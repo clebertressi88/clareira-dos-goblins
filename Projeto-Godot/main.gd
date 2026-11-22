@@ -1593,9 +1593,12 @@ func update_tree_visual(tree: Node3D) -> void:
 		tree.set_meta("kind","tree")
 		tree.collision_layer = SOLID|TARGET
 		growth.visible = true
+		growth.position = Vector3.ZERO
 		growth.scale = Vector3.ONE
 		stump.visible = false
 		sprout.visible = false
+		sprout.position = Vector3.ZERO
+		sprout.scale = Vector3.ONE
 		shape.size = Vector3(.43,2.7,.43)
 		collision.position.y = 1.35
 		return
@@ -1609,9 +1612,17 @@ func update_tree_visual(tree: Node3D) -> void:
 	tree.collision_layer = SOLID|TARGET
 	stump.visible = progress < .45
 	sprout.visible = age >= TREE_BUD_DELAY and progress < .18
-	sprout.scale = Vector3.ONE * (.45 + minf(progress * 9.0,1.1))
+	# O broto original inicia em Y=.44; fixamos sua base no topo do toco Y=.52.
+	# Escalar um Node3D no zero fazia o pe do broto subir e parecer flutuar.
+	var sprout_size := .45 + minf(progress * 9.0,1.1)
+	sprout.scale = Vector3.ONE * sprout_size
+	sprout.position = Vector3.UP * (.52 - .44 * sprout_size)
 	growth.visible = progress >= .07
-	growth.scale = Vector3.ONE * maxf(.07,pow(progress,1.05))
+	# O tronco adulto comeca em Y=.52. Manter a base no corte, mesmo
+	# quando a escala aumenta, elimina o intervalo entre tronco e raiz.
+	var growth_size := maxf(.07,pow(progress,1.05))
+	growth.scale = Vector3.ONE * growth_size
+	growth.position = Vector3.UP * (.52 * (1.0-growth_size))
 	var height := .54 + 2.20 * progress
 	shape.size = Vector3(.43,height,.43)
 	collision.position.y = height * .5
