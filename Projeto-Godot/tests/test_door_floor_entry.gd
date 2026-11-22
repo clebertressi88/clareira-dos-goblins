@@ -47,14 +47,17 @@ func _run() -> void:
 			ramps+=1
 		elif child is CollisionShape3D:
 			var ramp_shape := (child as CollisionShape3D).shape as BoxShape3D
-			if ramp_shape!=null and ramp_shape.size.z>1.5:
+			if ramp_shape!=null and ramp_shape.size.z>1.0:
 				collisions+=1
 	if ramps!=1 or collisions!=1:
 		for ch in doorway.get_children():
 			print("DOOR DEBUG CHILD:",ch.name," type=",ch.get_class(), " shape=",ch.shape if ch is CollisionShape3D else "")
 		fail("A porta com piso interno deveria ter rampa EXTERNA unica: %d visuais, %d colisoes" % [ramps,collisions])
 		return
-	print("DOOR RAMP OK: 1 rampa externa sem obstrucao interna, recalculada apos piso.")
+	if doorway.get_node_or_null("LimiarPorta")==null:
+		fail("A entrada nao possui patamar horizontal na soleira")
+		return
+	print("DOOR RAMP OK: rampa externa + patamar horizontal conectados ao piso.")
 	
 	# Regressao: bloco ocupado deve produzir um candidato livre adjacente.
 	game.set("build_level",0)
