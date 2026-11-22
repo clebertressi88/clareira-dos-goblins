@@ -2624,6 +2624,34 @@ func primary() -> void:
 		return
 	var o: Node3D = hit["collider"]
 	var kind: String = o.get_meta("kind","")
+	if held==SAPLING_ITEM and stock[SAPLING_ITEM]>0:
+		if kind!="" or (hit["normal"] as Vector3).y < .60:
+			notice("Plante a muda sobre um terreno livre.")
+			return
+		var spot: Vector3 = hit["position"]
+		spot.y = ground(spot.x,spot.z)
+		if TERRAIN.is_river(spot.x,spot.z) or spot.distance_to(player.position)<1.5:
+			notice("Escolha um local seco e afastado.")
+			return
+		var clearance := SphereShape3D.new()
+		clearance.radius = .50
+		var check := PhysicsShapeQueryParameters3D.new()
+		check.shape = clearance
+		check.transform.origin = spot + Vector3.UP*1.0
+		check.collision_mask = SOLID|TARGET
+		check.exclude = [player.get_rid()]
+		if not get_world_3d().direct_space_state.intersect_shape(check,1).is_empty():
+			notice("Existe um obstáculo neste local.")
+			return
+		var tree_id := "item-" + str(Time.get_ticks_usec()) + "-" + str(randi())
+		placed.append({"kind":"tree","id":tree_id,"p":[spot.x,spot.y,spot.z],"r":0.0})
+		tree_regrowth[tree_id] = Time.get_unix_time_from_system()-TREE_BUD_DELAY-1.0
+		spawn_object("tree",tree_id,spot,self)
+		stock[SAPLING_ITEM]-=1
+		sync_hotbar()
+		save_game()
+		notice("Muda plantada! A árvore crescerá com o tempo.")
+		return
 	if kind in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
@@ -2669,7 +2697,29 @@ func primary() -> void:
 						store_object("foot",pos+Vector3(-.41,0,0))
 		return
 	if kind=="stump":
-		notice("Toco com raizes: espere o broto crescer e virar arvore.")
+		if held!=SHOVEL_ITEM:
+			notice("Equipe a pá de madeira para desenterrar o toco e liberar espaço.")
+			return
+		var digs := int(o.get_meta("dig_hits",0))+1
+		o.set_meta("dig_hits",digs)
+		impact(hit["position"],hit["normal"],true)
+		if digs<2:
+			notice("Arrancando raízes com a pá: 1/2")
+			return
+		var stump_id: String = str(o.get_meta("id",""))
+		var age: float = Time.get_unix_time_from_system()-float(tree_regrowth.get(stump_id,0))
+		var got_sapling := age >= TREE_BUD_DELAY and age < TREE_BUD_DELAY+TREE_GROW_SECONDS
+		cleared_stumps[stump_id] = true
+		tree_regrowth.erase(stump_id)
+		remove_object(o)
+		stock[6] += 1
+		item_received(6)
+		if got_sapling:
+			stock[SAPLING_ITEM] += 1
+			item_received(SAPLING_ITEM)
+		sync_hotbar()
+		save_game()
+		notice("Toco removido! +1 tronco" + (" e +1 muda" if got_sapling else "") + ".")
 		return
 	if kind=="tree":
 		var cuts_per_hit := 1
@@ -2684,7 +2734,9 @@ func primary() -> void:
 		if cuts>=4:
 			for i in range(3):
 				store_object("log",pos+Vector3((i-1)*.65,0,.39))
-			notice("Arvore cortada: o toco vai brotar e crescer novamente.")
+			if randf()<.35:
+				store_object("sapling",pos+Vector3(.82,0,.55))
+			notice("Árvore cortada. Use a pá para remover o toco ou espere brotar.")
 			save_game()
 		else:
 			notice("Cortando a árvore: %d/4" % cuts)
