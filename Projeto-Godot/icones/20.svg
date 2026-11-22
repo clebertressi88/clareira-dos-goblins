@@ -1,1 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><defs><linearGradient id="wood" x1="0" x2="1"><stop stop-color="#6b3c21"/><stop offset=".5" stop-color="#b57e43"/><stop offset="1" stop-color="#754524"/></linearGradient><linearGradient id="blade" x1="0" x2="1"><stop stop-color="#b4a27a"/><stop offset=".5" stop-color="#d4b883"/><stop offset="1" stop-color="#6f6554"/></linearGradient></defs><g transform="rotate(42 64 64)"><rect x="56" y="15" width="16" height="80" rx="7" fill="#31251c"/><rect x="59" y="17" width="10" height="77" rx="5" fill="url(#wood)"/><path d="M50 78 Q64 75 78 78 L81 111 Q66 128 47 111 Z" stroke="#574a37" stroke-width="3" fill="url(#blade)"/><path d="M64 79 L64 115" stroke="#e4d5b2" stroke-opacity=".64" stroke-width="3"/><path d="M58 18 Q64 13 70 18" stroke="#d2a46e" stroke-width="3" fill="none"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs>
+  <linearGradient id="shaft" x1="0" x2="1"><stop stop-color="#633b20"/><stop offset=".45" stop-color="#ba7b46"/><stop offset="1" stop-color="#784324"/></linearGradient>
+  <linearGradient id="scoop" x1="0" x2=".8" y1="0" y2="1"><stop stop-color="#dbad72"/><stop offset=".5" stop-color="#b6814c"/><stop offset="1" stop-color="#6d452a"/></linearGradient>
+</defs>
+<g transform="rotate(-34 64 64)" stroke-linejoin="round" stroke-linecap="round">
+  <path d="M60 14 Q64 9 68 14 L70 67 Q64 73 58 67 Z" fill="url(#shaft)" stroke="#59331e" stroke-width="3"/>
+  <ellipse cx="64" cy="14" rx="9" ry="8" fill="#9b5c33" stroke="#64391f" stroke-width="2"/>
+  <path d="M48 64 Q64 57 80 64 L88 100 Q88 114 64 122 Q40 114 40 100 Z" fill="url(#scoop)" stroke="#644025" stroke-width="4"/>
+  <path d="M47 73 Q64 67 81 73 L80 103 Q64 116 48 103 Z" fill="none" stroke="#f2c78c" stroke-width="3"/>
+  <path d="M56 79 Q51 91 57 108 M64 76 Q62 93 64 113 M73 80 Q77 93 71 108" fill="none" stroke="#87552f" stroke-width="2.2"/>
+  <path d="M54 62 L75 77 M75 62 L54 77" stroke="#e2c18b" stroke-width="5"/>
+  <path d="M56 58 Q64 65 72 58 M55 71 Q64 78 74 71 M57 24 Q64 29 70 24" fill="none" stroke="#dbc18a" stroke-width="4"/>
+</g></svg>
