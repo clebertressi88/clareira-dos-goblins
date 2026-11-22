@@ -42,3 +42,7 @@ O projeto que o Godot abre esta em `Projeto-Godot/` (arquivo `project.godot`).
 - Medir FPS e tempo de quadro no painel **Debugger > Profiler** antes/depois; nao ha ganho quantificado sem teste executado.
 
 A validacao de CI verifica estrutura e scripts; nao substitui execucao grafica e testes dentro do Godot.
+
+## Localizacao rapida das funcoes
+
+Confira o [Mapa de funcoes](MAPA_FUNCOES.md) para localizar as rotinas do script principal por assunto e numero de linha.

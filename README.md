@@ -61,3 +61,5 @@ O `main.gd` continua como coordenador para preservar compatibilidade com as cena
 Consulte **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)** para encontrar cada subsistema e executar as verificacoes.
 
 Teste estatico local: `python3 tests/verificar_estrutura.py`. Os FPS precisam ser medidos no Godot.
+
+Para localizar rapidamente as rotinas do script principal, veja o **[Mapa de funcoes](docs/MAPA_FUNCOES.md)**.
