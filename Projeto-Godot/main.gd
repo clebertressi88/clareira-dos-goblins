@@ -2426,9 +2426,46 @@ func find_wall_snap(point: Vector3, yaw: float) -> Vector3:
 	return best
 
 
+func floor_target_from_aim(fallback: Vector3) -> Vector3:
+	# Clique na borda de um painel para criar o proximo; clique numa
+	# parede para fechar o teto por cima, mesmo estando no terreo.
+	var hit := ray(5.8)
+	if hit.is_empty():
+		return fallback
+	var obj := hit["collider"] as CollisionObject3D
+	if obj==null:
+		return fallback
+	var kind := str(obj.get_meta("kind",""))
+	var aimed: Vector3 = hit["position"]
+	if kind=="wood_floor":
+		var center: Vector3 = obj.global_position
+		var source_level := 0
+		for entry in placed:
+			if str(entry.get("id",""))==str(obj.get_meta("id","")):
+				source_level = int(entry.get("level",0))
+				break
+		if source_level<build_level:
+			return Vector3(center.x,fallback.y,center.z)
+		if source_level==build_level:
+			var direction := Vector2(aimed.x-center.x,aimed.z-center.z)
+			if direction.length()<WALL_SIZE*.18:
+				var look := -camera.global_basis.z
+				direction = Vector2(look.x,look.z)
+			if absf(direction.x)>absf(direction.y):
+				return Vector3(center.x+signf(direction.x)*WALL_SIZE,fallback.y,center.z)
+			return Vector3(center.x,fallback.y,center.z+signf(direction.y)*WALL_SIZE)
+	if kind in ["wood_wall","wood_doorway","wood_window"]:
+		var wp: Vector3 = obj.global_position
+		var side: Vector3 = hit["normal"]
+		if Vector2(side.x,side.z).length()>.5:
+			return Vector3(wp.x+side.x*WALL_SIZE*.5,fallback.y,wp.z+side.z*WALL_SIZE*.5)
+	return fallback
+
+
 func find_floor_snap(point: Vector3) -> Vector3:
+	# Encaixa sempre num espaco LIVRE, em vez de duplicar painel existente.
 	var best := point
-	var nearest := WALL_SIZE*.83
+	var best_score := INF
 	for entry in placed:
 		var kind := str(entry.get("kind",""))
 		if kind not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
@@ -2436,26 +2473,31 @@ func find_floor_snap(point: Vector3) -> Vector3:
 		var p: Array = entry["p"]
 		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
 		var level := int(entry.get("level",0))
-		if kind=="wood_floor" and level==build_level and absf(at.y-point.y)<.30:
-			for offset in [Vector3.RIGHT,Vector3.LEFT,Vector3.FORWARD,Vector3.BACK]:
-				var candidate: Vector3 = at+(offset as Vector3)*WALL_SIZE
-				var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
-				if distance<nearest:
-					best = candidate
-					nearest = distance
-		elif kind!="wood_floor" and level==build_level-1:
-			# Um painel horizontal vai da parede em direcao ao interior do comodo.
-			var center := at+Vector3.UP*WALL_SIZE
-			if absf(center.y-point.y)>.30:
+		var candidates: Array[Vector3] = []
+		if kind=="wood_floor" and level==build_level:
+			for direction in [Vector3.RIGHT,Vector3.LEFT,Vector3.FORWARD,Vector3.BACK]:
+				candidates.append(at+direction*WALL_SIZE)
+		elif kind=="wood_floor" and level==build_level-1:
+			candidates.append(at)
+		elif kind!="wood_floor" and level in [build_level,build_level-1]:
+			var other_side := Basis(Vector3.UP,float(entry.get("r",0.0))).z
+			candidates.append(at+other_side*WALL_SIZE*.5)
+			candidates.append(at-other_side*WALL_SIZE*.5)
+		for candidate in candidates:
+			candidate.y = point.y
+			if floor_intersects_other_floor(candidate):
 				continue
-			var side := Basis(Vector3.UP,float(entry.get("r",0.0))).z
-			for sign_value in [-1.0,1.0]:
-				var candidate: Vector3 = center+side*(float(sign_value)*WALL_SIZE*.5)
-				var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
-				if distance<nearest:
-					best = candidate
-					nearest = distance
-	return best
+			if not upper_build_supported(candidate):
+				continue
+			var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
+			var player_distance := Vector2(candidate.x-player.position.x,candidate.z-player.position.z).length()
+			var score := distance+player_distance*.025
+			if distance<WALL_SIZE*2.5 and score<best_score:
+				best = candidate
+				best_score = score
+	if best_score!=INF:
+		return best
+	return point
 
 
 func wall_intersects_other_wall(point: Vector3, yaw: float) -> bool:
@@ -2501,7 +2543,10 @@ func upper_build_supported(point: Vector3) -> bool:
 		var p: Array = entry["p"]
 		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
 		if kind=="wood_floor" and level==build_level and absf(at.y-point.y)<.30:
-			if Vector2(at.x-point.x,at.z-point.z).length()<WALL_SIZE*.98:
+			var dx := absf(at.x-point.x)
+			var dz := absf(at.z-point.z)
+			# Placas vizinhas estao afastadas exatamente WALL_SIZE.
+			if dx<=WALL_SIZE+.08 and dz<=WALL_SIZE+.08 and (dx<.14 or dz<.14):
 				return true
 		if kind!="wood_floor" and level==build_level-1 and absf((at.y+WALL_SIZE)-point.y)<.30:
 			if Vector2(at.x-point.x,at.z-point.z).length()<WALL_SIZE*1.15:
@@ -2528,12 +2573,12 @@ func place_craft(kind: String) -> bool:
 				notice("Esta posição já tem uma parede nesse pavimento.")
 				return false
 		else:
-			point = find_floor_snap(point)
+			point = find_floor_snap(floor_target_from_aim(point))
 			if floor_intersects_other_floor(point):
-				notice("Já existe um piso ou teto nesta posição.")
+				notice("Este quadro já tem piso. Aponte para a borda ou a parede ao lado.")
 				return false
 		if not upper_build_supported(point):
-			notice("Construa primeiro paredes abaixo ou um piso de apoio neste andar.")
+			notice("Falta apoio: aponte para uma parede ou outro painel para montar o teto.")
 			return false
 	else:
 		point.y = ground(point.x,point.z)
@@ -2569,6 +2614,10 @@ func toggle_stock(i: int) -> void:
 	save_game()
 	show_inventory()
 
+func construction_level_name() -> String:
+	return ["piso térreo","teto térreo / piso 2","teto 2 / piso 3","teto do 3"][build_level]
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_ESCAPE:
@@ -2596,13 +2645,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_V: toggle_view()
 			KEY_PAGEUP:
 				build_level = mini(build_level+1,BUILD_MAX_LEVEL)
-				notice("Construção: %s" % (["térreo","segundo pavimento","terceiro pavimento","teto do terceiro pavimento"][build_level]))
+				notice("Altura selecionada: %s" % construction_level_name())
 			KEY_PAGEDOWN:
 				build_level = maxi(build_level-1,0)
-				notice("Construção: %s" % (["térreo","segundo pavimento","terceiro pavimento","teto do terceiro pavimento"][build_level]))
+				notice("Altura selecionada: %s" % construction_level_name())
 			KEY_T:
-				build_rotation = (build_rotation+1)%4
-				notice("Girar parede: %d°" % (build_rotation*90))
+				if bar_items[selected]==FLOOR_ITEM:
+					build_level = (build_level+1)%(BUILD_MAX_LEVEL+1)
+					notice("Painel selecionado: %s" % construction_level_name())
+				else:
+					build_rotation = (build_rotation+1)%4
+					notice("Girar parede: %d°" % (build_rotation*90))
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:
 			selected = event.keycode-KEY_1
 	if not moving:
@@ -2693,7 +2746,7 @@ func _physics_process(dt: float) -> void:
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
 		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
-			interaction_hint = "Clique: construir · PgUp/PgDn: pavimento %d · T: girar parede" % (build_level+1)
+			interaction_hint = ("%s · T: piso/teto · PgUp/PgDn: altura · Clique: instalar" % construction_level_name()) if bar_items[selected]==FLOOR_ITEM else ("Parede andar %d · T: girar · PgUp/PgDn: altura · Clique: instalar" % (build_level+1))
 		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
@@ -2912,7 +2965,7 @@ func primary() -> void:
 				bench = true
 			sync_hotbar()
 			save_game()
-			notice("Estrutura colocada no pavimento %d." % (build_level+1))
+			notice(("Painel colocado: %s." % construction_level_name()) if held==FLOOR_ITEM else ("Parede no pavimento %d." % (build_level+1)))
 		return
 	var hit := ray()
 	if hit.is_empty():
