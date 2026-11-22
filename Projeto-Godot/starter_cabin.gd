@@ -2,7 +2,7 @@ extends RefCounted
 # Cabana goblin de inicio: interior funcional; decoracoes nao geram colisao.
 # Porta no lado +Z. Nunca bloquear o vao de 1.5 m x 2.35 m.
 
-static func piece(game: Node3D, body: StaticBody3D, pos: Vector3, size: Vector3, texture: String, color: Color, roll: float = 0.0) -> void:
+static func piece(game, body: StaticBody3D, pos: Vector3, size: Vector3, texture: String, color: Color, roll: float = 0.0) -> void:
 	var visual: MeshInstance3D = game.box(body,pos,size,texture,color)
 	visual.rotation.z = roll
 	var shape := BoxShape3D.new()
@@ -13,18 +13,18 @@ static func piece(game: Node3D, body: StaticBody3D, pos: Vector3, size: Vector3,
 	collision.rotation.z = roll
 	body.add_child(collision)
 
-static func trim_box(game: Node3D, body: Node3D, pos: Vector3, size: Vector3, color: Color, angle: float = 0.0, texture: String = "wood") -> void:
+static func trim_box(game, body: Node3D, pos: Vector3, size: Vector3, color: Color, angle: float = 0.0, texture: String = "wood") -> void:
 	var visual: MeshInstance3D = game.box(body,pos,size,texture,color)
 	visual.rotation.z = angle
 
-static func beam(game: Node3D, body: Node3D, a: Vector3, b: Vector3, radius: float, color: Color) -> void:
+static func beam(game, body: Node3D, a: Vector3, b: Vector3, radius: float, color: Color) -> void:
 	var length := a.distance_to(b)
 	if length < .01:
 		return
 	var visual: MeshInstance3D = game.cylinder(body,(a+b)*.5,radius,length,"wood",color)
 	visual.quaternion = Quaternion(Vector3.UP,(b-a).normalized())
 
-static func build(game: Node3D, body: StaticBody3D) -> void:
+static func build(game, body: StaticBody3D) -> void:
 	var plaster := Color("#80714d")
 	var clay := Color("#91805b")
 	var timber := Color("#433322")
