@@ -260,7 +260,7 @@ func setup_world() -> void:
 	environment.ambient_light_energy = .52
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#98ada0")
-	environment.fog_density = 0.014
+	environment.fog_density = 0.008
 	world.environment = environment
 	add_child(world)
 	var sun := DirectionalLight3D.new()
@@ -270,8 +270,11 @@ func setup_world() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 38
 	add_child(sun)
-	var grass := material("grass", Color("#dadbd0"))
+	var grass := material("grass", Color("#f5f5ee"))
 	grass.albedo_texture = preload("res://grass.png")
+	# Renderizar ambas as faces: evita o terreno desaparecer quando a camera
+	# aproxima-se da margem ou de uma encosta.
+	grass.cull_mode = BaseMaterial3D.CULL_DISABLED
 	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	var rock := material("rock", Color.WHITE)
 	rock.albedo_texture = preload("res://stone.png")
@@ -351,7 +354,7 @@ func make_player() -> void:
 	var spawn: Array = get_meta("spawn", [0,1,0])
 	player.position = Vector3(float(spawn[0]),float(spawn[1]),float(spawn[2]))
 	# Protege saves antigos: novo relevo nao pode fazer o jogador nascer soterrado.
-	player.position.y = maxf(player.position.y,ground(player.position.x,player.position.z)+.35)
+	player.position.y = maxf(player.position.y,ground(player.position.x,player.position.z)+.65)
 	var shape := CapsuleShape3D.new()
 	shape.radius = .27
 	shape.height = 1.64
@@ -445,11 +448,13 @@ func create_chunk(key: Vector2i) -> void:
 	chunks[key] = chunk
 	var mesh := SurfaceTool.new()
 	mesh.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for z in range(8):
-		for x in range(8):
-			var left := float(key.x*CHUNK+x*2)
-			var near := float(key.y*CHUNK+z*2)
-			for corner in [Vector2(0,0),Vector2(0,2),Vector2(2,0),Vector2(2,0),Vector2(0,2),Vector2(2,2)]:
+	# A malha visivel e a colisao HeightMap usam a MESMA grade de 1 metro.
+	# Antes: malha 2 m x colisao 1 m; a camera parecia atravessar encostas.
+	for z in range(CHUNK):
+		for x in range(CHUNK):
+			var left := float(key.x*CHUNK+x)
+			var near := float(key.y*CHUNK+z)
+			for corner in [Vector2(0,0),Vector2(0,1),Vector2(1,0),Vector2(1,0),Vector2(0,1),Vector2(1,1)]:
 				var px: float = left+corner.x
 				var pz: float = near+corner.y
 				mesh.set_uv(Vector2(px,pz)/2.)
@@ -2340,6 +2345,19 @@ func _physics_process(dt: float) -> void:
 			player.velocity.y = 5.2
 		jump = false
 		player.move_and_slide()
+		# Nao ha cavernas: nunca permitir um save antigo ou uma falha de fisica
+		# deixar a camera abaixo do relevo.
+		var ground_level := ground(player.position.x,player.position.z)
+		if player.position.y < ground_level-.18:
+			player.position.y = ground_level+.65
+			player.velocity.y = 0.0
+		# Agua do rio e visual, sem natacao implementada. Mantenha a camera
+		# acima da superficie para nao ver montanhas como ilhas flutuantes.
+		if TERRAIN.is_river(player.position.x,player.position.z):
+			var wading_level := TERRAIN.WATER_LEVEL-1.20
+			if player.position.y < wading_level:
+				player.position.y = wading_level
+				player.velocity.y = 0.0
 		walk_pose(player_model,player.get_real_velocity(),dt,player.is_on_floor())
 		eye_height = move_toward(eye_height,.96 if crouch else 1.49,dt*4.5)
 		update_camera()
