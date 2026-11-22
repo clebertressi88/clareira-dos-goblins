@@ -54,5 +54,32 @@ func _run_test() -> void:
 	if str(tree.get_meta("kind","")) != "tree" or saved.has(id):
 		fail("A arvore nao voltou ao estado adulto.")
 		return
+	# Testa o fluxo real: o menu bloqueia movimento ate clicar Jogar.
+	var player := game.get("player") as CharacterBody3D
+	if player == null:
+		fail("Jogador nao foi criado.")
+		return
+	game.call("begin")
+	if not bool(game.get("moving")):
+		fail("O botao Jogar/continuar nao ativou a movimentacao.")
+		return
+	var initial_position := Vector2(player.position.x,player.position.z)
+	var key_down := InputEventKey.new()
+	key_down.keycode = KEY_W
+	key_down.physical_keycode = KEY_W
+	key_down.pressed = true
+	Input.parse_input_event(key_down)
+	for tick in range(35):
+		await physics_frame
+	var key_up := InputEventKey.new()
+	key_up.keycode = KEY_W
+	key_up.physical_keycode = KEY_W
+	key_up.pressed = false
+	Input.parse_input_event(key_up)
+	var travel := initial_position.distance_to(Vector2(player.position.x,player.position.z))
+	if travel < .45:
+		fail("WASD nao movimentou o jogador; deslocamento = %.3f" % travel)
+		return
+	print("CONTROLES TEST OK: Jogar/continuar, tecla W e deslocamento de %.2f m." % travel)
 	print("PAISAGEM TEST OK: cena, arvore, colisao, toco, broto e maturidade.")
 	quit(0)
