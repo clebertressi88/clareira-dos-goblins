@@ -80,6 +80,14 @@ func _run() -> void:
 		return
 	print("ROOF PLACEMENT OK: piso superior/teto no nivel 1 sem mudar posicao da parede.")
 
+	# Um pinheiro gerado pelo mapa ocupava a frente desta porta do teste.
+	# Limpa SOMENTE o corredor do cenario sintetico, preservando os
+	# colisores da porta, rampa, piso e proprio terreno.
+	for obstacle in objs.values():
+		if not (obstacle is CollisionObject3D) or obstacle==doorway or obstacle==panel:
+			continue
+		if obstacle.global_position.distance_to(Vector3(px,h,pz))<4.0:
+			obstacle.collision_layer = 0
 	# Entrada real: corpo fisico anda do lado de fora, sobre a rampa,
 	# ate a laje, sem salto e sem atravessar uma parede solida.
 	var character := game.get("player") as CharacterBody3D
