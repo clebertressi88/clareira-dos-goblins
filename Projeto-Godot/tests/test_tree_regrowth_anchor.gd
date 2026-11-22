@@ -48,8 +48,8 @@ func _test() -> void:
 				quit(1)
 				return
 		if sprout.visible:
-			var bottom_sprout := sprout.position.y + .44 * sprout.scale.y
-			if absf(bottom_sprout - .52) > .015:
+			var bottom_sprout := sprout.position.y
+			if absf(bottom_sprout - .52) > .015 or sprout.scale.y > 1.01:
 				push_error("Broto flutuando")
 				quit(1)
 				return
