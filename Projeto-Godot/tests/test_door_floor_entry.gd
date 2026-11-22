@@ -45,9 +45,11 @@ func _run() -> void:
 	for child in doorway.get_children():
 		if child.name.begins_with("RampaPorta"):
 			ramps+=1
-		elif child.name.begins_with("ColisaoRampaPorta"):
+		elif child is CollisionShape3D and child.shape is BoxShape3D and child.shape.size.z>1.5:
 			collisions+=1
 	if ramps!=2 or collisions!=2:
+		for ch in doorway.get_children():
+			print("DOOR DEBUG CHILD:",ch.name," type=",ch.get_class(), " shape=",ch.shape if ch is CollisionShape3D else "")
 		fail("A porta deveria ter duas rampas fisicas: %d visuais, %d colisoes" % [ramps,collisions])
 		return
 	print("DOOR RAMP OK: 2 rampas e 2 colisoes, atualizadas ao adicionar piso.")
