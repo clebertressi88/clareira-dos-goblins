@@ -30,6 +30,8 @@ const SHOVEL_ITEM := 20
 const SAPLING_ITEM := 21
 const FLOOR_ITEM := 22
 const BUILD_MAX_LEVEL := 3
+const STARTER_CABIN_ID := "starter-cabin"
+const STARTER_CABIN_CENTER := Vector2(0.0,-15.0)
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
@@ -55,7 +57,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 6 # Equipamento de espada e escudo sincronizado entre jogadores
-const NET_SHARED_KINDS := ITEM_KINDS + ["block"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -552,7 +554,7 @@ func create_chunk(key: Vector2i) -> void:
 	for i in range(15):
 		var x := key.x*CHUNK+rng.randf_range(1,15)
 		var z := key.y*CHUNK+rng.randf_range(1,15)
-		if Vector2(x,z).length()<5 or TERRAIN.is_river(x,z):
+		if Vector2(x,z).length()<5 or Vector2(x-STARTER_CABIN_CENTER.x,z-STARTER_CABIN_CENTER.y).length()<5.8 or TERRAIN.is_river(x,z):
 			continue
 		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "vine_bush"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
@@ -606,6 +608,8 @@ func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
 	# Agua visual: fisica de natacao e correnteza ficam para etapa posterior.
 
 func village() -> void:
+	if not removed.has(STARTER_CABIN_ID):
+		spawn_starter_cabin()
 	spawn_friendly_goblin("Bruma",Vector3(-2,0,-4))
 	spawn_friendly_goblin("Talo",Vector3(2,0,-5))
 	if not removed.has("fire"):
@@ -775,6 +779,15 @@ func speak_to_goblin(npc: Node3D) -> void:
 	npc.set_meta("next_react",elapsed+13.0)
 	notice(lines[count%lines.size()])
 
+func spawn_starter_cabin() -> void:
+	if objects.has(STARTER_CABIN_ID):
+		return
+	var base_y := ground(STARTER_CABIN_CENTER.x,STARTER_CABIN_CENTER.y)
+	for dx in [-2.7,0.0,2.7]:
+		for dz in [-2.7,0.0,2.7]:
+			base_y = maxf(base_y,ground(STARTER_CABIN_CENTER.x+dx,STARTER_CABIN_CENTER.y+dz))
+	spawn_object("hut",STARTER_CABIN_ID,Vector3(STARTER_CABIN_CENTER.x,base_y,STARTER_CABIN_CENTER.y))
+
 func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, yaw: float = 0.0) -> StaticBody3D:
 	var o := StaticBody3D.new()
 	o.collision_layer = TARGET
@@ -860,11 +873,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			collider(o,Vector3(1.04,.93,.80),Vector3.UP*.465)
 		"hut":
 			o.collision_layer |= SOLID
-			box(o,Vector3(0,.73,0),Vector3(2,1.46,1.7),"plank",Color("#ac7749"))
-			for side in [-1,1]:
-				var roof := box(o,Vector3(side*.47,1.72,0),Vector3(1.21,.14,1.93),"roof",Color("#66432d"))
-				roof.rotation.z = side*-.48
-			collider(o,Vector3(2,1.95,1.7),Vector3.UP*.975)
+			preload("res://starter_cabin.gd").build(self,o)
 		"Bruma","Talo":
 			o.collision_layer |= SOLID
 			goblin_npc(o,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
@@ -3321,12 +3330,12 @@ func primary() -> void:
 		save_game()
 		notice("Muda plantada! A árvore crescerá com o tempo.")
 		return
-	if kind in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor"]:
+	if kind in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
 		var hits: int = int(o.get_meta("break_hits",0))+(2 if held==STONE_AXE else 1)
-		var needed := 4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2)
+		var needed := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2))
 		if hits<needed:
 			o.set_meta("break_hits",hits)
 			impact(hit["position"],hit["normal"],true)
@@ -3340,7 +3349,7 @@ func primary() -> void:
 		bench = any_bench_placed()
 		sync_hotbar()
 		save_game()
-		notice("Estrutura recuperada para o inventário.")
+		notice("Abrigo inicial removido deste mundo." if kind=="hut" else "Estrutura recuperada para o inventário.")
 		return
 	if o.has_meta("hp"):
 		if bar_items[selected] not in [0,8,WOOD_AXE,STONE_AXE]:
@@ -3831,6 +3840,12 @@ func apply_net_world(snapshot: Dictionary) -> void:
 					old.collision_layer = 0
 				old.queue_free()
 	placed = (snapshot["placed"] as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
+	if removed.has(STARTER_CABIN_ID) and objects.has(STARTER_CABIN_ID):
+		var obsolete: Node3D = objects[STARTER_CABIN_ID]
+		objects.erase(STARTER_CABIN_ID)
+		obsolete.queue_free()
+	elif not removed.has(STARTER_CABIN_ID) and not objects.has(STARTER_CABIN_ID):
+		spawn_starter_cabin()
 	removed = (snapshot["removed"] as Dictionary).duplicate(true)
 	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
@@ -3893,7 +3908,7 @@ func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
 func net_shared_place(kind: String,id: String,pos: Vector3,yaw: float,level: int) -> void:
 	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
 		return
-	if kind not in NET_SHARED_KINDS or id.length()>100 or not pos.is_finite():
+	if kind=="hut" or kind not in NET_SHARED_KINDS or id.length()>100 or not pos.is_finite():
 		return
 	if objects.has(id):
 		return
