@@ -2316,80 +2316,199 @@ func unequip_backpack() -> void:
 	save_game()
 	show_inventory()
 
+func build_base_ground(point: Vector3, yaw: float, is_wall: bool) -> float:
+	# A construcao fica nivelada pelo ponto MAIS alto do relevo sob o modulo.
+	# Em encostas, as partes mais baixas recebem pilares de fundacao.
+	var maximum := ground(point.x,point.z)
+	var axis := Basis(Vector3.UP,yaw).x
+	for fraction in [-.50,-.25,0.0,.25,.50]:
+		var sample := point+axis*(WALL_SIZE*fraction)
+		maximum = maxf(maximum,ground(sample.x,sample.z))
+		if not is_wall:
+			for offset in [-.5,.5]:
+				var corner := sample+Vector3(0,0,WALL_SIZE*offset)
+				maximum = maxf(maximum,ground(corner.x,corner.z))
+	return maximum
+
+
+func build_reference_base(point: Vector3, default_base: float) -> float:
+	# Casas antigas nao tem campo level: sao tratadas como terreo.
+	# Usar uma origem vertical compartilhada impede degraus entre modulos.
+	var best := WALL_SIZE*3.0
+	var base := default_base
+	for entry in placed:
+		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+			continue
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var dist := Vector2(at.x-point.x,at.z-point.z).length()
+		if dist<best:
+			best = dist
+			base = at.y-float(entry.get("level",0))*WALL_SIZE
+	return base
+
+
 func find_wall_snap(point: Vector3, yaw: float) -> Vector3:
-	# Novo segmento encaixa uma ponta à ponta da parede existente mais próxima.
-	# Funciona tanto para paredes retas quanto para cantos em L/U.
-	var new_axis := Basis(Vector3.UP,yaw).x.normalized()
+	# Permite fileiras, cantos e paredes exatamente empilhadas.
+	var axis := Basis(Vector3.UP,yaw).x.normalized()
 	var best := point
-	var best_distance := WALL_SIZE*.85
+	var best_distance := WALL_SIZE*.92
 	for entry in placed:
 		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window"]:
 			continue
 		var p: Array = entry["p"]
-		var old_position := Vector3(float(p[0]),float(p[1]),float(p[2]))
-		var old_yaw := float(entry.get("r",0.0))
-		var old_axis := Basis(Vector3.UP,old_yaw).x.normalized()
+		var old := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var old_level := int(entry.get("level",0))
+		var raised := old+Vector3.UP*(float(build_level-old_level)*WALL_SIZE)
+		if absf(raised.y-point.y)>.34:
+			continue
+		if old_level!=build_level:
+			var stack_distance := Vector2(point.x-raised.x,point.z-raised.z).length()
+			if stack_distance<best_distance:
+				best_distance = stack_distance
+				best = raised
+		var other_axis := Basis(Vector3.UP,float(entry.get("r",0.0))).x.normalized()
 		for old_sign in [-1.0,1.0]:
 			for new_sign in [-1.0,1.0]:
-				var candidate: Vector3 = old_position+old_axis*(old_sign*WALL_SIZE*.5)-new_axis*(new_sign*WALL_SIZE*.5)
+				var candidate := raised+other_axis*(old_sign*WALL_SIZE*.5)-axis*(new_sign*WALL_SIZE*.5)
 				var distance := Vector2(point.x-candidate.x,point.z-candidate.z).length()
 				if distance<best_distance:
 					best_distance = distance
 					best = candidate
 	return best
 
+
+func find_floor_snap(point: Vector3) -> Vector3:
+	var best := point
+	var nearest := WALL_SIZE*.83
+	for entry in placed:
+		var kind := str(entry.get("kind",""))
+		if kind not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+			continue
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var level := int(entry.get("level",0))
+		if kind=="wood_floor" and level==build_level and absf(at.y-point.y)<.30:
+			for offset in [Vector3.RIGHT,Vector3.LEFT,Vector3.FORWARD,Vector3.BACK]:
+				var candidate := at+offset*WALL_SIZE
+				var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
+				if distance<nearest:
+					best = candidate
+					nearest = distance
+		elif kind!="wood_floor" and level==build_level-1:
+			# Um painel horizontal vai da parede em direcao ao interior do comodo.
+			var center := at+Vector3.UP*WALL_SIZE
+			if absf(center.y-point.y)>.30:
+				continue
+			var side := Basis(Vector3.UP,float(entry.get("r",0.0))).z
+			for sign_value in [-1.0,1.0]:
+				var candidate := center+side*(sign_value*WALL_SIZE*.5)
+				var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
+				if distance<nearest:
+					best = candidate
+					nearest = distance
+	return best
+
+
 func wall_intersects_other_wall(point: Vector3, yaw: float) -> bool:
-	# Impede duas paredes no mesmo lugar, mas permite os cantos de 90 graus.
 	var axis := Vector2(cos(yaw),-sin(yaw))
 	for entry in placed:
 		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window"]:
 			continue
 		var p: Array = entry["p"]
+		if absf(float(p[1])-point.y)>.25:
+			continue # Outro andar, nao e sobreposicao.
 		var old := Vector2(float(p[0]),float(p[2]))
 		var this := Vector2(point.x,point.z)
-		var other_yaw := float(entry.get("r",0.0))
-		var old_axis := Vector2(cos(other_yaw),-sin(other_yaw))
+		var old_axis := Vector2(cos(float(entry.get("r",0.0))),-sin(float(entry.get("r",0.0))))
 		var delta := this-old
-		var aligned := absf(axis.dot(old_axis))>.95
-		if aligned:
+		if absf(axis.dot(old_axis))>.95:
 			if absf(delta.dot(axis))<WALL_SIZE-.12 and absf(delta.cross(axis))<.17:
 				return true
-		else:
-			# Cruzes no meio da parede são bloqueados; cantos no final são permitidos.
-			if absf(delta.dot(old_axis))<WALL_SIZE*.5-.14 and absf(delta.dot(axis))<WALL_SIZE*.5-.14:
+		elif absf(delta.dot(old_axis))<WALL_SIZE*.5-.14 and absf(delta.dot(axis))<WALL_SIZE*.5-.14:
+			return true
+	return false
+
+
+func floor_intersects_other_floor(point: Vector3) -> bool:
+	for entry in placed:
+		if entry.get("kind","")!="wood_floor":
+			continue
+		var p: Array = entry["p"]
+		if absf(float(p[1])-point.y)>.25:
+			continue
+		if absf(float(p[0])-point.x)<WALL_SIZE-.1 and absf(float(p[2])-point.z)<WALL_SIZE-.1:
+			return true
+	return false
+
+
+func upper_build_supported(point: Vector3) -> bool:
+	if build_level==0:
+		return true
+	for entry in placed:
+		var kind := str(entry.get("kind",""))
+		if kind not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+			continue
+		var level := int(entry.get("level",0))
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		if kind=="wood_floor" and level==build_level and absf(at.y-point.y)<.30:
+			if Vector2(at.x-point.x,at.z-point.z).length()<WALL_SIZE*.98:
+				return true
+		if kind!="wood_floor" and level==build_level-1 and absf((at.y+WALL_SIZE)-point.y)<.30:
+			if Vector2(at.x-point.x,at.z-point.z).length()<WALL_SIZE*1.15:
 				return true
 	return false
 
+
 func place_craft(kind: String) -> bool:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
-	var yaw := snappedf(player.rotation.y,PI/2.0) if is_wall else 0.0
-	var forward := -Basis(Vector3.UP,yaw).z
-	var point := player.position+forward*(2.15 if is_wall else 1.65)
-	point.y = ground(point.x,point.z)
-	if is_wall:
-		point = find_wall_snap(point,yaw)
-		# Evita colocar a segunda parede exatamente sobre a primeira.
-		if wall_intersects_other_wall(point,yaw):
-			notice("Esta posição já tem uma parede.")
+	var is_floor := kind=="wood_floor"
+	if is_wall and build_level>=BUILD_MAX_LEVEL:
+		notice("O terceiro pavimento é o último. Neste nível coloque apenas o teto.")
+		return false
+	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else 0.0
+	var forward := -Basis(Vector3.UP,snappedf(player.rotation.y,PI/2.0)).z
+	var point := player.position+forward*(2.15 if is_wall or is_floor else 1.65)
+	if is_wall or is_floor:
+		var base := build_base_ground(point,yaw,is_wall)
+		base = build_reference_base(point,base)
+		point.y = base+float(build_level)*WALL_SIZE
+		if is_wall:
+			point = find_wall_snap(point,yaw)
+			if wall_intersects_other_wall(point,yaw):
+				notice("Esta posição já tem uma parede nesse pavimento.")
+				return false
+		else:
+			point = find_floor_snap(point)
+			if floor_intersects_other_floor(point):
+				notice("Já existe um piso ou teto nesta posição.")
+				return false
+		if not upper_build_supported(point):
+			notice("Construa primeiro paredes abaixo ou um piso de apoio neste andar.")
 			return false
+	else:
+		point.y = ground(point.x,point.z)
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(WALL_SIZE*.94,WALL_SIZE*.96,.16) if is_wall else Vector3(1.05,.84,.8)
+	shape.size = Vector3(WALL_SIZE*.94,WALL_SIZE*.96,.16) if is_wall else (Vector3(WALL_SIZE*.99,.18,WALL_SIZE*.99) if is_floor else Vector3(1.05,.84,.8))
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
-	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else .48))
-	query.collision_mask = SOLID|TARGET|4
-	if is_wall:
-		# A análise geométrica acima protege contra sobreposição sem bloquear cantos.
-		var skip_wall_rids: Array[RID] = []
+	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else (.01 if is_floor else .48)))
+	query.collision_mask = (TARGET|4) if is_floor and build_level==0 else SOLID|TARGET|4
+	if is_wall or is_floor:
+		# Colisao com modulos de apoio e permitida nas juncoes.
+		# Sobreposicoes reais de pisos/parede sao verificadas acima.
+		var excluded: Array[RID] = []
 		for obj in objects.values():
-			if is_instance_valid(obj) and obj is CollisionObject3D and obj.get_meta("kind","") in ["wood_wall","wood_doorway","wood_window"]:
-				skip_wall_rids.append(obj.get_rid())
-		query.exclude = skip_wall_rids
+			if is_instance_valid(obj) and obj is CollisionObject3D and obj.get_meta("kind","") in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+				excluded.append(obj.get_rid())
+		query.exclude = excluded
 	if not get_world_3d().direct_space_state.intersect_shape(query,12).is_empty():
 		notice("Escolha um espaço livre à sua frente.")
 		return false
-	store_object(kind,point,yaw)
+	store_object(kind,point,yaw,build_level if is_wall or is_floor else 0)
 	return true
+
 
 func toggle_stock(i: int) -> void:
 	if reserve[i]:
@@ -2987,9 +3106,9 @@ func build_hut() -> void:
 	creature("guardian","guardiao",Vector3(3,0,-39),self)
 	notice("O guardião apareceu no Vale da Névoa.")
 
-func store_object(kind: String, pos: Vector3, yaw: float = 0.0) -> void:
+func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) -> void:
 	var id := "item-"+str(Time.get_ticks_usec())+"-"+str(randi())
-	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw})
+	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
 	spawn_object(kind,id,pos,self,yaw)
 
 func remove_object(o: Node3D) -> void:
