@@ -34,9 +34,8 @@ const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
-# Preload obrigatorio: se o GLB nao for importado, o jogo nao compila uma aparencia antiga por engano.
-const NPC_MODEL_SCENE: PackedScene = preload("res://modelos/goblin_npc.glb")
-const NPC_MOTION_SHADER: Shader = preload("res://modelos/goblin_motion.gdshader")
+const NPC_RIG_SCRIPT := preload("res://npc_goblin.gd")
+# O script independente cria malha com pesos, Skeleton3D e animacao articulada.
 const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
@@ -1217,82 +1216,21 @@ func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) ->
 # O GLB fornecido não possui skeleton nem animações. Normaliza escala e chão
 # mesmo quando o recurso foi exportado com unidades muito grandes.
 func goblin_npc(o: Node3D, _garment: Color) -> void:
-	# Bruma, Talo e Guardiao devem usar o GLB; nunca mostrar o visual antigo silenciosamente.
-	var instance: Node = NPC_MODEL_SCENE.instantiate()
-	if not instance is Node3D:
-		push_error("O modelo goblin_npc.glb nao produziu um Node3D valido.")
-		if instance != null:
-			instance.queue_free()
+	# A malha e a animacao ficam exclusivamente no script npc_goblin.gd.
+	var controller: Node3D = NPC_RIG_SCRIPT.new()
+	controller.name = "GoblinRig"
+	o.add_child(controller)
+	if not bool(controller.call("install")):
+		push_error("Falha ao instalar esqueleto do goblin NPC.")
+		controller.queue_free()
 		return
-	var pivot := Node3D.new()
-	pivot.name = "ModeloGoblinPivot"
-	o.add_child(pivot)
-	var model: Node3D = instance as Node3D
-	model.name = "ModeloGoblin"
-	pivot.add_child(model)
-	var low := Vector3(INF,INF,INF)
-	var high := Vector3(-INF,-INF,-INF)
-	var found := false
-	for child in model.find_children("*","MeshInstance3D",true,false):
-		var part := child as MeshInstance3D
-		if part.mesh == null:
-			continue
-		var bounds := part.get_aabb()
-		for x in [0.0,1.0]:
-			for y in [0.0,1.0]:
-				for z in [0.0,1.0]:
-					var corner := bounds.position+Vector3(bounds.size.x*x,bounds.size.y*y,bounds.size.z*z)
-					var local_corner := model.to_local(part.to_global(corner))
-					low = low.min(local_corner)
-					high = high.max(local_corner)
-		found = true
-	if not found:
-		push_error("O modelo goblin_npc.glb nao possui MeshInstance3D; revise a importacao.")
-		pivot.queue_free()
-		return
-	var ratio := 1.50/maxf(high.y-low.y,0.01)
-	model.scale = Vector3.ONE*ratio
-	model.position = Vector3(-(low.x+high.x)*0.5,-low.y,-(low.z+high.z)*0.5)*ratio
-	pivot.rotation.y = 0.0 # O GLB ja aponta para +Z; avatar do jogador usa Visual em PI.
-	var animation_materials: Array = []
-	for child in model.find_children("*","MeshInstance3D",true,false):
-		var part := child as MeshInstance3D
-		if part.mesh == null:
-			continue
-		var source_material := part.get_active_material(0) as BaseMaterial3D
-		if source_material == null or source_material.albedo_texture == null:
-			push_warning("Goblin GLB sem atlas no material: mantendo material original desta malha.")
-			continue
-		var animated_material := ShaderMaterial.new()
-		animated_material.shader = NPC_MOTION_SHADER
-		animated_material.set_shader_parameter("atlas_texture",source_material.albedo_texture)
-		animated_material.set_shader_parameter("atlas_tint",source_material.albedo_color)
-		animated_material.set_shader_parameter("phase_offset",float(o.get_instance_id()%17)*.38)
-		part.material_override = animated_material
-		animation_materials.append(animated_material)
-	o.set_meta("npc_anim_materials",animation_materials)
 	o.set_meta("modelo_goblin_npc",true)
 
 
 func animate_npc_model(visual: Node3D, velocity: Vector3, dt: float, grounded: bool) -> void:
-	if not visual.has_meta("modelo_goblin_npc"):
-		return
-	var pivot := visual.get_node_or_null("ModeloGoblinPivot") as Node3D
-	if pivot == null:
-		return
-	var speed := Vector2(velocity.x,velocity.z).length()
-	var phase := fposmod(float(visual.get_meta("npc_walk_phase",0.0))+dt*(4.0+speed*2.3),TAU)
-	visual.set_meta("npc_walk_phase",phase)
-	var target := clampf(speed/1.4,0.0,1.0) if grounded else 0.0
-	var amount := move_toward(float(visual.get_meta("npc_walk_amount",0.0)),target,dt*5.0)
-	visual.set_meta("npc_walk_amount",amount)
-	pivot.position.y = maxf(0.0,sin(phase*2.0))*.019*amount + sin(elapsed*1.7)*.003
-	pivot.rotation.z = sin(phase)*.028*amount
-	pivot.rotation.x = sin(phase)*.009*amount
-	for anim_material in visual.get_meta("npc_anim_materials",[]):
-		if anim_material is ShaderMaterial:
-			anim_material.set_shader_parameter("move_strength",amount)
-			anim_material.set_shader_parameter("move_rate",clampf(speed/1.4,.65,2.5))
+	var controller := visual.get_node_or_null("GoblinRig")
+	if controller != null:
+		controller.call("animate",velocity,dt,grounded)
 
 
 func goblin(o: Node3D, garment: Color, protagonist := false) -> void:
