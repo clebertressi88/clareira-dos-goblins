@@ -57,3 +57,65 @@ Thumbs.db
 # Backups do instalador (se houver)
 *backup*2026*.gd
 *.gd.backup*
+
+# Clareira dos Goblins - regras adicionadas pelo preparador GitHub
+# Godot: caches e arquivos gerados (nao sao codigo-fonte)
+**/.godot/
+**/.import/
+**/*.ctex
+**/*.stex
+**/*.tmp
+**/*.log
+**/*.bak
+**/*.backup
+**/*.orig
+**/*~
+
+# Ferramentas, builds, downloads e artefatos locais
+/.ferramentas/
+/Windows-Atualizado/
+/logs-geracao/
+/backups/
+/backup/
+/Backup/
+/.vs/
+/.vscode/
+/Clareira-dos-Goblins-Windows-Atualizado.zip
+*.exe
+*.dll
+*.pck
+*.zip
+*.7z
+*.rar
+*.msi
+*.dmp
+
+# Dados locais e segredos
+.env
+.env.*
+!.env.example
+**/export_credentials.cfg
+**/*.p12
+**/*.pfx
+**/*.pem
+**/*.key
+**/id_rsa*
+**/id_ed25519*
+**/credentials.json
+**/service-account*.json
+**/token.json
+**/secrets.json
+**/.ssh/
+
+# Jogos salvos / arquivos temporarios
+*clareira-nativa.json
+*.save
+*.sav
+*.autosave
+Thumbs.db
+.DS_Store
+
+# Backups do instalador (se houver)
+*backup*2026*.gd
+*.gd.backup*
+
