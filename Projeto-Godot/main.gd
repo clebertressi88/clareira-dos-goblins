@@ -279,6 +279,9 @@ func collider(body: CollisionObject3D, size: Vector3, offset: Vector3) -> void:
 	var shape := BoxShape3D.new()
 	shape.size = size
 	var col := CollisionShape3D.new()
+	# Nome explicito: nos criados por codigo recebem nome automatico @CollisionShape3D@... .
+	# As arvores precisam encontra-lo novamente para ajustar a colisao a cada estagio.
+	col.name = "CollisionShape3D"
 	col.shape = shape
 	col.position = offset
 	body.add_child(col)
@@ -1180,7 +1183,10 @@ func update_tree_visual(tree: Node3D) -> void:
 	var growth := tree.get_node("Visual/Crescimento") as Node3D
 	var stump := tree.get_node("Visual/Toco") as Node3D
 	var sprout := tree.get_node("Visual/Broto") as Node3D
-	var collision := tree.get_node("CollisionShape3D") as CollisionShape3D
+	var collision := tree.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if collision == null or not (collision.shape is BoxShape3D):
+		push_error("Colisao ausente ou invalida na arvore: " + id)
+		return
 	var shape := collision.shape as BoxShape3D
 	if not tree_regrowth.has(id):
 		tree.set_meta("kind","tree")
