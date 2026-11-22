@@ -107,6 +107,10 @@ func _run_test() -> void:
 	resume_down.physical_keycode = KEY_W
 	resume_down.pressed = true
 	Input.parse_input_event(resume_down)
+	# Na execucao headless, parse_input_event alimenta o estado global mas
+	# nao e obrigado a despachar o evento ao Node._input sem janela focada.
+	# Exercita explicitamente o handler de teclado do jogo.
+	game.call("_input",resume_down)
 	await process_frame
 	if not bool(game.get("moving")):
 		fail("W no menu nao ativou Jogar/continuar")
