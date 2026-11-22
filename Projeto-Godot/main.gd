@@ -936,22 +936,27 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	# A base de cada parede acompanha o relevo. Em saves antigos,
 	# pilares sustentam as partes que antes ficavam suspensas.
 	add_wall_foundations(parent)
+	if kind=="wood_doorway":
+		build_door_transitions(parent)
 
 func build_wood_floor(parent: StaticBody3D) -> void:
-	# Painel fechado de 2,55 x 2,55 m: piso e teto usam a mesma peca.
-	# A face superior suporta andar e construir o proximo pavimento.
+	# Base continua impede que apareca grama entre placas e sob as juntas.
+	# A mesma peca funciona como piso no terreo e laje/teto nos andares.
+	var base := box(parent,Vector3(0,-.005,0),Vector3(WALL_SIZE+.035,.14,WALL_SIZE+.035),
+		"floor_solid",Color("#86623e"))
+	base.name = "PainelContinuo"
 	for row in range(3):
 		var z := (float(row)-1.0)*CELL
-		box(parent,Vector3(0,.01,z),Vector3(WALL_SIZE*.995,.16,CELL*1.01),
+		box(parent,Vector3(0,.084,z),Vector3(WALL_SIZE+.035,.038,CELL-.015),
 			"floor_planks_%d" % row,Color("#b58a57").darkened(.045*float(row%2)))
 		for column in range(3):
 			var x := (float(column)-1.0)*CELL
-			box(parent,Vector3(x,.098,z+CELL*.25),Vector3(CELL*.72,.014,.018),
+			box(parent,Vector3(x,.108,z+CELL*.34),Vector3(CELL*.68,.012,.016),
 				"floor_seam",Color("#684328"))
 	for x in [-WALL_SIZE*.39,0.0,WALL_SIZE*.39]:
-		box(parent,Vector3(x,-.115,0),Vector3(.14,.21,WALL_SIZE*.99),
+		box(parent,Vector3(x,-.15,0),Vector3(.14,.19,WALL_SIZE+.03),
 			"floor_joist",Color("#704c31"))
-	collider(parent,Vector3(WALL_SIZE*.995,.18,WALL_SIZE*.995),Vector3(0,.01,0))
+	collider(parent,Vector3(WALL_SIZE+.025,.22,WALL_SIZE+.025),Vector3(0,.005,0))
 
 
 func add_wall_foundations(parent: StaticBody3D) -> void:
@@ -968,6 +973,49 @@ func add_wall_foundations(parent: StaticBody3D) -> void:
 		post.rotation.y = 0.0
 		# Volume fisico abaixo da parede para impedir atravessar as estacas.
 		collider(parent,Vector3(.17,gap+.11,.18),Vector3(x,-gap*.5,0))
+
+
+func floor_height_near_door(door: StaticBody3D) -> float:
+	# Prioriza a altura dos paineis ja construidos no mesmo comodo,
+	# inclusive saves antigos que nao guardavam o campo level.
+	var top := door.global_position.y + .09
+	var best := WALL_SIZE*1.15
+	for entry in placed:
+		if str(entry.get("kind",""))!="wood_floor" or int(entry.get("level",0))!=0:
+			continue
+		var p: Array = entry["p"]
+		var center := Vector2(float(p[0]),float(p[2]))
+		var distance := center.distance_to(Vector2(door.global_position.x,door.global_position.z))
+		if distance<best:
+			best = distance
+			top = float(p[1]) + .12
+	return top
+
+
+func build_door_transitions(door: StaticBody3D) -> void:
+	# Um piso elevado sem rampa vira um degrau impossivel para CharacterBody3D.
+	# Cria entrada inclinada dentro e fora da porta, sem mudar seu save.
+	# A largura fica menor que a abertura de 0,85 m.
+	var start_y := floor_height_near_door(door)
+	for side in [-1.0,1.0]:
+		var length := 1.65
+		var outside := door.to_global(Vector3(0,0,side*(length+.08)))
+		var end_y := ground(outside.x,outside.z) + .06
+		if absf(start_y-end_y)<.035:
+			continue
+		var ramp := box(door,Vector3(0,(start_y+end_y)*.5-door.global_position.y-.055,
+			side*(length*.5+.08)),Vector3(.72,.11,length),
+			"door_transition_wood",Color("#986f46"))
+		ramp.name = "RampaPorta"
+		ramp.rotation.x = side*atan2(start_y-end_y,length)
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(.72,.12,length)
+		var col := CollisionShape3D.new()
+		col.name = "ColisaoRampaPorta"
+		col.shape = shape
+		col.position = ramp.position
+		col.rotation = ramp.rotation
+		door.add_child(col)
 
 
 func make_vine(parent: Node3D, offset: Vector3) -> void:
