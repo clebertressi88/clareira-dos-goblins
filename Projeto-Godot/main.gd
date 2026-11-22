@@ -1160,8 +1160,12 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 	var body := CharacterBody3D.new()
 	body.collision_layer = TARGET
 	body.collision_mask = SOLID
+	body.floor_snap_length = .38
 	parent.add_child(body)
-	body.position = at
+	# Os mapas antigos criavam o guardiao em y=0 mesmo com o solo mais alto.
+	# Posicione todos os animais e inimigos na altitude real da malha fisica.
+	# A pequena folga deixa o corpo assentar sem atravessar o HeightMap.
+	body.position = Vector3(at.x,ground(at.x,at.z)+.06,at.z)
 	body.set_meta("kind",kind)
 	body.set_meta("id",id)
 	body.set_meta("hp",2 if kind=="rabbit" else 5 if kind=="wolf" else 9)
@@ -2534,6 +2538,19 @@ func update_wolf_spawns(dt: float) -> void:
 		return
 	wolf_spawn_timer = 8.0
 
+func mob_has_clear_hit(mob: CharacterBody3D) -> bool:
+	# Raycast separado do calculo horizontal: evita ataques atraves do terreno
+	# e de paredes. O primeiro alvo atingido deve ser o corpo do jogador.
+	if not is_instance_valid(mob) or not is_instance_valid(player):
+		return false
+	var begin_ray := mob.global_position+Vector3.UP*.85
+	var end_ray := player.global_position+Vector3.UP*.85
+	var query := PhysicsRayQueryParameters3D.create(
+		begin_ray,end_ray,SOLID|4,[mob.get_rid()])
+	var contact := get_world_3d().direct_space_state.intersect_ray(query)
+	return not contact.is_empty() and contact.get("collider",null)==player
+
+
 func update_mobs(dt: float) -> void:
 	for i in range(mobs.size()-1,-1,-1):
 		var mob := mobs[i]
@@ -2562,11 +2579,14 @@ func update_mobs(dt: float) -> void:
 			speed = 1.15
 		if distance<10:
 			speed = 2.25
-			if distance<1.35 and elapsed>next_hurt:
-				next_hurt = elapsed+1
-				health -= 15 if kind=="wolf" else 23
-				if health<=0:
-					respawn()
+			# Inimigos soterrados, em outro nivel ou atras de objetos
+			# nao devem causar dano apenas pela distancia horizontal.
+			if distance<1.35 and absf(player.global_position.y-mob.global_position.y)<1.35 and elapsed>next_hurt:
+				if mob_has_clear_hit(mob):
+					next_hurt = elapsed+1
+					health -= 15 if kind=="wolf" else 23
+					if health<=0:
+						respawn()
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
 		var stride := (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
