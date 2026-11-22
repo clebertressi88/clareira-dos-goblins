@@ -57,6 +57,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha teste de arvore/raiz/som/pa/lobo' }
           if (!(Select-String -Path floresta.log -SimpleMatch 'FOREST GAMEPLAY OK')) { throw 'Teste de floresta nao confirmou sucesso' }
           if (Select-String -Path floresta.log -Pattern 'SCRIPT ERROR|FOREST GAMEPLAY FAIL' -CaseSensitive:$false) { throw 'Erros no teste de floresta' }
+      - name: Testar paredes e pisos-tetos em 3 pavimentos
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_build_levels.gd 2>&1 | Tee-Object -FilePath construcao.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha de montagem das estruturas' }
+          if (!(Select-String -Path construcao.log -SimpleMatch 'BUILD LEVELS OK')) { throw 'Teste de construcoes nao confirmou sucesso' }
+          if (Select-String -Path construcao.log -Pattern 'SCRIPT ERROR|BUILD LEVELS FAIL' -CaseSensitive:$false) { throw 'Erro no teste de construcao' }
       - name: Enviar logs de teste
         if: always()
         uses: actions/upload-artifact@v4
@@ -68,4 +75,5 @@ jobs:
             fisica-terreno.log
             visual-terreno.log
             floresta.log
+            construcao.log
           if-no-files-found: ignore
