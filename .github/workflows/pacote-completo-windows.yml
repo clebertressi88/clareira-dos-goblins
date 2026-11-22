@@ -1,0 +1,123 @@
+name: Criar pacote completo Clareira Windows
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/pacote-completo-windows.yml'
+      - 'ferramentas/Atualizador-Windows/**'
+
+jobs:
+  pacote-completo:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Baixar jogo com paisagem e historico Git
+        uses: actions/checkout@v4
+        with:
+          ref: feature/paisagem-montanhas-rios-regeneracao
+          path: stage/Codigo-Fonte
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Baixar atualizador e scripts
+        uses: actions/checkout@v4
+        with:
+          path: builder
+          persist-credentials: false
+      - name: Preparar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Compilar atualizador portable
+        shell: pwsh
+        run: |
+          dotnet publish builder/ferramentas/Atualizador-Windows/AtualizadorClareira.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -o stage/Atualizador
+          if ($LASTEXITCODE -ne 0) { throw 'Falhou compilacao do atualizador.' }
+      - name: Baixar Godot 4.7.2 portable oficial
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path download,stage/Ferramentas | Out-Null
+          $url = 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip'
+          curl.exe -fLsS --retry 4 -o download/godot.zip $url
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao baixar Godot oficial.' }
+          Expand-Archive -LiteralPath download/godot.zip -DestinationPath download/Godot -Force
+          $exe = Get-ChildItem download/Godot -Filter 'Godot_v4.7.2-stable_win64.exe' -File -Recurse | Select-Object -First 1
+          if (-not $exe) { throw 'Nao encontrei o Godot no ZIP oficial.' }
+          Copy-Item -LiteralPath $exe.FullName -Destination stage/Ferramentas/Godot.exe
+      - name: Importar e validar jogo Godot
+        shell: pwsh
+        run: |
+          $godot = (Resolve-Path stage/Ferramentas/Godot.exe).Path
+          $proj = (Resolve-Path stage/Codigo-Fonte/Projeto-Godot).Path
+          & $godot --headless --path $proj --import 2>&1 | Tee-Object -FilePath download/validacao-godot.log
+          if ($LASTEXITCODE -ne 0) { throw 'Godot nao importou o projeto.' }
+          $errors = Select-String -Path download/validacao-godot.log -Pattern 'SCRIPT ERROR|Parse Error|Failed to load script' -CaseSensitive:$false
+          if ($errors) { $errors | Select-Object -First 8 | ForEach-Object { Write-Host $_.Line }; throw 'Godot encontrou erros de script.' }
+      - name: Baixar templates Windows e exportar o jogo
+        id: exportar
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz'
+          curl.exe -fLsS --retry 3 -o download/templates.tpz $url
+          if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel baixar templates de exportacao.' }
+          Add-Type -AssemblyName System.IO.Compression
+          $dst = Join-Path $env:APPDATA 'Godot/export_templates/4.7.2.stable'
+          New-Item -ItemType Directory -Path $dst -Force | Out-Null
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path download/templates.tpz).Path)
+          try {
+            $wanted = @('windows_release_x86_64.exe','windows_debug_x86_64.exe','version.txt')
+            foreach ($file in $wanted) {
+              $entry = $zip.Entries | Where-Object { $_.FullName -eq ('templates/' + $file) } | Select-Object -First 1
+              if ($null -eq $entry) { throw "Template ausente: $file" }
+              $out = Join-Path $dst $file
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$out,$true)
+            }
+          } finally { $zip.Dispose() }
+          New-Item -ItemType Directory -Force -Path stage/Jogo-Windows | Out-Null
+          $godot = (Resolve-Path stage/Ferramentas/Godot.exe).Path
+          $proj = (Resolve-Path stage/Codigo-Fonte/Projeto-Godot).Path
+          $out = Join-Path (Get-Location) 'stage/Jogo-Windows/Clareira-dos-Goblins.exe'
+          & $godot --headless --path $proj --export-release 'Windows Desktop' $out 2>&1 | Tee-Object -FilePath download/exportacao.log
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'Exportacao Windows nao concluida.' }
+      - name: Incluir atalhos e instrucoes
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath builder/ferramentas/Pacote-Completo/INSTRUCOES.txt -Destination stage/INSTRUCOES.txt
+          Copy-Item -LiteralPath builder/ferramentas/Pacote-Completo/JOGAR.cmd -Destination stage/JOGAR.cmd
+          Copy-Item -LiteralPath builder/ferramentas/Pacote-Completo/ABRIR-NO-GODOT.cmd -Destination stage/ABRIR-NO-GODOT.cmd
+          Copy-Item -LiteralPath builder/ferramentas/Pacote-Completo/ATUALIZAR.cmd -Destination stage/ATUALIZAR.cmd
+          if (Test-Path stage/Jogo-Windows/Clareira-dos-Goblins.exe) { Write-Host 'Jogo Windows EXE exportado.' } else { Write-Host 'Jogo executavel pelo Godot portable incluido (JOGAR.cmd).' }
+          git -C stage/Codigo-Fonte status --porcelain
+          $state = git -C stage/Codigo-Fonte status --porcelain
+          if ($state) { throw 'Arquivos locais alterados: o pacote precisa ter projeto Git limpo.' }
+      - name: Compactar tudo em ZIP unico
+        shell: pwsh
+        run: |
+          @'
+          import os, zipfile
+          base = 'stage'
+          target = 'Clareira-dos-Goblins-COMPLETO-Windows.zip'
+          count = 0
+          with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as z:
+              for root, dirs, files in os.walk(base):
+                  dirs[:] = [d for d in dirs if d not in ('.godot',)]
+                  for file in files:
+                      path = os.path.join(root, file)
+                      arc = os.path.join('Clareira-dos-Goblins-COMPLETO', os.path.relpath(path, base))
+                      z.write(path, arc)
+                      count += 1
+          print('ZIP:',target,'files:',count,'bytes:',os.path.getsize(target))
+          with zipfile.ZipFile(target) as z:
+              assert z.testzip() is None
+              required = ['Clareira-dos-Goblins-COMPLETO/INSTRUCOES.txt', 'Clareira-dos-Goblins-COMPLETO/JOGAR.cmd', 'Clareira-dos-Goblins-COMPLETO/Atualizador/ClareiraAtualizador.exe','Clareira-dos-Goblins-COMPLETO/Ferramentas/Godot.exe','Clareira-dos-Goblins-COMPLETO/Codigo-Fonte/Projeto-Godot/project.godot','Clareira-dos-Goblins-COMPLETO/Codigo-Fonte/Projeto-Godot/landscape_terrain.gd','Clareira-dos-Goblins-COMPLETO/Codigo-Fonte/.git/config']
+              for f in required:
+                  assert f in z.namelist(), f
+          '@ | python
+          if ($LASTEXITCODE -ne 0) { throw 'Pacote ZIP incompleto.' }
+      - name: Disponibilizar pacote completo
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clareira-dos-Goblins-COMPLETO-Windows
+          path: Clareira-dos-Goblins-COMPLETO-Windows.zip
+          retention-days: 30
+          if-no-files-found: error
