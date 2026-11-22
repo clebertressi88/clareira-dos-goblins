@@ -6,6 +6,7 @@ on:
       - 'Projeto-Godot/main.gd'
       - 'Projeto-Godot/tests/**'
       - 'Projeto-Godot/landscape_terrain.gd'
+      - 'Projeto-Godot/tree_fall_sound.gd'
       - '.github/workflows/teste-controles-paisagem.yml'
       - 'ferramentas/Correcao-WASD/**'
       - '.github/workflows/compilar-correcao-wasd.yml'
@@ -38,6 +39,9 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/fisica.log -SimpleMatch 'TERRAIN PHYSICS OK')) { throw 'Falha fisica de player/NPC' }
           & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_visual.gd 2>&1 | Tee-Object -FilePath temp/visual.log
           if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/visual.log -SimpleMatch 'TERRAIN RENDERING OK')) { throw 'Falha teste de terreno visual/camera' }
+          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_forest_gameplay.gd 2>&1 | Tee-Object -FilePath temp/floresta.log
+          if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/floresta.log -SimpleMatch 'FOREST GAMEPLAY OK')) { throw 'Falha teste de arvore/pa/som/lobos' }
+          if (Select-String -Path temp/floresta.log -Pattern 'SCRIPT ERROR|FOREST GAMEPLAY FAIL' -CaseSensitive:$false) { throw 'Erros na floresta' }
       - name: Preparar templates exportacao
         shell: pwsh
         run: |
