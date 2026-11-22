@@ -1640,19 +1640,26 @@ func timber(tree: Node3D, fell: bool) -> void:
 	if fell:
 		# O tronco cai e some, mas a arvore original permanece no mapa como toco.
 		var original := visual.get_node("Crescimento") as Node3D
+		# A arvore gira a partir do ponto de corte na base, e nao do meio
+		# do tronco. A extremidade cortada fica encostada no toco.
+		var fall_pivot := Node3D.new()
+		fall_pivot.name = "QuedaArvore"
+		add_child(fall_pivot)
+		fall_pivot.global_position = tree.global_position + Vector3.UP * 0.53
 		var falling := original.duplicate() as Node3D
-		add_child(falling)
-		falling.global_transform = original.global_transform
+		fall_pivot.add_child(falling)
+		falling.position = Vector3(0.0, -0.53, 0.0)
+		falling.rotation = original.rotation
 		play_tree_fall_sound(tree.global_position)
 		var id: String = str(tree.get_meta("id",""))
 		tree_regrowth[id] = Time.get_unix_time_from_system()
 		tree.set_meta("cuts",0)
 		update_tree_visual(tree)
-		var fall := falling.create_tween()
-		fall.tween_property(falling,"quaternion",Quaternion(axis,PI*.49),.57).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		fall.tween_interval(.35)
-		fall.tween_property(falling,"scale",Vector3.ONE*.02,.26).set_trans(Tween.TRANS_SINE)
-		fall.tween_callback(falling.queue_free)
+		var fall := fall_pivot.create_tween()
+		fall.tween_property(fall_pivot,"quaternion",Quaternion(axis,PI * 0.49),0.78).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		fall.tween_interval(1.20)
+		fall.tween_property(fall_pivot,"scale",Vector3.ONE * 0.02,0.32).set_trans(Tween.TRANS_SINE)
+		fall.tween_callback(fall_pivot.queue_free)
 	else:
 		var shake := visual.create_tween()
 		visual.set_meta("reaction",shake)
@@ -3293,6 +3300,14 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 	if cuts>=needed:
 		for i in range(3):
 			store_object("log",tree_pos+Vector3((i-1)*.65,0,.39))
+		# 50% de chance por arvore abatida: caem de 1 a 3 gravetos.
+		if randf() < 0.50:
+			var twigs := randi_range(1,3)
+			for twig_index in range(twigs):
+				var angle := TAU * float(twig_index) / float(twigs) + randf_range(-0.30,0.30)
+				var radius := randf_range(0.85,1.45)
+				var twig_pos := tree_pos + Vector3(cos(angle)*radius,0,sin(angle)*radius)
+				store_object("stick",Vector3(twig_pos.x,ground(twig_pos.x,twig_pos.z)+0.06,twig_pos.z))
 		if randf()<.35:
 			store_object("sapling",tree_pos+Vector3(.82,0,.55))
 		notice("Árvore derrubada. O mesmo tronco com raízes ficou no chão.")
