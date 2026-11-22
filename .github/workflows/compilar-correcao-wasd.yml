@@ -4,7 +4,9 @@ on:
   push:
     paths:
       - 'Projeto-Godot/main.gd'
-      - 'Projeto-Godot/tests/test_paisagem.gd'
+      - 'Projeto-Godot/tests/**'
+      - 'Projeto-Godot/landscape_terrain.gd'
+      - '.github/workflows/teste-controles-paisagem.yml'
       - 'ferramentas/Correcao-WASD/**'
       - '.github/workflows/compilar-correcao-wasd.yml'
 jobs:
@@ -31,7 +33,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha de importacao' }
           $errors = Select-String -Path temp/import.log -Pattern 'SCRIPT ERROR|Parse Error|Failed to load script' -CaseSensitive:$false
           if ($errors) { $errors | Select-Object -First 8 | ForEach-Object { Write-Host $_.Line }; throw 'Erro de script na importacao' }
-          # Teste completo de WASD roda separadamente na workflow Testar movimento e paisagem Godot.
+          # Testa fisica da malha e camera para impedir publicar terrain quebrado.
+          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_physics.gd 2>&1 | Tee-Object -FilePath temp/fisica.log
+          if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/fisica.log -SimpleMatch 'TERRAIN PHYSICS OK')) { throw 'Falha fisica de player/NPC' }
+          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_visual.gd 2>&1 | Tee-Object -FilePath temp/visual.log
+          if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/visual.log -SimpleMatch 'TERRAIN RENDERING OK')) { throw 'Falha teste de terreno visual/camera' }
       - name: Preparar templates exportacao
         shell: pwsh
         run: |
