@@ -80,6 +80,38 @@ func _run_test() -> void:
 	if travel < .45:
 		fail("WASD nao movimentou o jogador; deslocamento = %.3f" % travel)
 		return
-	print("CONTROLES TEST OK: Jogar/continuar, tecla W e deslocamento de %.2f m." % travel)
+	# Validar seta e layout logico sem depender apenas de scan code fisico.
+	var arrow_down := InputEventKey.new()
+	arrow_down.keycode = KEY_UP
+	arrow_down.physical_keycode = KEY_UP
+	arrow_down.pressed = true
+	Input.parse_input_event(arrow_down)
+	await physics_frame
+	var mapped: Vector2 = game.call("movement_axis")
+	if mapped.y > -.8:
+		fail("Seta para cima nao foi reconhecida: eixo = " + str(mapped))
+		return
+	var arrow_up := InputEventKey.new()
+	arrow_up.keycode = KEY_UP
+	arrow_up.physical_keycode = KEY_UP
+	arrow_up.pressed = false
+	Input.parse_input_event(arrow_up)
+	# Tecla W tambem inicia a partir do menu sem exigir foco em um botao.
+	game.call("show_menu")
+	var resume_down := InputEventKey.new()
+	resume_down.keycode = KEY_W
+	resume_down.physical_keycode = KEY_W
+	resume_down.pressed = true
+	Input.parse_input_event(resume_down)
+	await process_frame
+	if not bool(game.get("moving")):
+		fail("W no menu nao ativou Jogar/continuar")
+		return
+	var resume_up := InputEventKey.new()
+	resume_up.keycode = KEY_W
+	resume_up.physical_keycode = KEY_W
+	resume_up.pressed = false
+	Input.parse_input_event(resume_up)
+	print("CONTROLES TEST OK: Jogar/continuar, tecla W e deslocamento de %.2f m; setas e iniciar por tecla." % travel)
 	print("PAISAGEM TEST OK: cena, arvore, colisao, toco, broto e maturidade.")
 	quit(0)
