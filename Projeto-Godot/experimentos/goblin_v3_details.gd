@@ -113,11 +113,12 @@ static func _sculpted_mesh(kind: String) -> ArrayMesh:
 		for k in range(radial):
 			var a := j*(radial+1)+k
 			var b := a+radial+1
-			indexed.append_array(PackedInt32Array([a,b,a+1,b,b+1,a+1]))
+			indexed.append_array(PackedInt32Array([a,a+1,b,b,a+1,b+1]))
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for t in indexed:
 		st.add_vertex(uv[t])
+	st.index()
 	st.generate_normals()
 	return st.commit()
 
@@ -336,11 +337,12 @@ static func _tube_mesh(points: Array, radii: Array) -> ArrayMesh:
 		for j in range(segments):
 			var next := (j+1)%segments
 			st.add_vertex(ring[i][j])
-			st.add_vertex(ring[i+1][j])
-			st.add_vertex(ring[i][next])
 			st.add_vertex(ring[i][next])
 			st.add_vertex(ring[i+1][j])
+			st.add_vertex(ring[i][next])
 			st.add_vertex(ring[i+1][next])
+			st.add_vertex(ring[i+1][j])
+	st.index()
 	st.generate_normals()
 	return st.commit()
 
