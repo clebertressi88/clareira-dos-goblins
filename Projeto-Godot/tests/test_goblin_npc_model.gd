@@ -50,6 +50,21 @@ func _test_character(visual: Node3D, title: String) -> bool:
 	if active_parts<2 or not arms or not legs:
 		fail(title+": nao ha pele articulada em bracos E pernas")
 		return false
+	var swords: Array = controller.get("sword_parts")
+	var shields: Array = controller.get("shield_parts")
+	if swords.is_empty() or shields.is_empty():
+		fail(title+": espada e escudo nao foram separados da malha do corpo")
+		return false
+	controller.call("set_equipment",false,false)
+	for piece in swords+shields:
+		if not is_instance_valid(piece) or piece.visible or (piece as MeshInstance3D).mesh == null:
+			fail(title+": item nao foi removido da mao corretamente")
+			return false
+	controller.call("set_equipment",true,true)
+	for piece in swords+shields:
+		if not piece.visible:
+			fail(title+": item nao reapareceu ao equipar")
+			return false
 	controller.call("animate",Vector3(2,0,0),.3,true)
 	var skeleton := skeletons[0] as Skeleton3D
 	if skeleton.get_bone_pose_rotation(7).angle_to(Quaternion.IDENTITY)<.05 or skeleton.get_bone_pose_rotation(3).angle_to(Quaternion.IDENTITY)<.05:

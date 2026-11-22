@@ -40,6 +40,8 @@ const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
 var backpack_equipped := false
+var sword_equipped := false
+var shield_equipped := false
 var backpack_slots: Array[Vector2i] = []
 var backpack_selected_item := -1
 var backpack_visual: Node3D
@@ -51,7 +53,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 5 # Sincroniza todos os itens descartados e estruturas entre jogadores
+const NET_PROTOCOL := 6 # Equipamento de espada e escudo sincronizado entre jogadores
 const NET_SHARED_KINDS := ITEM_KINDS + ["block"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -412,6 +414,7 @@ func make_player() -> void:
 	player.add_child(player_model)
 	player_model.rotation.y = PI
 	goblin_npc(player_model,Color("#895938"))
+	apply_player_equipment()
 	backpack_visual = Node3D.new()
 	backpack_visual.name = "MochilaVestida"
 	player_model.add_child(backpack_visual)
@@ -1957,6 +1960,30 @@ func open_craft(mode: String) -> void:
 	craft_cells.fill(Vector2i(-1,0))
 	show_inventory()
 
+func apply_player_equipment() -> void:
+	if not is_instance_valid(player_model):
+		return
+	var rig_node := player_model.get_node_or_null("GoblinRig")
+	if rig_node != null:
+		rig_node.call("set_equipment",sword_equipped,shield_equipped)
+
+
+func toggle_player_equipment(which: String) -> void:
+	if which=="sword":
+		sword_equipped = not sword_equipped
+	elif which=="shield":
+		shield_equipped = not shield_equipped
+	else:
+		return
+	apply_player_equipment()
+	save_game()
+	show_inventory()
+
+
+func player_equipment_mask() -> int:
+	return (1 if sword_equipped else 0) | (2 if shield_equipped else 0)
+
+
 func show_inventory() -> void:
 	sync_inventory_slots()
 	if not inventory:
@@ -1998,6 +2025,19 @@ func show_inventory() -> void:
 	caption.modulate = Color("#ffe29c")
 	inventory_side.add_child(caption)
 	inventory_side.add_child(inventory_grid)
+	var gear_title := Label.new()
+	gear_title.text = "Equipamento (visual)"
+	inventory_side.add_child(gear_title)
+	var gear_row := HBoxContainer.new()
+	inventory_side.add_child(gear_row)
+	for gear in ["sword","shield"]:
+		var gear_button := Button.new()
+		var is_on := sword_equipped if gear=="sword" else shield_equipped
+		gear_button.text = ("Retirar " if is_on else "Equipar ") + ("espada" if gear=="sword" else "escudo")
+		gear_button.tooltip_text = "Exibir ou ocultar equipamento original na mao do personagem."
+		gear_button.pressed.connect(toggle_player_equipment.bind(gear))
+		style_craft_button(gear_button)
+		gear_row.add_child(gear_button)
 	for slot_index in range(inventory_slots.size()):
 		var kind: int = inventory_slots[slot_index]
 		var item := Button.new()
@@ -2940,7 +2980,7 @@ func _physics_process(dt: float) -> void:
 	if net_role!="solo" and multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
 		if net_role=="host" or net_connected:
-			send_position.rpc(player.global_position,player.rotation.y)
+			send_position.rpc(player.global_position,player.rotation.y,player_equipment_mask())
 	if net_role=="host" and multiplayer.get_peers().size()>0:
 		net_entities_clock += dt
 		if net_entities_clock>=.15:
@@ -3553,6 +3593,8 @@ func load_game() -> void:
 		reserve[i] = int(saved_reserve[i])
 	hotbar_manual = bool(data.get("hotbar_manual",false))
 	backpack_equipped = bool(data.get("backpack_equipped",false)) and stock[BACKPACK_ITEM]>0
+	sword_equipped = bool(data.get("sword_equipped",false))
+	shield_equipped = bool(data.get("shield_equipped",false))
 	var saved_inventory: Array = data.get("inventory_slots",[])
 	for index in range(mini(inventory_slots.size(),saved_inventory.size())):
 		var kind := int(saved_inventory[index])
@@ -3595,7 +3637,8 @@ func save_game() -> void:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":removed,
 			"placed":placed,"tree_regrowth":tree_regrowth,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
-			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots}))
+			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
+			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.close()
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE+".tmp"),ProjectSettings.globalize_path(SAVE))
 
@@ -4069,11 +4112,14 @@ func net_create_avatar(peer_id: int) -> Node3D:
 	avatar.add_child(visual)
 	visual.rotation.y = PI
 	goblin_npc(visual,Color("#895938"))
+	var remote_rig := visual.get_node_or_null("GoblinRig")
+	if remote_rig != null:
+		remote_rig.call("set_equipment",false,false)
 	remotes[peer_id] = avatar
 	return avatar
 
 
-func net_apply_avatar_position(peer_id: int,pos: Vector3,facing: float) -> void:
+func net_apply_avatar_position(peer_id: int,pos: Vector3,facing: float,gear_mask: int) -> void:
 	if peer_id==multiplayer.get_unique_id() or not pos.is_finite() or not is_finite(facing):
 		return
 	if pos.length()>50000:
@@ -4086,30 +4132,34 @@ func net_apply_avatar_position(peer_id: int,pos: Vector3,facing: float) -> void:
 		avatar.position = pos
 	avatar.set_meta("destination",pos)
 	avatar.rotation.y = facing
+	var avatar_visual := avatar.get_child(0) as Node3D
+	var avatar_rig := avatar_visual.get_node_or_null("GoblinRig")
+	if avatar_rig != null:
+		avatar_rig.call("set_equipment",(gear_mask&1)!=0,(gear_mask&2)!=0)
 
 
 @rpc("any_peer","call_remote","unreliable_ordered")
-func send_position(pos: Vector3,facing: float) -> void:
+func send_position(pos: Vector3,facing: float,gear_mask: int) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if sender<1:
 		return
 	if net_role!="host":
 		# Cliente so aceita atualizacoes do anfitriao; nao de outros clientes.
 		if sender==1:
-			net_apply_avatar_position(1,pos,facing)
+			net_apply_avatar_position(1,pos,facing,gear_mask)
 		return
 	if not multiplayer.get_peers().has(sender):
 		return
-	net_apply_avatar_position(sender,pos,facing)
+	net_apply_avatar_position(sender,pos,facing,gear_mask)
 	# O anfitriao encaminha posicoes para todos os outros clientes.
-	net_relay_position.rpc(sender,pos,facing)
+	net_relay_position.rpc(sender,pos,facing,gear_mask)
 
 
 @rpc("authority","call_remote","unreliable_ordered")
-func net_relay_position(peer_id: int,pos: Vector3,facing: float) -> void:
+func net_relay_position(peer_id: int,pos: Vector3,facing: float,gear_mask: int) -> void:
 	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
 		return
-	net_apply_avatar_position(peer_id,pos,facing)
+	net_apply_avatar_position(peer_id,pos,facing,gear_mask)
 
 
 @rpc("authority","call_remote","reliable")

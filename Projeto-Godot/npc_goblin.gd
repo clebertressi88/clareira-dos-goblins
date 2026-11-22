@@ -4,6 +4,7 @@ extends Node3D
 ## skinning em tempo de execucao, mantendo UVs, materiais e textura do arquivo.
 ## O movimento real e feito por Skeleton3D, nao pelo antigo balanco de cabeca.
 const MODEL: PackedScene = preload("res://modelos/goblin_npc.glb")
+const EQUIPMENT = preload("res://npc_goblin_equipment.gd")
 
 const BONES := [
 	"Quadril",       # 0
@@ -23,6 +24,10 @@ const BONES := [
 const PARENTS := [-1,0,1,1,3,1,5,0,7,0,9,8,10]
 
 var skeletons: Array[Skeleton3D] = []
+var sword_parts: Array[Node3D] = []
+var shield_parts: Array[Node3D] = []
+var sword_equipped := true
+var shield_equipped := true
 var walk_phase := 0.0
 var walk_blend := 0.0
 
@@ -40,6 +45,16 @@ func install() -> bool:
 	model.name = "ModeloGoblin"
 	pivot.add_child(model)
 	var parts := model.find_children("*","MeshInstance3D",true,false)
+	var gear_sections: Dictionary = {}
+	for node in parts:
+		var part := node as MeshInstance3D
+		if part == null or part.mesh == null:
+			continue
+		var pieces: Array = EQUIPMENT.split_mesh(part)
+		if pieces[0] == null:
+			continue
+		gear_sections[part.get_instance_id()] = {"sword":pieces[1],"shield":pieces[2]}
+		part.mesh = pieces[0]
 	var bounds_min := Vector3(INF,INF,INF)
 	var bounds_max := Vector3(-INF,-INF,-INF)
 	for node in parts:
@@ -68,13 +83,29 @@ func install() -> bool:
 	for node in parts:
 		var part := node as MeshInstance3D
 		if part != null and part.mesh != null:
+			var previous_count := skeletons.size()
 			_skin_part(part)
-	if skeletons.is_empty():
+			if skeletons.size()>previous_count and gear_sections.has(part.get_instance_id()):
+				var group: Dictionary = gear_sections[part.get_instance_id()]
+				var skeleton := skeletons[-1]
+				EQUIPMENT.attach(part,skeleton,group["sword"] as ArrayMesh,"Espada","AntebracoDir",sword_parts)
+				EQUIPMENT.attach(part,skeleton,group["shield"] as ArrayMesh,"Escudo","AntebracoEsq",shield_parts)
+	if skeletons.is_empty() or sword_parts.is_empty() or shield_parts.is_empty():
 		push_error("GLB sem pesos de ossos ou malhas compativeis.")
 		pivot.queue_free()
 		return false
+	set_equipment(sword_equipped,shield_equipped)
 	set_meta("skeleton_ready",true)
+	set_meta("atlas_original_preservado",true)
 	return true
+
+func set_equipment(sword: bool, shield: bool) -> void:
+	sword_equipped = sword
+	shield_equipped = shield
+	for item in sword_parts:
+		if is_instance_valid(item): item.visible = sword
+	for item in shield_parts:
+		if is_instance_valid(item): item.visible = shield
 
 func _skin_part(part: MeshInstance3D) -> void:
 	var original := part.mesh
