@@ -94,7 +94,7 @@ static func build(parent: Node3D) -> void:
 		_tube(parent,Vector3(-.40,.340,side*.032),Vector3(-.23,.310,side*.064),.005,blade_grain,6)
 		_tube(parent,Vector3(-.36,.375,side*.043),Vector3(-.20,.358,side*.068),.004,blade_grain,6)
 		# Corda REAL em X cruzando a face do machado.
-		var z := side*.093
+		var z: float = float(side) * 0.093
 		_tube(parent,Vector3(-.075,.454,z),Vector3(.081,.250,z),.017,rope)
 		_tube(parent,Vector3(.081,.450,z+.006*side),Vector3(-.073,.254,z+.006*side),.017,rope_shadow)
 	# Cordas firmes acima e abaixo do encaixe.
