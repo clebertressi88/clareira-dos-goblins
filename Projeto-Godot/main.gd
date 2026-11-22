@@ -48,7 +48,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 1
+const NET_PROTOCOL := 2
 const NET_SHARED_KINDS := ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor","block"]
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -1807,7 +1807,10 @@ func show_menu() -> void:
 	label("Mouse para mirar · Direito pegar/usar · Esquerdo atacar/construir")
 	label("E inventário · B abrigo · Q largar · V câmera · F10 retornar à clareira")
 	if net_role=="host":
-		label("Sala aberta · UDP %d · jogadores: %d/8" % [NET_PORT,multiplayer.get_peers().size()+1])
+		label("Sala LAN aberta · UDP %d · jogadores: %d/8" % [NET_PORT,multiplayer.get_peers().size()+1])
+		var ips := lan_local_ipv4_addresses()
+		label("IP do anfitrião: " + (", ".join(ips) if ips.size()>0 else "verifique em ipconfig"))
+		label("Outros jogadores devem estar no mesmo Wi-Fi ou roteador.")
 	elif net_role=="client":
 		label(("Conectado em " if net_connected else "Conectando a ")+net_address)
 	if not net_session_message.is_empty():
@@ -1820,7 +1823,7 @@ func show_menu() -> void:
 		address.focus_mode = Control.FOCUS_CLICK
 		menu.add_child(address)
 		address.release_focus()
-		label("Todos precisam ter a mesma versão · Porta UDP %d" % NET_PORT)
+		label("Mesmo roteador/rede Wi-Fi e mesma versão · UDP %d" % NET_PORT)
 		button("Hospedar partida na rede local (LAN)", host_game)
 		button("Entrar na partida pelo IP", join_game)
 	else:
@@ -1830,6 +1833,10 @@ func show_menu() -> void:
 	button("Salvar e sair", func(): save_game(); get_tree().quit())
 
 func begin() -> void:
+	if net_role=="client" and not net_world_ready:
+		notice("Aguarde o anfitrião enviar o mundo antes de começar.")
+		show_menu()
+		return
 	panel.hide()
 	inventory = false
 	moving = true
@@ -3414,6 +3421,22 @@ func _notification(what: int) -> void:
 	if what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
 
+func lan_local_ipv4_addresses() -> PackedStringArray:
+	var addresses := PackedStringArray()
+	for ip in IP.get_local_addresses():
+		# Ignora IPv6, loopback, links locais e IPs publicos.
+		if ip.contains(":") or not ip.is_valid_ip_address():
+			continue
+		var octets := ip.split(".")
+		if octets.size()!=4:
+			continue
+		var second := int(octets[1])
+		var private_range := ip.begins_with("192.168.") or ip.begins_with("10.") or (int(octets[0])==172 and second>=16 and second<=31)
+		if private_range and not addresses.has(ip):
+			addresses.append(ip)
+	return addresses
+
+
 func host_game() -> void:
 	disconnect_game()
 	var peer := ENetMultiplayerPeer.new()
@@ -3426,7 +3449,8 @@ func host_game() -> void:
 		return
 	net_role = "host"
 	net_connected = true
-	net_session_message = "Sala hospedada: compartilhe o IPv4 deste PC com quem está na mesma rede (UDP %d)." % NET_PORT
+	var ips := lan_local_ipv4_addresses()
+	net_session_message = "Compartilhe o IP local: %s (UDP %d)." % [", ".join(ips) if ips.size()>0 else "veja em ipconfig",NET_PORT]
 	multiplayer.multiplayer_peer = peer
 	notice("Partida hospedada. Porta UDP %d." % NET_PORT)
 	begin()
