@@ -783,18 +783,16 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var base := Node3D.new()
 			base.name = "BaseTronco"
 			visual.add_child(base)
-			var stump_trunk := cylinder(base,Vector3(0,.26,0),.23,.52,"tree_bark",Color.WHITE)
-			stump_trunk.name = "TroncoToco"
-			for i in range(5):
-				var angle := float(i)*TAU/5.0
-				var root := cylinder(base,Vector3(cos(angle)*.36,.075,sin(angle)*.36),.075,.64,"tree_bark",Color.WHITE)
-				root.rotation = Vector3(0.0,-angle,PI*.42)
+			# Base alargada e raizes afuniladas, ligadas dentro do tronco.
+			var wood_geo := preload("res://forest_wood_geometry.gd")
+			wood_geo.make_trunk(base,materials["tree_bark"],false)
+			wood_geo.make_roots(base,materials["tree_bark"],id)
 			var growth := Node3D.new()
 			growth.name = "Crescimento"
 			visual.add_child(growth)
 			# Tronco adulto unico desde o solo ate a copa: elimina a emenda
 			# visivel entre dois cilindros sobrepostos no ponto de corte.
-			cylinder(growth,Vector3(0,1.10,0),.23,2.20,"tree_bark",Color.WHITE)
+			wood_geo.make_trunk(growth,materials["tree_bark"],true)
 			# Copas detalhadas, galhos e variacao deterministica por ID.
 			# O tronco continua sendo a unica colisao da arvore.
 			preload("res://forest_tree_visual.gd").decorate(growth,materials["tree_bark"],id)
