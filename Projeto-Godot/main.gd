@@ -613,6 +613,8 @@ func village() -> void:
 	if hut and not won and not removed.has("guardiao"):
 		creature("guardian","guardiao",Vector3(3,0,-39),self)
 	for entry in placed:
+		if str(entry.get("kind",""))=="hut":
+			continue
 		var p: Array = entry["p"]
 		spawn_object(entry["kind"],entry["id"],Vector3(p[0],p[1],p[2]),self,float(entry.get("r",0.0)))
 
@@ -2913,7 +2915,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_SPACE: jump = true
 			KEY_Q: drop_selected()
-			KEY_B: build_hut()
 			KEY_C: show_inventory()
 			KEY_R: eat()
 			KEY_F: primary()
@@ -3564,23 +3565,9 @@ func bench_near() -> bool:
 				return true
 	return false
 
-func build_hut() -> void:
-	if hut:
-		return
-	if Vector2(player.position.x,player.position.z+6).length()>7:
-		notice("Volte para perto da fogueira.")
-		return
-	if stock[1]<4 or stock[2]<2:
-		notice("Abrigo: 4 gravetos e 2 pedras.")
-		return
-	stock[1] -= 4
-	stock[2] -= 2
-	hut = true
-	store_object("hut",Vector3(-3,0,-7))
-	creature("guardian","guardiao",Vector3(3,0,-39),self)
-	notice("O guardião apareceu no Vale da Névoa.")
-
 func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) -> void:
+	if kind=="hut":
+		return # Abrigo descontinuado.
 	if kind in NET_SHARED_KINDS and net_role=="client" and not net_apply_in_progress:
 		if net_world_ready:
 			net_request_place.rpc_id(1,kind,pos,yaw,level)
@@ -3658,7 +3645,7 @@ func load_game() -> void:
 	removed = data.get("removed",{})
 	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
-	placed = data.get("placed",[])
+	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
 	bench = bool(data.get("bench",false))
@@ -3843,7 +3830,7 @@ func apply_net_world(snapshot: Dictionary) -> void:
 				if old is CollisionObject3D:
 					old.collision_layer = 0
 				old.queue_free()
-	placed = (snapshot["placed"] as Array).duplicate(true)
+	placed = (snapshot["placed"] as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	removed = (snapshot["removed"] as Dictionary).duplicate(true)
 	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
@@ -3859,6 +3846,8 @@ func apply_net_world(snapshot: Dictionary) -> void:
 	chunks.clear()
 	load_chunks()
 	for entry in placed:
+		if str(entry.get("kind",""))=="hut":
+			continue
 		var p: Array = entry["p"]
 		spawn_object(str(entry["kind"]),str(entry["id"]),
 			Vector3(float(p[0]),float(p[1]),float(p[2])),self,float(entry.get("r",0.0)))
