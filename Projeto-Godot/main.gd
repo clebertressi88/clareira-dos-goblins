@@ -57,7 +57,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 6 # Equipamento de espada e escudo sincronizado entre jogadores
-const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -995,6 +995,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 				cylinder(tool,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
 				make_stone_axe_head(tool)
 			collider(o,Vector3(.4,.22,.76),Vector3.UP*.11)
+		"meat","meat_wolf","meat_rabbit":
+			preload("res://raw_meat_model.gd").build(o,kind=="meat_rabbit")
+			collider(o,Vector3(.52,.22,.43),Vector3.UP*.11)
 		_:
 			var item_colors := {"meat":Color("#a95842"),"hide":Color("#ad7c59"),"foot":Color("#eadcc1"),"spear":Color("#8e744d")}
 			ball(o,Vector3.UP*.14,Vector3(.42,.27,.33),kind,item_colors.get(kind,Color.WHITE))
@@ -3425,7 +3428,7 @@ func primary() -> void:
 				won = true
 				notice("Você conquistou o Vale da Névoa.")
 			else:
-				store_object("meat",pos)
+				store_object("meat_rabbit" if kind=="rabbit" else "meat_wolf",pos)
 				if kind=="rabbit":
 					store_object("hide",pos+Vector3(.41,0,0))
 					if randf()<.05:
@@ -3558,7 +3561,7 @@ func secondary() -> void:
 	if not hit.is_empty():
 		var o: Node3D = hit["collider"]
 		var kind: String = o.get_meta("kind","")
-		var item := ITEM_KINDS.find(kind)
+		var item := 3 if kind in ["meat_wolf","meat_rabbit"] else ITEM_KINDS.find(kind)
 		if kind=="block":
 			item = 2
 		if kind=="vine_bush":
@@ -4117,7 +4120,7 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 		if kind=="guardian":
 			won = true
 		else:
-			store_object("meat",p)
+			store_object("meat_rabbit" if kind=="rabbit" else "meat_wolf",p)
 			if kind=="rabbit":
 				store_object("hide",p+Vector3(.41,0,0))
 	net_sync_entities.rpc(net_capture_entities())
