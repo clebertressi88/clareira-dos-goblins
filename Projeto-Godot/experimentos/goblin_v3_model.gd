@@ -245,7 +245,7 @@ func _build_character() -> void:
 	_skirt_panel(.22,-.007,2)
 	# Bracos independentes em ombros/cotovelos e maos.
 	for side in [-1.0,1.0]:
-		var left := side<0.0
+		var left: bool = side < 0.0
 		var upper := "OmbroEsq" if left else "OmbroDir"
 		var lower := "CotoveloEsq" if left else "CotoveloDir"
 		var hand := "MaoEsq" if left else "MaoDir"
@@ -260,13 +260,13 @@ func _build_character() -> void:
 		_oval(hand,"Palma",wrist+Vector3(.013*side,-.09,.025),
 			Vector3(.19,.23,.14),skins["pele"])
 		for finger in range(3):
-			var fx := (.46+float(finger)*.051)*side
+			var fx: float = (.46+float(finger)*.051)*side
 			_rod(hand,"Dedo%d" % finger,
 				Vector3(fx,.735,.097),Vector3(fx,.666,.125),
 				.022,skins["pele"])
 	# Pernas completas com coxas, joelhos, canelas, botas e solas.
 	for side in [-1.0,1.0]:
-		var left := side<0.0
+		var left: bool = side < 0.0
 		var thigh := "CoxaEsq" if left else "CoxaDir"
 		var knee := "JoelhoEsq" if left else "JoelhoDir"
 		var ankle := "TornozeloEsq" if left else "TornozeloDir"
