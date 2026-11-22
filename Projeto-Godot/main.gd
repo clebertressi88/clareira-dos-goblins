@@ -448,7 +448,7 @@ func make_player() -> void:
 	axe_handle.name = "CaboMachadoMadeira"
 	wood_axe_head = Node3D.new()
 	axe.add_child(wood_axe_head)
-	make_wood_axe_head(wood_axe_head)
+	preload("res://wood_axe_model.gd").build(wood_axe_head)
 	stone_axe_head = Node3D.new()
 	axe.add_child(stone_axe_head)
 	make_stone_axe_head(stone_axe_head)
@@ -991,10 +991,10 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			o.add_child(tool)
 			tool.position = Vector3(0,.10,0)
 			tool.rotation.x = PI/2
-			cylinder(tool,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
 			if kind=="wood_axe":
-				make_wood_axe_head(tool)
+				preload("res://wood_axe_model.gd").build(tool)
 			else:
+				cylinder(tool,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
 				make_stone_axe_head(tool)
 			collider(o,Vector3(.4,.22,.76),Vector3.UP*.11)
 		_:
@@ -3093,7 +3093,7 @@ func _physics_process(dt: float) -> void:
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	# A antiga Sprite3D nao acompanha corretamente a rotacao 3D do golpe.
 	stone_axe_sprite.visible = false
-	axe.get_node("CaboMachadoMadeira").visible = held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
+	axe.get_node("CaboMachadoMadeira").visible = held in [STONE_AXE,SHOVEL_ITEM]
 	# Corte frontal: preparacao elevada, descida rapida com o fio, retorno neutro.
 	var chop_t := 1.0-clampf((next_attack-elapsed)/.46,0.0,1.0)
 	var chop_angle := -.44
