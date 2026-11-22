@@ -52,6 +52,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Godot nao importou o projeto.' }
           $errors = Select-String -Path download/validacao-godot.log -Pattern 'SCRIPT ERROR|Parse Error|Failed to load script' -CaseSensitive:$false
           if ($errors) { $errors | Select-Object -First 8 | ForEach-Object { Write-Host $_.Line }; throw 'Godot encontrou erros de script.' }
+      - name: Testar inicializacao e regeneracao das arvores
+        shell: pwsh
+        run: |
+          $godot = (Resolve-Path stage/Ferramentas/Godot.exe).Path
+          $proj = (Resolve-Path stage/Codigo-Fonte/Projeto-Godot).Path
+          & $godot --headless --path $proj --script res://tests/test_paisagem.gd 2>&1 | Tee-Object -FilePath download/teste-paisagem.log
+          if ($LASTEXITCODE -ne 0) { throw 'Teste de jogo ou arvores falhou; consulte o log.' }
+          $errors = Select-String -Path download/teste-paisagem.log -Pattern 'SCRIPT ERROR|RUNTIME ERROR|PAISAGEM TEST FAIL' -CaseSensitive:$false
+          if ($errors) { $errors | Select-Object -First 8 | ForEach-Object { Write-Host $_.Line }; throw 'Teste do jogo reportou erros.' }
+          if (!(Select-String -Path download/teste-paisagem.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Teste nao confirmou sucesso.' }
       - name: Baixar templates Windows e exportar o jogo
         id: exportar
         continue-on-error: true
