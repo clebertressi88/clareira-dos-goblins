@@ -3,6 +3,11 @@ extends Node3D
 const SAVE := "user://clareira-nativa.json"
 const CELL := 0.85
 const CHUNK := 16
+const TERRAIN := preload("res://landscape_terrain.gd")
+const TREE_BUD_DELAY := 120.0
+const TREE_GROW_SECONDS := 720.0
+var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
+var tree_regrowth_clock := 0.0
 const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2"]
 const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2"]
 const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2"}
@@ -357,8 +362,7 @@ func make_stone_axe_head(parent: Node3D) -> void:
 		binding.rotation.z = .19
 
 func ground(x: float,z: float) -> float:
-	var fade := smoothstep(16.,38.,Vector2(x,z).length())
-	return (sin(x*.12)*1.2+cos(z*.14)*.87+sin((x+z)*.22)*.52)*fade
+	return TERRAIN.height_at(x,z)
 
 func load_chunks() -> void:
 	var center := Vector2i(floori(player.position.x/CHUNK), floori(player.position.z/CHUNK))
@@ -394,6 +398,7 @@ func create_chunk(key: Vector2i) -> void:
 	var geometry := mesh.commit()
 	var land := mesh_part(chunk,geometry,Vector3.ZERO,Vector3.ONE,materials["grass"])
 	land.create_trimesh_collision()
+	create_river_chunk(chunk,key)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
 	for i in range(15):
@@ -404,11 +409,50 @@ func create_chunk(key: Vector2i) -> void:
 		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "vine_bush"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
 		var at := Vector3(x,ground(x,z),z)
+		# Compatibilidade: antigas arvores cortadas ficavam em "removed".
+		# Transforma-as em tocos regenerativos sem reaparecer adultas de uma vez.
+		if kind == "tree" and removed.has(id):
+			removed.erase(id)
+			if not tree_regrowth.has(id):
+				tree_regrowth[id] = Time.get_unix_time_from_system()
 		if kind == "rabbit":
 			if not removed.has(id):
 				creature(kind,id,at,chunk)
 		elif not removed.has(id):
 			spawn_object(kind,id,at,chunk)
+
+func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
+	var x0 := float(key.x * CHUNK)
+	var x1 := x0 + float(CHUNK)
+	var z0 := float(key.y * CHUNK)
+	var z1 := z0 + float(CHUNK)
+	var low := minf(TERRAIN.river_x(z0), TERRAIN.river_x(z1))
+	var high := maxf(TERRAIN.river_x(z0), TERRAIN.river_x(z1))
+	if high + TERRAIN.RIVER_HALF_WIDTH < x0 or low - TERRAIN.RIVER_HALF_WIDTH > x1:
+		return
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(8):
+		var za := z0 + float(i) * 2.0
+		var zb := za + 2.0
+		var ca := TERRAIN.river_x(za)
+		var cb := TERRAIN.river_x(zb)
+		var left_a := Vector3(ca - TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,za)
+		var right_a := Vector3(ca + TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,za)
+		var left_b := Vector3(cb - TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,zb)
+		var right_b := Vector3(cb + TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,zb)
+		for point in [left_a,left_b,right_a,right_a,left_b,right_b]:
+			surface.set_uv(Vector2(point.x,point.z) * .06)
+			surface.add_vertex(point)
+	surface.generate_normals()
+	var water_material := material("river_water",Color(.15,.43,.59,.77))
+	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	water_material.metallic = .08
+	water_material.roughness = .25
+	water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var water := mesh_part(chunk,surface.commit(),Vector3.ZERO,Vector3.ONE,water_material)
+	water.name = "Rio_Sinuoso"
+	# Agua visual: fisica de natacao e correnteza ficam para etapa posterior.
 
 func village() -> void:
 	spawn_friendly_goblin("Bruma",Vector3(-2,0,-4))
@@ -591,11 +635,30 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var visual := Node3D.new()
 			visual.name = "Visual"
 			o.add_child(visual)
-			cylinder(visual,Vector3(0,1.1,0),.18,2.2,"wood",Color("#855b36"))
+			var growth := Node3D.new()
+			growth.name = "Crescimento"
+			visual.add_child(growth)
+			cylinder(growth,Vector3(0,1.1,0),.18,2.2,"wood",Color("#855b36"))
 			for i in range(4):
 				var a := i*TAU/4
-				ball(visual,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
-			collider(o,Vector3(.39,2.7,.39),Vector3.UP*1.35)
+				ball(growth,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
+			var stump := Node3D.new()
+			stump.name = "Toco"
+			visual.add_child(stump)
+			cylinder(stump,Vector3(0,.24,0),.25,.48,"wood",Color("#855b36"))
+			cylinder(stump,Vector3(0,.487,0),.255,.032,"cut_wood",Color("#c6a273"))
+			for i in range(5):
+				var angle := float(i)*TAU/5.0
+				var root := cylinder(stump,Vector3(cos(angle)*.40,.075,sin(angle)*.40),.075,.78,"wood",Color("#6c452d"))
+				root.rotation = Vector3(0.0,-angle,PI*.45)
+			var sprout := Node3D.new()
+			sprout.name = "Broto"
+			visual.add_child(sprout)
+			cylinder(sprout,Vector3(.12,.67,0),.032,.46,"sprout_stem",Color("#589447"))
+			ball(sprout,Vector3(-.03,.88,0),Vector3(.24,.13,.19),"sprout_leaf",Color("#77a94b"))
+			ball(sprout,Vector3(.23,.93,0),Vector3(.22,.13,.18),"sprout_leaf",Color("#77a94b"))
+			collider(o,Vector3(.43,2.7,.43),Vector3.UP*1.35)
+			update_tree_visual(o)
 		"stone","block":
 			o.collision_layer |= SOLID
 			mesh_part(o,rock_mesh,Vector3.UP*CELL/2,Vector3.ONE,materials["rock"])
@@ -1108,6 +1171,52 @@ func stagger(body: Node3D, world_direction: Vector3) -> void:
 	tween.tween_property(visual,"position",Vector3.ZERO,.18).set_trans(Tween.TRANS_BACK)
 	tween.parallel().tween_property(visual,"rotation:x",0.,.18)
 
+func update_tree_visual(tree: Node3D) -> void:
+	if not is_instance_valid(tree):
+		return
+	var id: String = str(tree.get_meta("id",""))
+	var growth := tree.get_node("Visual/Crescimento") as Node3D
+	var stump := tree.get_node("Visual/Toco") as Node3D
+	var sprout := tree.get_node("Visual/Broto") as Node3D
+	var collision := tree.get_node("CollisionShape3D") as CollisionShape3D
+	var shape := collision.shape as BoxShape3D
+	if not tree_regrowth.has(id):
+		tree.set_meta("kind","tree")
+		tree.collision_layer = SOLID|TARGET
+		growth.visible = true
+		growth.scale = Vector3.ONE
+		stump.visible = false
+		sprout.visible = false
+		shape.size = Vector3(.43,2.7,.43)
+		collision.position.y = 1.35
+		return
+	var age := maxf(0.0,float(Time.get_unix_time_from_system())-float(tree_regrowth[id]))
+	var progress := clampf((age-TREE_BUD_DELAY)/TREE_GROW_SECONDS,0.0,1.0)
+	if progress >= 1.0:
+		tree_regrowth.erase(id)
+		update_tree_visual(tree)
+		return
+	tree.set_meta("kind","stump")
+	tree.collision_layer = TARGET
+	stump.visible = progress < .45
+	sprout.visible = age >= TREE_BUD_DELAY and progress < .18
+	sprout.scale = Vector3.ONE * (.45 + minf(progress * 9.0,1.1))
+	growth.visible = progress >= .07
+	growth.scale = Vector3.ONE * maxf(.07,pow(progress,1.05))
+	var height := .54 + 2.20 * progress
+	shape.size = Vector3(.43,height,.43)
+	collision.position.y = height * .5
+
+func update_regrowing_trees() -> void:
+	for id: String in tree_regrowth.keys():
+		var tree_age := float(Time.get_unix_time_from_system())-float(tree_regrowth[id])
+		if tree_age >= TREE_BUD_DELAY+TREE_GROW_SECONDS:
+			tree_regrowth.erase(id)
+		if objects.has(id):
+			var tree: Node3D = objects[id]
+			if is_instance_valid(tree):
+				update_tree_visual(tree)
+
 func timber(tree: Node3D, fell: bool) -> void:
 	var visual := tree.get_node("Visual") as Node3D
 	if visual.has_meta("reaction"):
@@ -1117,15 +1226,20 @@ func timber(tree: Node3D, fell: bool) -> void:
 	if axis.is_zero_approx():
 		axis = Vector3.RIGHT
 	if fell:
-		var keep := visual.global_transform
-		visual.reparent(self,false)
-		visual.global_transform = keep
-		remove_object(tree)
-		var fall := visual.create_tween()
-		fall.tween_property(visual,"quaternion",Quaternion(axis,PI*.49),.57).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		# O tronco cai e some, mas a arvore original permanece no mapa como toco.
+		var original := visual.get_node("Crescimento") as Node3D
+		var falling := original.duplicate() as Node3D
+		add_child(falling)
+		falling.global_transform = original.global_transform
+		var id: String = str(tree.get_meta("id",""))
+		tree_regrowth[id] = Time.get_unix_time_from_system()
+		tree.set_meta("cuts",0)
+		update_tree_visual(tree)
+		var fall := falling.create_tween()
+		fall.tween_property(falling,"quaternion",Quaternion(axis,PI*.49),.57).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		fall.tween_interval(.35)
-		fall.tween_property(visual,"scale",Vector3.ONE*.02,.26).set_trans(Tween.TRANS_SINE)
-		fall.tween_callback(visual.queue_free)
+		fall.tween_property(falling,"scale",Vector3.ONE*.02,.26).set_trans(Tween.TRANS_SINE)
+		fall.tween_callback(falling.queue_free)
 	else:
 		var shake := visual.create_tween()
 		visual.set_meta("reaction",shake)
@@ -2152,8 +2266,12 @@ func _physics_process(dt: float) -> void:
 		if elapsed>next_save:
 			next_save = elapsed+8
 			save_game()
-	# A rotina dos NPCs é independente da movimentação do jogador e do menu.
+	# A rotina dos NPCs e o crescimento das arvores continuam durante os menus.
 	update_villagers(dt)
+	tree_regrowth_clock += dt
+	if tree_regrowth_clock >= 2.0:
+		tree_regrowth_clock = 0.0
+		update_regrowing_trees()
 	if multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
 		send_position.rpc(player.global_position,player.rotation.y)
@@ -2416,6 +2534,9 @@ func primary() -> void:
 					if randf()<.05:
 						store_object("foot",pos+Vector3(-.41,0,0))
 		return
+	if kind=="stump":
+		notice("Toco com raizes: espere o broto crescer e virar arvore.")
+		return
 	if kind=="tree":
 		var cuts_per_hit := 1
 		match bar_items[selected]:
@@ -2429,7 +2550,8 @@ func primary() -> void:
 		if cuts>=4:
 			for i in range(3):
 				store_object("log",pos+Vector3((i-1)*.65,0,.39))
-			notice("Árvore cortada. Recolha os troncos.")
+			notice("Arvore cortada: o toco vai brotar e crescer novamente.")
+			save_game()
 		else:
 			notice("Cortando a árvore: %d/4" % cuts)
 		return
@@ -2601,6 +2723,7 @@ func load_game() -> void:
 			bar_items[i] = item
 	sync_hotbar()
 	removed = data.get("removed",{})
+	tree_regrowth = data.get("tree_regrowth",{})
 	placed = data.get("placed",[])
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -2616,7 +2739,7 @@ func save_game() -> void:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":removed,
-			"placed":placed,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots}))
 		file.close()
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE+".tmp"),ProjectSettings.globalize_path(SAVE))
