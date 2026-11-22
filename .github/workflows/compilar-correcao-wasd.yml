@@ -48,6 +48,24 @@ jobs:
           & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_door_floor_entry.gd 2>&1 | Tee-Object -FilePath temp/entrada-piso.log
           if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/entrada-piso.log -SimpleMatch 'DOOR FLOOR TEST OK')) { throw 'Falha entrada por porta, snap ou teto' }
           if (Select-String -Path temp/entrada-piso.log -Pattern 'SCRIPT ERROR|DOOR FLOOR FAIL' -CaseSensitive:$false) { throw 'Erro na entrada do piso' }
+      - name: Testar multiplayer LAN real em dois processos
+        shell: pwsh
+        run: |
+          $godot = (Resolve-Path './temp/Godot.exe').Path
+          $server = Start-Process -FilePath $godot -ArgumentList '--headless','--path','Projeto-Godot','--script','res://tests/test_multiplayer_udp.gd','--','--mode=host' -PassThru -RedirectStandardOutput 'temp/rede-host.log' -RedirectStandardError 'temp/rede-host-err.log'
+          try {
+            Start-Sleep -Seconds 4
+            if ($server.HasExited) { Get-Content temp/rede-host.log,temp/rede-host-err.log; throw 'Anfitriao saiu antes da conexao' }
+            & $godot --headless --path Projeto-Godot --script res://tests/test_multiplayer_udp.gd -- --mode=client 2>&1 | Tee-Object -FilePath 'temp/rede-client.log'
+            if ($LASTEXITCODE -ne 0) { throw 'Cliente multiplayer falhou' }
+            if (!(Select-String -Path temp/rede-client.log -SimpleMatch 'NET MULTIPLAYER CLIENT OK')) { throw 'Convidado nao confirmou mundo compartilhado' }
+            if (!$server.WaitForExit(40000)) { throw 'Anfitriao nao confirmou mundo compartilhado' }
+            if ($server.ExitCode -ne 0) { throw 'Anfitriao multiplayer falhou' }
+            if (!(Select-String -Path temp/rede-host.log -SimpleMatch 'NET MULTIPLAYER HOST OK')) { throw 'Anfitriao nao confirmou colocacao compartilhada' }
+            Get-Content temp/rede-host.log -Tail 20
+          } finally {
+            if (!$server.HasExited) { $server.Kill() }
+          }
       - name: Preparar templates exportacao
         shell: pwsh
         run: |
