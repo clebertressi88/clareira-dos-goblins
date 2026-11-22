@@ -906,6 +906,13 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 			var opening := column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
 			if opening:
 				continue
+			if kind=="wood_doorway" and row==2 and column==1:
+				# Porta com 2,15 m livres: o antigo cabecalho comecava em
+				# 1,70 m e prendia a cabeca do jogador em pisos elevados.
+				box(parent,Vector3(0,WALL_SIZE-.20,0),Vector3(CELL*1.015,.40,.15),
+					"door_top_board",Color("#a47a50"))
+				collider(parent,Vector3(CELL*.99,.40,.18),Vector3(0,WALL_SIZE-.20,0))
+				continue
 			var x := (float(column)-1.0)*CELL
 			var y := (float(row)+0.5)*CELL
 			var tone := plank_tone.darkened(.055 if (row+column)%2==0 else .0)
@@ -921,7 +928,7 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	if kind!="wood_wall":
 		var window := kind=="wood_window"
 		var low := CELL if window else 0.0
-		var high := CELL*2.0
+		var high := WALL_SIZE-.40 if kind=="wood_doorway" else CELL*2.0
 		var jamb_height := high-low
 		for side in [-1.0,1.0]:
 			box(parent,Vector3(side*CELL*.5,low+jamb_height*.5,.105),
