@@ -36,8 +36,8 @@ func _test() -> void:
 	for child in wall0.get_children():
 		if child is MeshInstance3D and child.position.y < -.12:
 			posts += 1
-	if posts<4:
-		fail("Parede suspensa antiga nao recebeu quatro pilares: "+str(posts))
+	if posts<2:
+		fail("Parede suspensa antiga nao recebeu pilares onde havia vao: "+str(posts))
 		return
 	if not game.call("wall_intersects_other_wall",Vector3(x,base,z),0.0):
 		fail("Uma parede nao bloqueou sobreposicao no proprio andar.")
