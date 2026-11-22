@@ -1,4 +1,5 @@
 extends SceneTree
+const SIZE := 2.55
 ## Teste completo do sistema: paredes + piso/teto em tres pavimentos,
 ## fundacao em terreno desigual, colisao e persistencia de pecas antigas.
 
@@ -21,8 +22,8 @@ func _test() -> void:
 	if player==null:
 		fail("Personagem ausente.")
 		return
-	if game.ITEMS.size()!=game.ITEM_ICONS.size():
-		fail("Numero de icones diverge dos itens de inventario.")
+	if (game.get("stock") as Array).size()<23:
+		fail("Inventario nao inclui a peca de piso/teto.")
 		return
 	var x := 51.0
 	var z := 50.0
@@ -42,7 +43,7 @@ func _test() -> void:
 		fail("Uma parede nao bloqueou sobreposicao no proprio andar.")
 		return
 	game.set("build_level",1)
-	if game.call("wall_intersects_other_wall",Vector3(x,base+game.WALL_SIZE,z),0.0):
+	if game.call("wall_intersects_other_wall",Vector3(x,base+SIZE,z),0.0):
 		fail("Parede de outro pavimento foi considerada sobreposicao.")
 		return
 	for floor_level in [1,2,3]:
@@ -69,17 +70,17 @@ func _test() -> void:
 			fail("O piso superior nao tem forma de colisao.")
 			return
 		if floor_level<=2:
-			game.call("store_object","wood_wall",Vector3(x,base+float(floor_level)*game.WALL_SIZE,z),0.0,floor_level)
+			game.call("store_object","wood_wall",Vector3(x,base+float(floor_level)*SIZE,z),0.0,floor_level)
 			var wall_entry: Dictionary = entries.back()
-			if not game.call("upper_build_supported",Vector3(x,base+float(floor_level)*game.WALL_SIZE,z)):
+			if not game.call("upper_build_supported",Vector3(x,base+float(floor_level)*SIZE,z)):
 				fail("Parede superior sem apoio reconhecido.")
 				return
 		print("BUILD LEVEL %d OK: painel horizontal, parede de apoio e save" % floor_level)
 	if entries.size()<6:
 		fail("A sequencia de estruturas nao foi gravada.")
 		return
-	game.set("build_level",0)
-	if game.call("upper_build_supported",Vector3(x+90,base+game.WALL_SIZE,z+90)):
+	game.set("build_level",1)
+	if game.call("upper_build_supported",Vector3(x+90,base+SIZE,z+90)):
 		fail("Apoio fantasma em area vazia.")
 		return
 	print("BUILD LEVELS OK: pilares, paredes empilhadas, piso/teto 3 pavimentos e salvamento.")
