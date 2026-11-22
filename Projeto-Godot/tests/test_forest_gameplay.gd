@@ -29,6 +29,11 @@ func _test() -> void:
 		fail("Precisamos de duas arvores para testar os machados")
 		return
 
+	# A textura compacta precisa decodificar corretamente no executavel exportado.
+	var bark := preload("res://tree_bark_texture.gd").make_texture()
+	if bark == null or bark.get_width()!=128 or bark.get_height()!=128:
+		fail("JPG de casca nao decodificou corretamente")
+		return
 	var stream := preload("res://tree_fall_sound.gd").make_stream()
 	if stream == null or stream.data.size()<30000:
 		fail("Som de queda nao gerou PCM")
