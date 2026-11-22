@@ -1,0 +1,107 @@
+name: Testar movimento e paisagem Godot
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Projeto-Godot/main.gd'
+      - 'Projeto-Godot/tests/**'
+      - 'Projeto-Godot/landscape_terrain.gd'
+      - '.github/workflows/teste-controles-paisagem.yml'
+jobs:
+  testar:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+      - name: Instalar Godot 4.7.2
+        shell: pwsh
+        run: |
+          curl.exe -fLsS --retry 3 -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Falha download Godot' }
+          Expand-Archive -LiteralPath godot.zip -DestinationPath godot
+          $exe = Get-ChildItem godot -Recurse -File -Filter 'Godot_v4.7.2-stable_win64.exe' | Select-Object -First 1
+          if (!$exe) { throw 'Godot nao localizado' }
+          Copy-Item $exe.FullName godot.exe
+      - name: Importar projeto
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath import.log
+          if ($LASTEXITCODE -ne 0) { throw 'Erro importando' }
+      - name: Testar movimentacao e arvores em execucao
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_paisagem.gd 2>&1 | Tee-Object -FilePath teste.log
+          if ($LASTEXITCODE -ne 0) { throw 'Teste falhou' }
+          if (!(Select-String -Path teste.log -SimpleMatch 'CONTROLES TEST OK')) { throw 'Movimentacao nao confirmada' }
+          if (!(Select-String -Path teste.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Paisagem nao confirmada' }
+          if (Select-String -Path teste.log -Pattern 'SCRIPT ERROR|TEST FAIL' -CaseSensitive:$false) { throw 'Erro detectado no teste' }
+      - name: Testar fisica real do terreno, jogador e NPCs
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_physics.gd 2>&1 | Tee-Object -FilePath fisica-terreno.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na fisica do terreno/jogador/NPCs' }
+          if (!(Select-String -Path fisica-terreno.log -SimpleMatch 'TERRAIN PHYSICS OK')) { throw 'Jogador/NPCs nao se deslocaram corretamente' }
+          if (Select-String -Path fisica-terreno.log -Pattern 'SCRIPT ERROR|TERRAIN PHYSICS FAIL' -CaseSensitive:$false) { throw 'Erro no teste fisico' }
+      - name: Testar geometria visual, textura e camera no relevo
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_visual.gd 2>&1 | Tee-Object -FilePath visual-terreno.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na malha visual/camera' }
+          if (!(Select-String -Path visual-terreno.log -SimpleMatch 'TERRAIN RENDERING OK')) { throw 'Teste da renderizacao do terreno nao confirmou sucesso' }
+          if (Select-String -Path visual-terreno.log -Pattern 'SCRIPT ERROR|TERRAIN VISUAL FAIL' -CaseSensitive:$false) { throw 'Erro no teste visual' }
+      - name: Testar arvores com raizes, cortes, som, pa e lobos
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_forest_gameplay.gd 2>&1 | Tee-Object -FilePath floresta.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha teste de arvore/raiz/som/pa/lobo' }
+          if (!(Select-String -Path floresta.log -SimpleMatch 'FOREST GAMEPLAY OK')) { throw 'Teste de floresta nao confirmou sucesso' }
+          if (Select-String -Path floresta.log -Pattern 'SCRIPT ERROR|FOREST GAMEPLAY FAIL' -CaseSensitive:$false) { throw 'Erros no teste de floresta' }
+      - name: Testar paredes e pisos-tetos em 3 pavimentos
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_build_levels.gd 2>&1 | Tee-Object -FilePath construcao.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha de montagem das estruturas' }
+          if (!(Select-String -Path construcao.log -SimpleMatch 'BUILD LEVELS OK')) { throw 'Teste de construcoes nao confirmou sucesso' }
+          if (Select-String -Path construcao.log -Pattern 'SCRIPT ERROR|BUILD LEVELS FAIL' -CaseSensitive:$false) { throw 'Erro no teste de construcao' }
+      - name: Testar entrada na casa sem pulo e teto encaixado
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_door_floor_entry.gd 2>&1 | Tee-Object -FilePath entrada-piso.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha entrada na porta com piso' }
+          if (!(Select-String -Path entrada-piso.log -SimpleMatch 'DOOR FLOOR TEST OK')) { throw 'Entrada com piso e teto nao passou' }
+          if (Select-String -Path entrada-piso.log -Pattern 'SCRIPT ERROR|DOOR FLOOR FAIL' -CaseSensitive:$false) { throw 'Erro no teste de entrada' }
+      - name: Testar multiplayer LAN real em dois processos
+        shell: pwsh
+        run: |
+          $godot = (Resolve-Path './godot.exe').Path
+          $server = Start-Process -FilePath $godot -ArgumentList '--headless','--path','Projeto-Godot','--script','res://tests/test_multiplayer_udp.gd','--','--mode=host' -PassThru -RedirectStandardOutput 'rede-host.log' -RedirectStandardError 'rede-host-err.log'
+          try {
+            Start-Sleep -Seconds 4
+            if ($server.HasExited) { Get-Content rede-host.log,rede-host-err.log; throw 'Anfitriao saiu antes da conexao' }
+            & $godot --headless --path Projeto-Godot --script res://tests/test_multiplayer_udp.gd -- --mode=client 2>&1 | Tee-Object -FilePath 'rede-client.log'
+            if ($LASTEXITCODE -ne 0) { throw 'Cliente multiplayer falhou' }
+            if (!(Select-String -Path rede-client.log -SimpleMatch 'NET MULTIPLAYER CLIENT OK')) { throw 'Convidado nao confirmou mundo compartilhado' }
+            if (!$server.WaitForExit(40000)) { throw 'Anfitriao nao confirmou mundo compartilhado' }
+            if ($server.ExitCode -ne 0) { throw 'Anfitriao multiplayer falhou' }
+            if (!(Select-String -Path 'rede-host.log' -SimpleMatch 'NET MULTIPLAYER HOST OK')) { throw 'Anfitriao nao confirmou colocacao compartilhada' }
+            Get-Content rede-host.log -Tail 20
+          } finally {
+            if (!$server.HasExited) { $server.Kill() }
+          }
+      - name: Enviar logs de teste
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: Logs-Controles-Paisagem
+          path: |
+            import.log
+            teste.log
+            fisica-terreno.log
+            visual-terreno.log
+            floresta.log
+            construcao.log
+            entrada-piso.log
+            rede-*.log
+          if-no-files-found: ignore

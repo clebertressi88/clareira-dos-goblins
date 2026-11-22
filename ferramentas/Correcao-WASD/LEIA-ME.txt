@@ -1,0 +1,14 @@
+CLAREIRA DOS GOBLINS - CORRECAO MOVIMENTO WASD
+
+1. Feche o Godot e o jogo.
+2. Extraia este ZIP para uma pasta (nao execute dentro do ZIP).
+3. Clique duas vezes em INSTALAR-CORRECAO.cmd.
+4. Quando abrir a janela de arquivos, selecione o executavel ANTIGO do jogo
+   na pasta Jogo-Windows: Clareira-dos-Goblins.exe.
+5. O instalador faz backup e coloca o novo EXE na mesma pasta.
+6. Abra o jogo por JOGAR.cmd.
+
+Controles: WASD / setas para andar. Shift correr. Espaco pular.
+No menu inicial, pressione W/setas ou clique em Jogar / continuar.
+F10 retorna a clareira se seu save estiver preso no relevo.
+Este patch nao altera saves nem o codigo-fonte do Godot.

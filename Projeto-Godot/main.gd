@@ -3,10 +3,16 @@ extends Node3D
 const SAVE := "user://clareira-nativa.json"
 const CELL := 0.85
 const CHUNK := 16
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2"}
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6]}
+const TERRAIN := preload("res://landscape_terrain.gd")
+const TREE_BUD_DELAY := 120.0
+const TREE_GROW_SECONDS := 720.0
+var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
+var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
+var tree_regrowth_clock := 0.0
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","wood_floor":"Piso / teto de madeira"}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
 const VINE := 11
@@ -20,10 +26,14 @@ const WALL_ITEM := 16
 const DOORWAY_ITEM := 17
 const WINDOW_ITEM := 18
 const BENCH2_ITEM := 19
+const SHOVEL_ITEM := 20
+const SAPLING_ITEM := 21
+const FLOOR_ITEM := 22
+const BUILD_MAX_LEVEL := 3
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
-const BUILD_TAG := "Atualização 21/11 · patrulha 8 m · paredes encaixadas · inventário arrastável"
+const BUILD_TAG := "Paredes ancoradas no terreno · pisos e tetos horizontais · ate 3 pavimentos"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
 var backpack_equipped := false
@@ -37,10 +47,15 @@ var craft_cells: Array[Vector2i] = []
 var craft_material := -1
 const SOLID := 1
 const TARGET := 2
-var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+const NET_PORT := 24650
+const NET_PROTOCOL := 2
+const NET_SHARED_KINDS := ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor","block"]
+var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
 var placed: Array = []
+var build_level := 0 # 0=terreo; 1=segundo; 2=terceiro; 3=teto terceiro
+var build_rotation := 0 # incrementos de 90 graus
 var objects: Dictionary = {}
 var chunks: Dictionary = {}
 var mobs: Array[CharacterBody3D] = []
@@ -49,7 +64,7 @@ var materials: Dictionary = {}
 var surface_textures: Dictionary = {}
 var wolf_face_materials: Dictionary = {}
 var roaming_wolf: CharacterBody3D
-var wolf_spawn_timer := randf_range(95.0,175.0)
+var wolf_spawn_timer := 12.0
 var rock_mesh: ArrayMesh
 var sphere_mesh := SphereMesh.new()
 var cube_mesh := BoxMesh.new()
@@ -66,11 +81,12 @@ var spear_tip: MeshInstance3D
 var axe: Node3D
 var wood_axe_head: MeshInstance3D
 var stone_axe_head: Node3D
+var shovel_head: Node3D
 var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/9.png"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/9.png"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -111,22 +127,92 @@ var next_net := 0.0
 var feedback := ""
 var feedback_until := 0.0
 var remotes: Dictionary = {}
+var net_role := "solo" # solo / host / client
+var net_address := ""
+var net_connected := false
+var net_world_ready := false
+var net_world_backup: Dictionary = {}
+var net_apply_in_progress := false
+var net_session_message := ""
 
 func _ready() -> void:
+	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
+	# inexistentes. Sempre complete estoques antes de carregar inventario.
+	while stock.size()<ITEMS.size():
+		stock.append(0)
+	while reserve.size()<ITEMS.size():
+		reserve.append(0)
 	inventory_slots.resize(ITEMS.size())
 	inventory_slots.fill(-1)
 	backpack_slots.resize(BACKPACK_SIZE)
 	backpack_slots.fill(Vector2i(-1,0))
 	setup_world()
+	configure_movement_inputs()
 	load_game()
 	make_player()
 	make_ui()
 	village()
 	load_chunks()
 	show_menu()
-	multiplayer.peer_disconnected.connect(remove_remote)
+	multiplayer.peer_connected.connect(net_peer_connected)
+	multiplayer.peer_disconnected.connect(net_peer_disconnected)
+	multiplayer.connected_to_server.connect(net_connected_to_server)
 	multiplayer.server_disconnected.connect(disconnected)
-	multiplayer.connection_failed.connect(disconnected)
+	multiplayer.connection_failed.connect(net_connection_failed)
+
+func configure_movement_inputs() -> void:
+	# Acoes configuradas no inicio: layouts de teclado diferentes e setas.
+	# Nao depende exclusivamente de is_physical_key_pressed (WASD).
+	var bindings := {
+		"goblin_esquerda": [KEY_A,KEY_LEFT],
+		"goblin_direita": [KEY_D,KEY_RIGHT],
+		"goblin_frente": [KEY_W,KEY_UP],
+		"goblin_tras": [KEY_S,KEY_DOWN]
+	}
+	for action: String in bindings.keys():
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		for key: int in bindings[action]:
+			var physical := InputEventKey.new()
+			physical.physical_keycode = key
+			if not InputMap.action_has_event(action,physical):
+				InputMap.action_add_event(action,physical)
+			var logical := InputEventKey.new()
+			logical.keycode = key
+			if not InputMap.action_has_event(action,logical):
+				InputMap.action_add_event(action,logical)
+
+func movement_axis() -> Vector2:
+	var direction := Input.get_vector("goblin_esquerda","goblin_direita","goblin_frente","goblin_tras")
+	if not direction.is_zero_approx():
+		return direction
+	# Reserva para teclados cuja entrada chega so como tecla logica.
+	var x := float(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))
+	var y := float(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))
+	return Vector2(x,y).normalized()
+
+func _input(event: InputEvent) -> void:
+	var keyboard := event as InputEventKey
+	if keyboard == null or not keyboard.pressed or keyboard.echo:
+		return
+	var key: int = keyboard.physical_keycode
+	if key == KEY_NONE:
+		key = keyboard.keycode
+	if key==KEY_F10 and moving:
+		# Recuperacao manual se um save antigo prender o jogador no relevo.
+		respawn()
+		save_game()
+		get_viewport().set_input_as_handled()
+		return
+	if moving or inventory or not is_instance_valid(panel) or not panel.visible:
+		return
+	if is_instance_valid(address) and address.has_focus() and not address.text.is_empty():
+		# Nao interrompe digitacao de IP ja iniciada no campo de rede.
+		return
+	# Permite iniciar com WASD/setas sem depender do foco do botao Jogar.
+	if key in [KEY_W,KEY_A,KEY_S,KEY_D,KEY_UP,KEY_DOWN,KEY_LEFT,KEY_RIGHT,KEY_ENTER,KEY_KP_ENTER]:
+		begin()
+		get_viewport().set_input_as_handled()
 
 func character_texture(family: String) -> ImageTexture:
 	if surface_textures.has(family):
@@ -200,7 +286,7 @@ func setup_world() -> void:
 	environment.ambient_light_energy = .52
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#98ada0")
-	environment.fog_density = 0.014
+	environment.fog_density = 0.008
 	world.environment = environment
 	add_child(world)
 	var sun := DirectionalLight3D.new()
@@ -210,8 +296,11 @@ func setup_world() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 38
 	add_child(sun)
-	var grass := material("grass", Color("#dadbd0"))
+	var grass := material("grass", Color("#f5f5ee"))
 	grass.albedo_texture = preload("res://grass.png")
+	# Renderizar ambas as faces: evita o terreno desaparecer quando a camera
+	# aproxima-se da margem ou de uma encosta.
+	grass.cull_mode = BaseMaterial3D.CULL_DISABLED
 	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	var rock := material("rock", Color.WHITE)
 	rock.albedo_texture = preload("res://stone.png")
@@ -219,6 +308,14 @@ func setup_world() -> void:
 	rock.uv1_triplanar_sharpness = 3.5
 	rock.uv1_scale = Vector3.ONE*1.45
 	rock.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	# Casca fotografica da referencia do jogador, reaplicada em troncos, tocos e raizes.
+	var bark := material("tree_bark",Color.WHITE)
+	bark.albedo_texture = preload("res://tree_bark_texture.gd").make_texture()
+	bark.uv1_triplanar = true
+	bark.uv1_triplanar_sharpness = 3.5
+	bark.uv1_scale = Vector3(2.0,1.6,2.0)
+	bark.roughness = .96
+	bark.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	rock_mesh = make_rock()
 
 func make_rock() -> ArrayMesh:
@@ -274,6 +371,9 @@ func collider(body: CollisionObject3D, size: Vector3, offset: Vector3) -> void:
 	var shape := BoxShape3D.new()
 	shape.size = size
 	var col := CollisionShape3D.new()
+	# Nome explicito: nos criados por codigo recebem nome automatico @CollisionShape3D@... .
+	# As arvores precisam encontra-lo novamente para ajustar a colisao a cada estagio.
+	col.name = "CollisionShape3D"
 	col.shape = shape
 	col.position = offset
 	body.add_child(col)
@@ -287,6 +387,8 @@ func make_player() -> void:
 	add_child(player)
 	var spawn: Array = get_meta("spawn", [0,1,0])
 	player.position = Vector3(float(spawn[0]),float(spawn[1]),float(spawn[2]))
+	# Protege saves antigos: novo relevo nao pode fazer o jogador nascer soterrado.
+	player.position.y = maxf(player.position.y,ground(player.position.x,player.position.z)+.65)
 	var shape := CapsuleShape3D.new()
 	shape.radius = .27
 	shape.height = 1.64
@@ -337,6 +439,12 @@ func make_player() -> void:
 	stone_axe_head = Node3D.new()
 	axe.add_child(stone_axe_head)
 	make_stone_axe_head(stone_axe_head)
+	shovel_head = Node3D.new()
+	shovel_head.name = "CabecaPa"
+	axe.add_child(shovel_head)
+	var shovel_blade := box(shovel_head,Vector3(.07,.32,0),Vector3(.28,.37,.085),"wood_shovel_blade",Color("#a07a4d"))
+	shovel_blade.rotation.z = -.18
+	shovel_head.hide()
 	stone_axe_sprite = Sprite3D.new()
 	stone_axe_sprite.name = "MachadoPedraAprovado"
 	stone_axe_sprite.texture = preload("res://icones/machado_pedra_equipado.png")
@@ -357,8 +465,7 @@ func make_stone_axe_head(parent: Node3D) -> void:
 		binding.rotation.z = .19
 
 func ground(x: float,z: float) -> float:
-	var fade := smoothstep(16.,38.,Vector2(x,z).length())
-	return (sin(x*.12)*1.2+cos(z*.14)*.87+sin((x+z)*.22)*.52)*fade
+	return TERRAIN.height_at(x,z)
 
 func load_chunks() -> void:
 	var center := Vector2i(floori(player.position.x/CHUNK), floori(player.position.z/CHUNK))
@@ -381,11 +488,15 @@ func create_chunk(key: Vector2i) -> void:
 	chunks[key] = chunk
 	var mesh := SurfaceTool.new()
 	mesh.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for z in range(8):
-		for x in range(8):
-			var left := float(key.x*CHUNK+x*2)
-			var near := float(key.y*CHUNK+z*2)
-			for corner in [Vector2(0,0),Vector2(2,0),Vector2(0,2),Vector2(2,0),Vector2(2,2),Vector2(0,2)]:
+	# A malha visivel e a colisao HeightMap usam a MESMA grade de 1 metro.
+	# Antes: malha 2 m x colisao 1 m; a camera parecia atravessar encostas.
+	for z in range(CHUNK):
+		for x in range(CHUNK):
+			var left := float(key.x*CHUNK+x)
+			var near := float(key.y*CHUNK+z)
+			# Godot usa frente horaria: inversao dos indices fazia as normais
+			# apontarem para -Y e ocultava o chao visto de cima.
+			for corner in [Vector2(0,0),Vector2(1,0),Vector2(0,1),Vector2(1,0),Vector2(1,1),Vector2(0,1)]:
 				var px: float = left+corner.x
 				var pz: float = near+corner.y
 				mesh.set_uv(Vector2(px,pz)/2.)
@@ -393,22 +504,87 @@ func create_chunk(key: Vector2i) -> void:
 	mesh.generate_normals()
 	var geometry := mesh.commit()
 	var land := mesh_part(chunk,geometry,Vector3.ZERO,Vector3.ONE,materials["grass"])
-	land.create_trimesh_collision()
+	land.name = "TerrenoVisual"
+	# Colisao independente da malha visual. O metodo create_trimesh_collision()
+	# nao estava produzindo superficie fisica detectavel no teste de caminhada.
+	# HeightMapShape3D fornece solo continuo, sem costas de triangulos abertas.
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "TerrenoFisico"
+	floor_body.collision_layer = SOLID
+	floor_body.collision_mask = 0
+	floor_body.position = Vector3(float(key.x*CHUNK)+float(CHUNK)*.5,0.0,float(key.y*CHUNK)+float(CHUNK)*.5)
+	chunk.add_child(floor_body)
+	var height_shape := HeightMapShape3D.new()
+	height_shape.map_width = CHUNK+1
+	height_shape.map_depth = CHUNK+1
+	var heights := PackedFloat32Array()
+	heights.resize((CHUNK+1)*(CHUNK+1))
+	for zi in range(CHUNK+1):
+		for xi in range(CHUNK+1):
+			heights[zi*(CHUNK+1)+xi] = ground(float(key.x*CHUNK+xi),float(key.y*CHUNK+zi))
+	height_shape.map_data = heights
+	var floor_collision := CollisionShape3D.new()
+	floor_collision.name = "ColisaoTerreno"
+	floor_collision.shape = height_shape
+	floor_body.add_child(floor_collision)
+	create_river_chunk(chunk,key)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
 	for i in range(15):
 		var x := key.x*CHUNK+rng.randf_range(1,15)
 		var z := key.y*CHUNK+rng.randf_range(1,15)
-		if Vector2(x,z).length()<5:
+		if Vector2(x,z).length()<5 or TERRAIN.is_river(x,z):
 			continue
 		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "vine_bush"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
+		if kind=="tree" and cleared_stumps.has(id):
+			continue
 		var at := Vector3(x,ground(x,z),z)
+		# Compatibilidade: antigas arvores cortadas ficavam em "removed".
+		# Transforma-as em tocos regenerativos sem reaparecer adultas de uma vez.
+		if kind == "tree" and removed.has(id):
+			removed.erase(id)
+			if not tree_regrowth.has(id):
+				tree_regrowth[id] = Time.get_unix_time_from_system()
 		if kind == "rabbit":
 			if not removed.has(id):
 				creature(kind,id,at,chunk)
 		elif not removed.has(id):
 			spawn_object(kind,id,at,chunk)
+
+func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
+	var x0 := float(key.x * CHUNK)
+	var x1 := x0 + float(CHUNK)
+	var z0 := float(key.y * CHUNK)
+	var z1 := z0 + float(CHUNK)
+	var low := minf(TERRAIN.river_x(z0), TERRAIN.river_x(z1))
+	var high := maxf(TERRAIN.river_x(z0), TERRAIN.river_x(z1))
+	if high + TERRAIN.RIVER_HALF_WIDTH < x0 or low - TERRAIN.RIVER_HALF_WIDTH > x1:
+		return
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(8):
+		var za := z0 + float(i) * 2.0
+		var zb := za + 2.0
+		var ca := TERRAIN.river_x(za)
+		var cb := TERRAIN.river_x(zb)
+		var left_a := Vector3(ca - TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,za)
+		var right_a := Vector3(ca + TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,za)
+		var left_b := Vector3(cb - TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,zb)
+		var right_b := Vector3(cb + TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,zb)
+		# Agua com normais voltadas para +Y, mesma orientacao do terreno.
+		for point in [left_a,right_a,left_b,right_a,right_b,left_b]:
+			surface.set_uv(Vector2(point.x,point.z) * .06)
+			surface.add_vertex(point)
+	surface.generate_normals()
+	var water_material := material("river_water",Color(.15,.43,.59,.77))
+	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	water_material.metallic = .08
+	water_material.roughness = .25
+	water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var water := mesh_part(chunk,surface.commit(),Vector3.ZERO,Vector3.ONE,water_material)
+	water.name = "Rio_Sinuoso"
+	# Agua visual: fisica de natacao e correnteza ficam para etapa posterior.
 
 func village() -> void:
 	spawn_friendly_goblin("Bruma",Vector3(-2,0,-4))
@@ -591,17 +767,43 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var visual := Node3D.new()
 			visual.name = "Visual"
 			o.add_child(visual)
-			cylinder(visual,Vector3(0,1.1,0),.18,2.2,"wood",Color("#855b36"))
+			# Base e raizes SAO AS MESMAS antes e depois de cortar.
+			# Nao e criado um outro tronco mais grosso quando vira toco.
+			var base := Node3D.new()
+			base.name = "BaseTronco"
+			visual.add_child(base)
+			cylinder(base,Vector3(0,.26,0),.23,.52,"tree_bark",Color.WHITE)
+			for i in range(5):
+				var angle := float(i)*TAU/5.0
+				var root := cylinder(base,Vector3(cos(angle)*.36,.075,sin(angle)*.36),.075,.64,"tree_bark",Color.WHITE)
+				root.rotation = Vector3(0.0,-angle,PI*.42)
+			var growth := Node3D.new()
+			growth.name = "Crescimento"
+			visual.add_child(growth)
+			# O tronco alto encaixa na mesma base de raio .23, sem salto visual.
+			cylinder(growth,Vector3(0,1.36,0),.23,1.68,"tree_bark",Color.WHITE)
 			for i in range(4):
 				var a := i*TAU/4
-				ball(visual,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
-			collider(o,Vector3(.39,2.7,.39),Vector3.UP*1.35)
+				ball(growth,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
+			var stump := Node3D.new()
+			stump.name = "Toco"
+			visual.add_child(stump)
+			# So o corte transversal aparece; as raizes e base nunca mudam.
+			cylinder(stump,Vector3(0,.527,0),.234,.028,"cut_wood",Color("#c6a273"))
+			var sprout := Node3D.new()
+			sprout.name = "Broto"
+			visual.add_child(sprout)
+			cylinder(sprout,Vector3(.12,.67,0),.032,.46,"sprout_stem",Color("#589447"))
+			ball(sprout,Vector3(-.03,.88,0),Vector3(.24,.13,.19),"sprout_leaf",Color("#77a94b"))
+			ball(sprout,Vector3(.23,.93,0),Vector3(.22,.13,.18),"sprout_leaf",Color("#77a94b"))
+			collider(o,Vector3(.43,2.7,.43),Vector3.UP*1.35)
+			update_tree_visual(o)
 		"stone","block":
 			o.collision_layer |= SOLID
 			mesh_part(o,rock_mesh,Vector3.UP*CELL/2,Vector3.ONE,materials["rock"])
 			collider(o,Vector3.ONE*CELL,Vector3.UP*CELL/2)
 		"log":
-			var log_mesh := cylinder(o,Vector3(0,.18,0),.17,.61,"wood",Color("#855b36"))
+			var log_mesh := cylinder(o,Vector3(0,.18,0),.17,.61,"tree_bark",Color.WHITE)
 			log_mesh.rotation.z = PI/2
 			collider(o,Vector3(.68,.39,.43),Vector3.UP*.19)
 		"plank":
@@ -664,6 +866,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 		"wood_wall","wood_doorway","wood_window":
 			o.collision_layer |= SOLID
 			build_wood_wall(o,kind)
+		"wood_floor":
+			o.collision_layer |= SOLID
+			build_wood_floor(o)
 		"backpack":
 			box(o,Vector3(0,.23,0),Vector3(.39,.44,.26),"pack_leather",Color("#815337"))
 			box(o,Vector3(0,.37,-.14),Vector3(.39,.12,.035),"pack_flap",Color("#5e3d28"))
@@ -676,6 +881,19 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			coil.ring_segments = 8
 			mesh_part(o,coil,Vector3.UP*.07,Vector3.ONE,material("rope",Color("#cfb17e")))
 			collider(o,Vector3(.45,.17,.45),Vector3.UP*.08)
+		"shovel":
+			var tool := Node3D.new()
+			o.add_child(tool)
+			tool.position = Vector3(0,.12,0)
+			tool.rotation.z = PI*.5
+			cylinder(tool,Vector3(0,.04,0),.037,.70,"wood",Color("#895e35"))
+			box(tool,Vector3(0,.40,0),Vector3(.27,.33,.07),"wood_shovel_blade",Color("#b69a69"))
+			collider(o,Vector3(.45,.25,.75),Vector3.UP*.125)
+		"sapling":
+			cylinder(o,Vector3(0,.20,0),.025,.33,"sprout_stem",Color("#875832"))
+			ball(o,Vector3(-.11,.36,0),Vector3(.26,.13,.19),"sprout_leaf",Color("#79b54d"))
+			ball(o,Vector3(.12,.42,0),Vector3(.23,.14,.19),"sprout_leaf2",Color("#9ec85b"))
+			collider(o,Vector3(.40,.45,.40),Vector3.UP*.22)
 		"stone_axe":
 			var tool := Node3D.new()
 			o.add_child(tool)
@@ -700,6 +918,13 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 			var opening := column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
 			if opening:
 				continue
+			if kind=="wood_doorway" and row==2 and column==1:
+				# Porta com 2,15 m livres: o antigo cabecalho comecava em
+				# 1,70 m e prendia a cabeca do jogador em pisos elevados.
+				box(parent,Vector3(0,WALL_SIZE-.20,0),Vector3(CELL*1.015,.40,.15),
+					"door_top_board",Color("#a47a50"))
+				collider(parent,Vector3(CELL*.99,.40,.18),Vector3(0,WALL_SIZE-.20,0))
+				continue
 			var x := (float(column)-1.0)*CELL
 			var y := (float(row)+0.5)*CELL
 			var tone := plank_tone.darkened(.055 if (row+column)%2==0 else .0)
@@ -715,7 +940,7 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	if kind!="wood_wall":
 		var window := kind=="wood_window"
 		var low := CELL if window else 0.0
-		var high := CELL*2.0
+		var high := WALL_SIZE-.40 if kind=="wood_doorway" else CELL*2.0
 		var jamb_height := high-low
 		for side in [-1.0,1.0]:
 			box(parent,Vector3(side*CELL*.5,low+jamb_height*.5,.105),
@@ -727,6 +952,147 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 		else:
 			box(parent,Vector3(0,high,.105),Vector3(CELL,.095,.075),
 				"wall_frame",Color("#60402a"))
+	# A base de cada parede acompanha o relevo. Em saves antigos,
+	# pilares sustentam as partes que antes ficavam suspensas.
+	add_wall_foundations(parent)
+	if kind=="wood_doorway":
+		build_door_transitions(parent)
+
+func build_wood_floor(parent: StaticBody3D) -> void:
+	# Base continua impede que apareca grama entre placas e sob as juntas.
+	# A mesma peca funciona como piso no terreo e laje/teto nos andares.
+	var base := box(parent,Vector3(0,-.005,0),Vector3(WALL_SIZE+.035,.14,WALL_SIZE+.035),
+		"floor_solid",Color("#86623e"))
+	base.name = "PainelContinuo"
+	for row in range(3):
+		var z := (float(row)-1.0)*CELL
+		box(parent,Vector3(0,.084,z),Vector3(WALL_SIZE+.035,.038,CELL-.015),
+			"floor_planks_%d" % row,Color("#b58a57").darkened(.045*float(row%2)))
+		for column in range(3):
+			var x := (float(column)-1.0)*CELL
+			box(parent,Vector3(x,.108,z+CELL*.34),Vector3(CELL*.68,.012,.016),
+				"floor_seam",Color("#684328"))
+	for x in [-WALL_SIZE*.39,0.0,WALL_SIZE*.39]:
+		box(parent,Vector3(x,-.15,0),Vector3(.14,.19,WALL_SIZE+.03),
+			"floor_joist",Color("#704c31"))
+	collider(parent,Vector3(WALL_SIZE+.025,.22,WALL_SIZE+.025),Vector3(0,.005,0))
+
+
+func add_wall_foundations(parent: StaticBody3D) -> void:
+	# Compatibilidade com paredes ja construidas: nao deslocar o save,
+	# preencher com pilares os vaos deixados pelo terreno irregular.
+	# Paredes nos pavimentos superiores sao apoiadas pelo piso, nao por estacas.
+	for x in [-WALL_SIZE*.45,-WALL_SIZE*.15,WALL_SIZE*.15,WALL_SIZE*.45]:
+		var world := parent.to_global(Vector3(x,0,0))
+		var gap := parent.global_position.y - ground(world.x,world.z)
+		if gap <= .13 or gap > WALL_SIZE*.92:
+			continue
+		var post := box(parent,Vector3(x,-gap*.5,0),Vector3(.17,gap+.11,.18),
+			"wall_foundation",Color("#79563b"))
+		post.rotation.y = 0.0
+		# Volume fisico abaixo da parede para impedir atravessar as estacas.
+		collider(parent,Vector3(.17,gap+.11,.18),Vector3(x,-gap*.5,0))
+
+
+func floor_height_near_door(door: StaticBody3D) -> float:
+	# Prioriza a altura dos paineis ja construidos no mesmo comodo,
+	# inclusive saves antigos que nao guardavam o campo level.
+	var top := door.global_position.y + .09
+	var best := WALL_SIZE*1.15
+	for entry in placed:
+		if str(entry.get("kind",""))!="wood_floor" or int(entry.get("level",0))!=0:
+			continue
+		var p: Array = entry["p"]
+		var center := Vector2(float(p[0]),float(p[2]))
+		var distance := center.distance_to(Vector2(door.global_position.x,door.global_position.z))
+		if distance<best:
+			best = distance
+			top = float(p[1]) + .12
+	return top
+
+
+func build_door_transitions(door: StaticBody3D) -> void:
+	# Antes havia duas rampas, uma delas invadia o piso interno.
+	# O jogador batia na face inferior ao passar pela porta.
+	# Agora a rampa exterior sobe ate 30 cm DENTRO do piso, suavemente.
+	for part in door.get_children():
+		var is_ramp_shape: bool = false
+		if part is CollisionShape3D:
+			var existing_shape := (part as CollisionShape3D).shape as BoxShape3D
+			is_ramp_shape = existing_shape!=null and existing_shape.size.z>1.0
+		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta") or part.name.begins_with("LimiarPorta") or is_ramp_shape:
+			if part is CollisionShape3D:
+				part.disabled = true
+			part.queue_free()
+	var floor_side := 0.0
+	var nearest := WALL_SIZE*1.2
+	for entry in placed:
+		if str(entry.get("kind",""))!="wood_floor" or int(entry.get("level",0))!=0:
+			continue
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var dist := Vector2(at.x-door.global_position.x,at.z-door.global_position.z).length()
+		if dist<nearest:
+			var local_point := door.to_local(at)
+			if absf(local_point.z)>.15:
+				nearest = dist
+				floor_side = signf(local_point.z)
+	var y_top := floor_height_near_door(door)
+	# Sem piso: duas rampas baixas para paredes antigas no relevo.
+	# Com piso: so UMA rampa na entrada externa. Nunca sob o piso interno.
+	var sides := [-floor_side] if floor_side!=0.0 else [-1.0,1.0]
+	for side in sides:
+		var outside_distance := 1.65
+		var inside_distance := .30 if floor_side!=0.0 else .08
+		var far_z := float(side)*outside_distance
+		# Com piso, a rampa termina ANTES da borda vertical do piso.
+		# Um patamar horizontal cobre a soleira e entra sobre o painel.
+		var near_z := float(side)*inside_distance if floor_side!=0.0 else -float(side)*inside_distance
+		var span := absf(far_z-near_z)
+		var outside := door.to_global(Vector3(0,0,far_z))
+		var end_y := ground(outside.x,outside.z)+.06
+		if absf(y_top-end_y)<.035:
+			continue
+		var center_z := (far_z+near_z)*.5
+		var ramp := box(door,Vector3(0,(y_top+end_y)*.5-door.global_position.y-.055,
+			center_z),Vector3(.72,.11,span),
+			"door_transition_wood",Color("#986f46"))
+		ramp.name = "RampaPorta"
+		ramp.rotation.x = float(side)*atan2(y_top-end_y,span)
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(.72,.12,span)
+		var col := CollisionShape3D.new()
+		col.name = "ColisaoRampaPorta"
+		col.shape = shape
+		col.position = ramp.position
+		col.rotation = ramp.rotation
+		door.add_child(col)
+		if floor_side!=0.0:
+			# A soleira resolve o impacto contra a quina do piso.
+			var sill_center := (near_z-float(side)*.45)*.5
+			var sill_length := absf(near_z+float(side)*.45)
+			var sill := box(door,Vector3(0,y_top-door.global_position.y-.06,sill_center),
+				Vector3(.72,.12,sill_length+.05),"door_sill",Color("#a88050"))
+			sill.name = "LimiarPorta"
+			var sill_shape := BoxShape3D.new()
+			sill_shape.size = Vector3(.72,.12,sill_length+.05)
+			var sill_collision := CollisionShape3D.new()
+			sill_collision.name = "LimiarPortaColisao"
+			sill_collision.shape = sill_shape
+			sill_collision.position = sill.position
+			door.add_child(sill_collision)
+
+
+func refresh_door_transitions(at: Vector3) -> void:
+	for obj in objects.values():
+		if not is_instance_valid(obj) or not (obj is StaticBody3D):
+			continue
+		if str(obj.get_meta("kind",""))!="wood_doorway":
+			continue
+		if Vector2(obj.global_position.x-at.x,obj.global_position.z-at.z).length()>WALL_SIZE*2.6:
+			continue
+		build_door_transitions(obj)
+
 
 func make_vine(parent: Node3D, offset: Vector3) -> void:
 	for i in range(4):
@@ -961,8 +1327,12 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 	var body := CharacterBody3D.new()
 	body.collision_layer = TARGET
 	body.collision_mask = SOLID
+	body.floor_snap_length = .38
 	parent.add_child(body)
-	body.position = at
+	# Os mapas antigos criavam o guardiao em y=0 mesmo com o solo mais alto.
+	# Posicione todos os animais e inimigos na altitude real da malha fisica.
+	# A pequena folga deixa o corpo assentar sem atravessar o HeightMap.
+	body.position = Vector3(at.x,ground(at.x,at.z)+.06,at.z)
 	body.set_meta("kind",kind)
 	body.set_meta("id",id)
 	body.set_meta("hp",2 if kind=="rabbit" else 5 if kind=="wolf" else 9)
@@ -1094,6 +1464,21 @@ func impact(pos: Vector3, normal: Vector3, wood: bool) -> void:
 		tween.tween_property(chip,"scale",Vector3.ZERO,duration).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(effect.queue_free)
 
+func play_tree_fall_sound(pos: Vector3) -> void:
+	# Som original de madeira rangendo + impacto + folhas.
+	# Stream WAV procedimental: dispensamos arquivos externos/licencas de audio.
+	var player_sound := AudioStreamPlayer3D.new()
+	player_sound.name = "SomQuedaArvore"
+	add_child(player_sound)
+	player_sound.global_position = pos + Vector3.UP
+	player_sound.stream = preload("res://tree_fall_sound.gd").make_stream()
+	player_sound.unit_size = 7.0
+	player_sound.max_distance = 45.0
+	player_sound.volume_db = -3.0
+	player_sound.finished.connect(player_sound.queue_free)
+	player_sound.play()
+
+
 func stagger(body: Node3D, world_direction: Vector3) -> void:
 	var visual := body.get_node("Visual") as Node3D
 	if visual.has_meta("reaction"):
@@ -1108,6 +1493,55 @@ func stagger(body: Node3D, world_direction: Vector3) -> void:
 	tween.tween_property(visual,"position",Vector3.ZERO,.18).set_trans(Tween.TRANS_BACK)
 	tween.parallel().tween_property(visual,"rotation:x",0.,.18)
 
+func update_tree_visual(tree: Node3D) -> void:
+	if not is_instance_valid(tree):
+		return
+	var id: String = str(tree.get_meta("id",""))
+	var growth := tree.get_node("Visual/Crescimento") as Node3D
+	var stump := tree.get_node("Visual/Toco") as Node3D
+	var sprout := tree.get_node("Visual/Broto") as Node3D
+	var collision := tree.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if collision == null or not (collision.shape is BoxShape3D):
+		push_error("Colisao ausente ou invalida na arvore: " + id)
+		return
+	var shape := collision.shape as BoxShape3D
+	if not tree_regrowth.has(id):
+		tree.set_meta("kind","tree")
+		tree.collision_layer = SOLID|TARGET
+		growth.visible = true
+		growth.scale = Vector3.ONE
+		stump.visible = false
+		sprout.visible = false
+		shape.size = Vector3(.43,2.7,.43)
+		collision.position.y = 1.35
+		return
+	var age := maxf(0.0,float(Time.get_unix_time_from_system())-float(tree_regrowth[id]))
+	var progress := clampf((age-TREE_BUD_DELAY)/TREE_GROW_SECONDS,0.0,1.0)
+	if progress >= 1.0:
+		tree_regrowth.erase(id)
+		update_tree_visual(tree)
+		return
+	tree.set_meta("kind","stump")
+	tree.collision_layer = SOLID|TARGET
+	stump.visible = progress < .45
+	sprout.visible = age >= TREE_BUD_DELAY and progress < .18
+	sprout.scale = Vector3.ONE * (.45 + minf(progress * 9.0,1.1))
+	growth.visible = progress >= .07
+	growth.scale = Vector3.ONE * maxf(.07,pow(progress,1.05))
+	var height := .54 + 2.20 * progress
+	shape.size = Vector3(.43,height,.43)
+	collision.position.y = height * .5
+
+func update_regrowing_trees() -> void:
+	for id: String in tree_regrowth.keys():
+		var tree_age := float(Time.get_unix_time_from_system())-float(tree_regrowth[id])
+		if tree_age >= TREE_BUD_DELAY+TREE_GROW_SECONDS:
+			tree_regrowth.erase(id)
+		if objects.has(id):
+			var tree: Node3D = objects[id]
+			if is_instance_valid(tree):
+				update_tree_visual(tree)
+
 func timber(tree: Node3D, fell: bool) -> void:
 	var visual := tree.get_node("Visual") as Node3D
 	if visual.has_meta("reaction"):
@@ -1117,15 +1551,21 @@ func timber(tree: Node3D, fell: bool) -> void:
 	if axis.is_zero_approx():
 		axis = Vector3.RIGHT
 	if fell:
-		var keep := visual.global_transform
-		visual.reparent(self,false)
-		visual.global_transform = keep
-		remove_object(tree)
-		var fall := visual.create_tween()
-		fall.tween_property(visual,"quaternion",Quaternion(axis,PI*.49),.57).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		# O tronco cai e some, mas a arvore original permanece no mapa como toco.
+		var original := visual.get_node("Crescimento") as Node3D
+		var falling := original.duplicate() as Node3D
+		add_child(falling)
+		falling.global_transform = original.global_transform
+		play_tree_fall_sound(tree.global_position)
+		var id: String = str(tree.get_meta("id",""))
+		tree_regrowth[id] = Time.get_unix_time_from_system()
+		tree.set_meta("cuts",0)
+		update_tree_visual(tree)
+		var fall := falling.create_tween()
+		fall.tween_property(falling,"quaternion",Quaternion(axis,PI*.49),.57).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		fall.tween_interval(.35)
-		fall.tween_property(visual,"scale",Vector3.ONE*.02,.26).set_trans(Tween.TRANS_SINE)
-		fall.tween_callback(visual.queue_free)
+		fall.tween_property(falling,"scale",Vector3.ONE*.02,.26).set_trans(Tween.TRANS_SINE)
+		fall.tween_callback(falling.queue_free)
 	else:
 		var shake := visual.create_tween()
 		visual.set_meta("reaction",shake)
@@ -1258,7 +1698,7 @@ func sync_inventory_slots() -> void:
 	# Tipos sem unidades são liberados; a ordem escolhida pelo jogador permanece.
 	for index in range(inventory_slots.size()):
 		var item: int = inventory_slots[index]
-		if item>=0 and stock[item]<=0 and reserve[item]<=0:
+		if item>=ITEMS.size() or (item>=0 and stock[item]<=0 and reserve[item]<=0):
 			inventory_slots[index] = -1
 	for item in range(ITEMS.size()):
 		if (stock[item]>0 or reserve[item]>0) and not inventory_slots.has(item):
@@ -1363,20 +1803,40 @@ func show_menu() -> void:
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	menu.add_child(portrait)
-	label("WASD andar · Shift correr · Espaço pular · X agachar")
+	label("WASD ou setas: andar/iniciar · Shift correr · Espaço pular · X agachar")
 	label("Mouse para mirar · Direito pegar/usar · Esquerdo atacar/construir")
-	label("E inventário · B abrigo · Q largar · V câmera · 1–9 selecionar")
+	label("E inventário · B abrigo · Q largar · V câmera · F10 retornar à clareira")
+	if net_role=="host":
+		label("Sala LAN aberta · UDP %d · jogadores: %d/8" % [NET_PORT,multiplayer.get_peers().size()+1])
+		var ips := lan_local_ipv4_addresses()
+		label("IP do anfitrião: " + (", ".join(ips) if ips.size()>0 else "verifique em ipconfig"))
+		label("Outros jogadores devem estar no mesmo Wi-Fi ou roteador.")
+	elif net_role=="client":
+		label(("Conectado em " if net_connected else "Conectando a ")+net_address)
+	if not net_session_message.is_empty():
+		label(net_session_message)
 	button("Jogar / continuar", begin)
-	address = LineEdit.new()
-	address.placeholder_text = "IP do anfitrião na rede local"
-	menu.add_child(address)
-	button("Hospedar na rede local", host_game)
-	button("Entrar na rede local", join_game)
+	if net_role=="solo":
+		address = LineEdit.new()
+		address.placeholder_text = "IP do computador anfitrião (ex.: 192.168.1.10)"
+		address.text = net_address
+		address.focus_mode = Control.FOCUS_CLICK
+		menu.add_child(address)
+		address.release_focus()
+		label("Mesmo roteador/rede Wi-Fi e mesma versão · UDP %d" % NET_PORT)
+		button("Hospedar partida na rede local (LAN)", host_game)
+		button("Entrar na partida pelo IP", join_game)
+	else:
+		button("Desconectar da partida", disconnect_and_show_menu)
 	if not feedback.is_empty():
 		label(feedback)
 	button("Salvar e sair", func(): save_game(); get_tree().quit())
 
 func begin() -> void:
+	if net_role=="client" and not net_world_ready:
+		notice("Aguarde o anfitrião enviar o mundo antes de começar.")
+		show_menu()
+		return
 	panel.hide()
 	inventory = false
 	moving = true
@@ -1694,7 +2154,7 @@ func craft_status(recipe: String) -> String:
 		return "Receita pronta · clique no item para fabricar"
 	match craft_mode:
 		"station":
-			return "Lanças, machados, mochila, paredes e bancada 2 com tampo de pedra."
+			return "Lanças, machados, pá, paredes e piso/teto (8 tábuas + 1 tronco)."
 		_:
 			var kinds: Array = []
 			for cell in craft_cells:
@@ -1851,7 +2311,7 @@ func craft_basic() -> void:
 	if kind.is_empty():
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
 	}[kind]
 	for index: int in costs:
 		stock[index] -= costs[index]
@@ -1998,80 +2458,244 @@ func unequip_backpack() -> void:
 	save_game()
 	show_inventory()
 
+func build_base_ground(point: Vector3, yaw: float, is_wall: bool) -> float:
+	# A construcao fica nivelada pelo ponto MAIS alto do relevo sob o modulo.
+	# Em encostas, as partes mais baixas recebem pilares de fundacao.
+	var maximum := ground(point.x,point.z)
+	var axis := Basis(Vector3.UP,yaw).x
+	for fraction in [-.50,-.25,0.0,.25,.50]:
+		var sample: Vector3 = point+axis*(WALL_SIZE*float(fraction))
+		maximum = maxf(maximum,ground(sample.x,sample.z))
+		if not is_wall:
+			for offset in [-.5,.5]:
+				var corner: Vector3 = sample+Vector3(0,0,WALL_SIZE*float(offset))
+				maximum = maxf(maximum,ground(corner.x,corner.z))
+	return maximum
+
+
+func build_reference_base(point: Vector3, default_base: float) -> float:
+	# Casas antigas nao tem campo level: sao tratadas como terreo.
+	# Usar uma origem vertical compartilhada impede degraus entre modulos.
+	var best := WALL_SIZE*3.0
+	var base := default_base
+	for entry in placed:
+		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+			continue
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var dist := Vector2(at.x-point.x,at.z-point.z).length()
+		if dist<best:
+			best = dist
+			base = at.y-float(entry.get("level",0))*WALL_SIZE
+	return base
+
+
 func find_wall_snap(point: Vector3, yaw: float) -> Vector3:
-	# Novo segmento encaixa uma ponta à ponta da parede existente mais próxima.
-	# Funciona tanto para paredes retas quanto para cantos em L/U.
-	var new_axis := Basis(Vector3.UP,yaw).x.normalized()
+	# Permite fileiras, cantos e paredes exatamente empilhadas.
+	var axis := Basis(Vector3.UP,yaw).x.normalized()
 	var best := point
-	var best_distance := WALL_SIZE*.85
+	var best_distance := WALL_SIZE*.92
 	for entry in placed:
 		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window"]:
 			continue
 		var p: Array = entry["p"]
-		var old_position := Vector3(float(p[0]),float(p[1]),float(p[2]))
-		var old_yaw := float(entry.get("r",0.0))
-		var old_axis := Basis(Vector3.UP,old_yaw).x.normalized()
+		var old := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var old_level := int(entry.get("level",0))
+		var raised := old+Vector3.UP*(float(build_level-old_level)*WALL_SIZE)
+		if absf(raised.y-point.y)>.34:
+			continue
+		if old_level!=build_level:
+			var stack_distance := Vector2(point.x-raised.x,point.z-raised.z).length()
+			if stack_distance<best_distance:
+				best_distance = stack_distance
+				best = raised
+		var other_axis := Basis(Vector3.UP,float(entry.get("r",0.0))).x.normalized()
 		for old_sign in [-1.0,1.0]:
 			for new_sign in [-1.0,1.0]:
-				var candidate: Vector3 = old_position+old_axis*(old_sign*WALL_SIZE*.5)-new_axis*(new_sign*WALL_SIZE*.5)
+				var candidate: Vector3 = raised+other_axis*(float(old_sign)*WALL_SIZE*.5)-axis*(float(new_sign)*WALL_SIZE*.5)
 				var distance := Vector2(point.x-candidate.x,point.z-candidate.z).length()
 				if distance<best_distance:
 					best_distance = distance
 					best = candidate
 	return best
 
+
+func floor_target_from_aim(fallback: Vector3) -> Vector3:
+	# Clique na borda de um painel para criar o proximo; clique numa
+	# parede para fechar o teto por cima, mesmo estando no terreo.
+	var hit := ray(5.8)
+	if hit.is_empty():
+		return fallback
+	var obj := hit["collider"] as CollisionObject3D
+	if obj==null:
+		return fallback
+	var kind := str(obj.get_meta("kind",""))
+	var aimed: Vector3 = hit["position"]
+	if kind=="wood_floor":
+		var center: Vector3 = obj.global_position
+		var source_level := 0
+		for entry in placed:
+			if str(entry.get("id",""))==str(obj.get_meta("id","")):
+				source_level = int(entry.get("level",0))
+				break
+		if source_level<build_level:
+			return Vector3(center.x,fallback.y,center.z)
+		if source_level==build_level:
+			var direction := Vector2(aimed.x-center.x,aimed.z-center.z)
+			if direction.length()<WALL_SIZE*.18:
+				var look := -camera.global_basis.z
+				direction = Vector2(look.x,look.z)
+			if absf(direction.x)>absf(direction.y):
+				return Vector3(center.x+signf(direction.x)*WALL_SIZE,fallback.y,center.z)
+			return Vector3(center.x,fallback.y,center.z+signf(direction.y)*WALL_SIZE)
+	if kind in ["wood_wall","wood_doorway","wood_window"]:
+		var wp: Vector3 = obj.global_position
+		var side: Vector3 = hit["normal"]
+		if Vector2(side.x,side.z).length()>.5:
+			return Vector3(wp.x+side.x*WALL_SIZE*.5,fallback.y,wp.z+side.z*WALL_SIZE*.5)
+	return fallback
+
+
+func find_floor_snap(point: Vector3) -> Vector3:
+	# Encaixa sempre num espaco LIVRE, em vez de duplicar painel existente.
+	var best := point
+	var best_score := INF
+	for entry in placed:
+		var kind := str(entry.get("kind",""))
+		if kind not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+			continue
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var level := int(entry.get("level",0))
+		var candidates: Array[Vector3] = []
+		if kind=="wood_floor" and level==build_level:
+			for direction in [Vector3.RIGHT,Vector3.LEFT,Vector3.FORWARD,Vector3.BACK]:
+				candidates.append(at+direction*WALL_SIZE)
+		elif kind=="wood_floor" and level==build_level-1:
+			candidates.append(at)
+		elif kind!="wood_floor" and level in [build_level,build_level-1]:
+			var other_side := Basis(Vector3.UP,float(entry.get("r",0.0))).z
+			candidates.append(at+other_side*WALL_SIZE*.5)
+			candidates.append(at-other_side*WALL_SIZE*.5)
+		for candidate in candidates:
+			candidate.y = point.y
+			if floor_intersects_other_floor(candidate):
+				continue
+			if not upper_build_supported(candidate):
+				continue
+			var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
+			var player_distance := Vector2(candidate.x-player.position.x,candidate.z-player.position.z).length()
+			var score := distance+player_distance*.025
+			if distance<WALL_SIZE*2.5 and score<best_score:
+				best = candidate
+				best_score = score
+	if best_score!=INF:
+		return best
+	return point
+
+
 func wall_intersects_other_wall(point: Vector3, yaw: float) -> bool:
-	# Impede duas paredes no mesmo lugar, mas permite os cantos de 90 graus.
 	var axis := Vector2(cos(yaw),-sin(yaw))
 	for entry in placed:
 		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window"]:
 			continue
 		var p: Array = entry["p"]
+		if absf(float(p[1])-point.y)>.25:
+			continue # Outro andar, nao e sobreposicao.
 		var old := Vector2(float(p[0]),float(p[2]))
 		var this := Vector2(point.x,point.z)
-		var other_yaw := float(entry.get("r",0.0))
-		var old_axis := Vector2(cos(other_yaw),-sin(other_yaw))
+		var old_axis := Vector2(cos(float(entry.get("r",0.0))),-sin(float(entry.get("r",0.0))))
 		var delta := this-old
-		var aligned := absf(axis.dot(old_axis))>.95
-		if aligned:
+		if absf(axis.dot(old_axis))>.95:
 			if absf(delta.dot(axis))<WALL_SIZE-.12 and absf(delta.cross(axis))<.17:
 				return true
-		else:
-			# Cruzes no meio da parede são bloqueados; cantos no final são permitidos.
-			if absf(delta.dot(old_axis))<WALL_SIZE*.5-.14 and absf(delta.dot(axis))<WALL_SIZE*.5-.14:
+		elif absf(delta.dot(old_axis))<WALL_SIZE*.5-.14 and absf(delta.dot(axis))<WALL_SIZE*.5-.14:
+			return true
+	return false
+
+
+func floor_intersects_other_floor(point: Vector3) -> bool:
+	for entry in placed:
+		if entry.get("kind","")!="wood_floor":
+			continue
+		var p: Array = entry["p"]
+		if absf(float(p[1])-point.y)>.25:
+			continue
+		if absf(float(p[0])-point.x)<WALL_SIZE-.1 and absf(float(p[2])-point.z)<WALL_SIZE-.1:
+			return true
+	return false
+
+
+func upper_build_supported(point: Vector3) -> bool:
+	if build_level==0:
+		return true
+	for entry in placed:
+		var kind := str(entry.get("kind",""))
+		if kind not in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+			continue
+		var level := int(entry.get("level",0))
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		if kind=="wood_floor" and level==build_level and absf(at.y-point.y)<.30:
+			var dx := absf(at.x-point.x)
+			var dz := absf(at.z-point.z)
+			# Placas vizinhas estao afastadas exatamente WALL_SIZE.
+			if dx<=WALL_SIZE+.08 and dz<=WALL_SIZE+.08 and (dx<.14 or dz<.14):
+				return true
+		if kind!="wood_floor" and level==build_level-1 and absf((at.y+WALL_SIZE)-point.y)<.30:
+			if Vector2(at.x-point.x,at.z-point.z).length()<WALL_SIZE*1.15:
 				return true
 	return false
 
+
 func place_craft(kind: String) -> bool:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
-	var yaw := snappedf(player.rotation.y,PI/2.0) if is_wall else 0.0
-	var forward := -Basis(Vector3.UP,yaw).z
-	var point := player.position+forward*(2.15 if is_wall else 1.65)
-	point.y = ground(point.x,point.z)
-	if is_wall:
-		point = find_wall_snap(point,yaw)
-		# Evita colocar a segunda parede exatamente sobre a primeira.
-		if wall_intersects_other_wall(point,yaw):
-			notice("Esta posição já tem uma parede.")
+	var is_floor := kind=="wood_floor"
+	if is_wall and build_level>=BUILD_MAX_LEVEL:
+		notice("O terceiro pavimento é o último. Neste nível coloque apenas o teto.")
+		return false
+	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else 0.0
+	var forward := -Basis(Vector3.UP,snappedf(player.rotation.y,PI/2.0)).z
+	var point := player.position+forward*(2.15 if is_wall or is_floor else 1.65)
+	if is_wall or is_floor:
+		var base := build_base_ground(point,yaw,is_wall)
+		base = build_reference_base(point,base)
+		point.y = base+float(build_level)*WALL_SIZE
+		if is_wall:
+			point = find_wall_snap(point,yaw)
+			if wall_intersects_other_wall(point,yaw):
+				notice("Esta posição já tem uma parede nesse pavimento.")
+				return false
+		else:
+			point = find_floor_snap(floor_target_from_aim(point))
+			if floor_intersects_other_floor(point):
+				notice("Este quadro já tem piso. Aponte para a borda ou a parede ao lado.")
+				return false
+		if not upper_build_supported(point):
+			notice("Falta apoio: aponte para uma parede ou outro painel para montar o teto.")
 			return false
+	else:
+		point.y = ground(point.x,point.z)
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(WALL_SIZE*.94,WALL_SIZE*.96,.16) if is_wall else Vector3(1.05,.84,.8)
+	shape.size = Vector3(WALL_SIZE*.94,WALL_SIZE*.96,.16) if is_wall else (Vector3(WALL_SIZE*.99,.18,WALL_SIZE*.99) if is_floor else Vector3(1.05,.84,.8))
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
-	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else .48))
-	query.collision_mask = SOLID|TARGET|4
-	if is_wall:
-		# A análise geométrica acima protege contra sobreposição sem bloquear cantos.
-		var skip_wall_rids: Array[RID] = []
+	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else (.01 if is_floor else .48)))
+	query.collision_mask = (TARGET|4) if is_floor and build_level==0 else SOLID|TARGET|4
+	if is_wall or is_floor:
+		# Colisao com modulos de apoio e permitida nas juncoes.
+		# Sobreposicoes reais de pisos/parede sao verificadas acima.
+		var excluded: Array[RID] = []
 		for obj in objects.values():
-			if is_instance_valid(obj) and obj is CollisionObject3D and obj.get_meta("kind","") in ["wood_wall","wood_doorway","wood_window"]:
-				skip_wall_rids.append(obj.get_rid())
-		query.exclude = skip_wall_rids
+			if is_instance_valid(obj) and obj is CollisionObject3D and obj.get_meta("kind","") in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+				excluded.append(obj.get_rid())
+		query.exclude = excluded
 	if not get_world_3d().direct_space_state.intersect_shape(query,12).is_empty():
 		notice("Escolha um espaço livre à sua frente.")
 		return false
-	store_object(kind,point,yaw)
+	store_object(kind,point,yaw,build_level if is_wall or is_floor else 0)
 	return true
+
 
 func toggle_stock(i: int) -> void:
 	if reserve[i]:
@@ -2083,6 +2707,10 @@ func toggle_stock(i: int) -> void:
 		stock[i] = 0
 	save_game()
 	show_inventory()
+
+func construction_level_name() -> String:
+	return ["piso térreo","teto térreo / piso 2","teto 2 / piso 3","teto do 3"][build_level]
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -2109,6 +2737,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_R: eat()
 			KEY_F: primary()
 			KEY_V: toggle_view()
+			KEY_PAGEUP:
+				build_level = mini(build_level+1,BUILD_MAX_LEVEL)
+				notice("Altura selecionada: %s" % construction_level_name())
+			KEY_PAGEDOWN:
+				build_level = maxi(build_level-1,0)
+				notice("Altura selecionada: %s" % construction_level_name())
+			KEY_T:
+				if bar_items[selected]==FLOOR_ITEM:
+					build_level = (build_level+1)%(BUILD_MAX_LEVEL+1)
+					notice("Painel selecionado: %s" % construction_level_name())
+				else:
+					build_rotation = (build_rotation+1)%4
+					notice("Girar parede: %d°" % (build_rotation*90))
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:
 			selected = event.keycode-KEY_1
 	if not moving:
@@ -2126,12 +2767,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(dt: float) -> void:
 	elapsed += dt
 	if moving:
-		var f := float(Input.is_physical_key_pressed(KEY_W))-float(Input.is_physical_key_pressed(KEY_S))
-		var s := float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A))
-		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X))
-		var running := sprint_step(not crouch and f>0 and Input.is_physical_key_pressed(KEY_SHIFT),dt)
+		var input_axis := movement_axis()
+		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X))
+		var running := sprint_step(not crouch and input_axis.y<0 and (Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_SHIFT)),dt)
 		var speed := 2. if crouch else RUN_SPEED if running else WALK_SPEED
-		var requested := player.basis*Vector3(s,0,-f).normalized()*speed
+		var requested := player.basis*Vector3(input_axis.x,0,input_axis.y)*speed
 		player.velocity.x = move_toward(player.velocity.x,requested.x,dt*28)
 		player.velocity.z = move_toward(player.velocity.z,requested.z,dt*28)
 		if not player.is_on_floor():
@@ -2140,6 +2780,19 @@ func _physics_process(dt: float) -> void:
 			player.velocity.y = 5.2
 		jump = false
 		player.move_and_slide()
+		# Nao ha cavernas: nunca permitir um save antigo ou uma falha de fisica
+		# deixar a camera abaixo do relevo.
+		var ground_level := ground(player.position.x,player.position.z)
+		if player.position.y < ground_level-.18:
+			player.position.y = ground_level+.65
+			player.velocity.y = 0.0
+		# Agua do rio e visual, sem natacao implementada. Mantenha a camera
+		# acima da superficie para nao ver montanhas como ilhas flutuantes.
+		if TERRAIN.is_river(player.position.x,player.position.z):
+			var wading_level := TERRAIN.WATER_LEVEL-1.20
+			if player.position.y < wading_level:
+				player.position.y = wading_level
+				player.velocity.y = 0.0
 		walk_pose(player_model,player.get_real_velocity(),dt,player.is_on_floor())
 		eye_height = move_toward(eye_height,.96 if crouch else 1.49,dt*4.5)
 		update_camera()
@@ -2152,11 +2805,16 @@ func _physics_process(dt: float) -> void:
 		if elapsed>next_save:
 			next_save = elapsed+8
 			save_game()
-	# A rotina dos NPCs é independente da movimentação do jogador e do menu.
+	# A rotina dos NPCs e o crescimento das arvores continuam durante os menus.
 	update_villagers(dt)
-	if multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
+	tree_regrowth_clock += dt
+	if tree_regrowth_clock >= 2.0:
+		tree_regrowth_clock = 0.0
+		update_regrowing_trees()
+	if net_role!="solo" and multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
-		send_position.rpc(player.global_position,player.rotation.y)
+		if net_role=="host" or net_connected:
+			send_position.rpc(player.global_position,player.rotation.y)
 	for remote in remotes.values():
 		var destination: Vector3 = remote.get_meta("destination",remote.position)
 		var next: Vector3 = remote.position.lerp(destination,1.-exp(-dt*16.))
@@ -2166,27 +2824,35 @@ func _physics_process(dt: float) -> void:
 	spear.visible = not third_person and held in [0,8]
 	if spear.visible:
 		spear_tip.material_override = materials["rock"] if held==0 else material("wood",Color("#855b36"))
-	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE]
+	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
 	wood_axe_head.visible = held==WOOD_AXE
 	stone_axe_head.visible = false
+	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
-	axe.get_node("CaboMachadoMadeira").visible = held==WOOD_AXE
+	axe.get_node("CaboMachadoMadeira").visible = held in [WOOD_AXE,SHOVEL_ITEM]
 	axe.rotation.x = -.44-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.67
 	spear.position.z = -.77-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.31
 	if elapsed>feedback_until and moving:
 		feedback = ""
 	hud.text = "Clareira dos Goblins  ·  "+("Vale conquistado" if won else "Explore o vale" if hut else "Construa a bancada e o abrigo")
+	if net_role=="host":
+		hud.text += "  ·  Rede: anfitrião (%d conectados)" % multiplayer.get_peers().size()
+	elif net_role=="client":
+		hud.text += "  ·  Rede: conectado" if net_connected else "  ·  Rede: conectando..."
 	update_player_hud()
 	if moving and elapsed>=next_interaction_hint:
 		next_interaction_hint = elapsed+.12
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
-		if not hit.is_empty():
+		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
+			interaction_hint = ("%s · T: piso/teto · PgUp/PgDn: altura · Clique: instalar" % construction_level_name()) if bar_items[selected]==FLOOR_ITEM else ("Parede andar %d · T: girar · PgUp/PgDn: altura · Clique: instalar" % (build_level+1))
+		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
+				"stump": interaction_hint = "Pá + clique esquerdo · desenterrar toco"
 	hint.text = feedback if not feedback.is_empty() else interaction_hint
 	if player.position.y < -12:
 		respawn()
@@ -2209,34 +2875,54 @@ func update_crouch(requested: bool) -> bool:
 	return requested
 
 func update_wolf_spawns(dt: float) -> void:
+	# Um lobo aparece numa area segura da floresta depois de poucos segundos.
+	# Nao exige mais andar 20 m e esperar dois minutos para encontra-lo.
 	if is_instance_valid(roaming_wolf) and not roaming_wolf.is_queued_for_deletion():
-		if player.position.distance_to(roaming_wolf.position)>44.:
+		if player.position.distance_to(roaming_wolf.position)>43.0:
 			roaming_wolf.queue_free()
-		return
-	if Vector2(player.position.x,player.position.z).length()<20.:
+			wolf_spawn_timer = 12.0
 		return
 	wolf_spawn_timer -= dt
-	if wolf_spawn_timer>0.:
+	if wolf_spawn_timer>0.0:
 		return
 	var space := get_world_3d().direct_space_state
 	var clearance := SphereShape3D.new()
-	clearance.radius = .60
-	for attempt in range(8):
-		var offset := Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)*randf_range(16.,24.)
+	clearance.radius = .48
+	for attempt in range(24):
+		var offset := Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)*randf_range(15.,22.)
 		var position := player.position+offset
-		if Vector2(position.x,position.z).length()<24.:
+		if Vector2(position.x,position.z).length()<12.0 or TERRAIN.is_river(position.x,position.z):
 			continue
-		position.y = ground(position.x,position.z)+.06
+		var h := ground(position.x,position.z)
+		if absf(ground(position.x+.65,position.z)-h)>.46 or absf(ground(position.x,position.z+.65)-h)>.46:
+			continue
+		position.y = h+.06
 		var query := PhysicsShapeQueryParameters3D.new()
 		query.shape = clearance
-		query.transform.origin = position+Vector3.UP*.71
+		query.transform.origin = position+Vector3.UP*.85
 		query.collision_mask = SOLID|TARGET|4
+		query.exclude = [player.get_rid()]
 		if not space.intersect_shape(query,1).is_empty():
 			continue
 		roaming_wolf = creature("wolf","lobo-errante",position,self)
-		wolf_spawn_timer = randf_range(95.0,175.0)
+		roaming_wolf.set_meta("wolf_home",position)
+		roaming_wolf.set_meta("wander_direction",Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU))
+		wolf_spawn_timer = randf_range(50.0,80.0)
 		return
-	wolf_spawn_timer = 12.0
+	wolf_spawn_timer = 8.0
+
+func mob_has_clear_hit(mob: CharacterBody3D) -> bool:
+	# Raycast separado do calculo horizontal: evita ataques atraves do terreno
+	# e de paredes. O primeiro alvo atingido deve ser o corpo do jogador.
+	if not is_instance_valid(mob) or not is_instance_valid(player):
+		return false
+	var begin_ray := mob.global_position+Vector3.UP*.85
+	var end_ray := player.global_position+Vector3.UP*.85
+	var query := PhysicsRayQueryParameters3D.create(
+		begin_ray,end_ray,SOLID|4,[mob.get_rid()])
+	var contact := get_world_3d().direct_space_state.intersect_ray(query)
+	return not contact.is_empty() and contact.get("collider",null)==player
+
 
 func update_mobs(dt: float) -> void:
 	for i in range(mobs.size()-1,-1,-1):
@@ -2254,16 +2940,29 @@ func update_mobs(dt: float) -> void:
 		if kind=="rabbit":
 			update_rabbit(mob,direction,distance,dt)
 			continue
+		var wander := Vector3.ZERO
+		if kind=="wolf" and distance>=10.0:
+			var home: Vector3 = mob.get_meta("wolf_home",mob.position)
+			if elapsed>=float(mob.get_meta("wolf_next_turn",0.0)) or mob.is_on_wall() or mob.position.distance_to(home)>13.0:
+				wander = (home-mob.position).normalized() if mob.position.distance_to(home)>13.0 else Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)
+				wander.y = 0.0
+				mob.set_meta("wander_direction",wander)
+				mob.set_meta("wolf_next_turn",elapsed+randf_range(2.0,5.0))
+			wander = mob.get_meta("wander_direction",Vector3.FORWARD)
+			speed = 1.15
 		if distance<10:
 			speed = 2.25
-			if distance<1.35 and elapsed>next_hurt:
-				next_hurt = elapsed+1
-				health -= 15 if kind=="wolf" else 23
-				if health<=0:
-					respawn()
+			# Inimigos soterrados, em outro nivel ou atras de objetos
+			# nao devem causar dano apenas pela distancia horizontal.
+			if distance<1.35 and absf(player.global_position.y-mob.global_position.y)<1.35 and elapsed>next_hurt:
+				if mob_has_clear_hit(mob):
+					next_hurt = elapsed+1
+					health -= 15 if kind=="wolf" else 23
+					if health<=0:
+						respawn()
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
-		var stride := direction.normalized()*speed
+		var stride := (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
 		mob.velocity.x = stride.x
 		mob.velocity.z = stride.z
 		if stride.length_squared()>.01:
@@ -2358,26 +3057,54 @@ func primary() -> void:
 		return
 	next_attack = elapsed+.46
 	var held: int = bar_items[selected]
-	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM] and stock[held]>0:
+	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM] and stock[held]>0:
 		if place_craft(ITEM_KINDS[held]):
 			stock[held] -= 1
 			if held in [BENCH_ITEM,BENCH2_ITEM]:
 				bench = true
 			sync_hotbar()
 			save_game()
-			notice("Estrutura colocada no chão.")
+			notice(("Painel colocado: %s." % construction_level_name()) if held==FLOOR_ITEM else ("Parede no pavimento %d." % (build_level+1)))
 		return
 	var hit := ray()
 	if hit.is_empty():
 		return
 	var o: Node3D = hit["collider"]
 	var kind: String = o.get_meta("kind","")
-	if kind in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window"]:
+	if held==SAPLING_ITEM and stock[SAPLING_ITEM]>0:
+		if kind!="" or (hit["normal"] as Vector3).y < .60:
+			notice("Plante a muda sobre um terreno livre.")
+			return
+		var spot: Vector3 = hit["position"]
+		spot.y = ground(spot.x,spot.z)
+		if TERRAIN.is_river(spot.x,spot.z) or spot.distance_to(player.position)<1.5:
+			notice("Escolha um local seco e afastado.")
+			return
+		var clearance := SphereShape3D.new()
+		clearance.radius = .50
+		var check := PhysicsShapeQueryParameters3D.new()
+		check.shape = clearance
+		check.transform.origin = spot + Vector3.UP*1.0
+		check.collision_mask = SOLID|TARGET
+		check.exclude = [player.get_rid()]
+		if not get_world_3d().direct_space_state.intersect_shape(check,1).is_empty():
+			notice("Existe um obstáculo neste local.")
+			return
+		var tree_id := "item-" + str(Time.get_ticks_usec()) + "-" + str(randi())
+		placed.append({"kind":"tree","id":tree_id,"p":[spot.x,spot.y,spot.z],"r":0.0})
+		tree_regrowth[tree_id] = Time.get_unix_time_from_system()-TREE_BUD_DELAY-1.0
+		spawn_object("tree",tree_id,spot,self)
+		stock[SAPLING_ITEM]-=1
+		sync_hotbar()
+		save_game()
+		notice("Muda plantada! A árvore crescerá com o tempo.")
+		return
+	if kind in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
 		var hits: int = int(o.get_meta("break_hits",0))+(2 if held==STONE_AXE else 1)
-		var needed := 4 if kind in ["wood_wall","wood_doorway","wood_window","bench2"] else (3 if kind=="bench" else 2)
+		var needed := 4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2)
 		if hits<needed:
 			o.set_meta("break_hits",hits)
 			impact(hit["position"],hit["normal"],true)
@@ -2416,22 +3143,11 @@ func primary() -> void:
 					if randf()<.05:
 						store_object("foot",pos+Vector3(-.41,0,0))
 		return
+	if kind=="stump":
+		dig_stump(o,held,hit["position"],hit["normal"])
+		return
 	if kind=="tree":
-		var cuts_per_hit := 1
-		match bar_items[selected]:
-			WOOD_AXE: cuts_per_hit = 2
-			STONE_AXE: cuts_per_hit = 4
-		var cuts: int = o.get_meta("cuts",0)+cuts_per_hit
-		o.set_meta("cuts",cuts)
-		impact(hit["position"],hit["normal"],true)
-		var pos := o.global_position
-		timber(o,cuts>=4)
-		if cuts>=4:
-			for i in range(3):
-				store_object("log",pos+Vector3((i-1)*.65,0,.39))
-			notice("Árvore cortada. Recolha os troncos.")
-		else:
-			notice("Cortando a árvore: %d/4" % cuts)
+		chop_tree(o,held,hit["position"],hit["normal"])
 		return
 	if bar_items[selected]==2 and stock[2]>0 and (kind=="" or kind=="block" or kind=="stone"):
 		var point: Vector3 = hit["position"]
@@ -2457,6 +3173,60 @@ func primary() -> void:
 		else:
 			notice("Escolha um espaço livre para a pedra.")
 
+func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
+	# Cinco golpes com madeira; quatro com pedra. Nao cortar com as maos.
+	if tool not in [WOOD_AXE,STONE_AXE]:
+		notice("Use um machado para cortar esta árvore.")
+		return false
+	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
+		return false
+	var needed := 4 if tool==STONE_AXE else 5
+	var cuts := int(tree.get_meta("cuts",0))+1
+	tree.set_meta("cuts",cuts)
+	impact(pos,normal,true)
+	var tree_pos := tree.global_position
+	timber(tree,cuts>=needed)
+	if cuts>=needed:
+		for i in range(3):
+			store_object("log",tree_pos+Vector3((i-1)*.65,0,.39))
+		if randf()<.35:
+			store_object("sapling",tree_pos+Vector3(.82,0,.55))
+		notice("Árvore derrubada. O mesmo tronco com raízes ficou no chão.")
+		save_game()
+		return true
+	notice("Cortando a árvore: %d/%d golpes" % [cuts,needed])
+	return false
+
+
+func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
+	if tool!=SHOVEL_ITEM:
+		notice("Equipe a pá de madeira para desenterrar o toco e liberar espaço.")
+		return false
+	if not is_instance_valid(stump) or str(stump.get_meta("kind",""))!="stump":
+		return false
+	var digs := int(stump.get_meta("dig_hits",0))+1
+	stump.set_meta("dig_hits",digs)
+	impact(pos,normal,true)
+	if digs<2:
+		notice("Arrancando raízes com a pá: 1/2")
+		return false
+	var stump_id: String = str(stump.get_meta("id",""))
+	var age: float = Time.get_unix_time_from_system()-float(tree_regrowth.get(stump_id,0))
+	var got_sapling := age>=TREE_BUD_DELAY and age<TREE_BUD_DELAY+TREE_GROW_SECONDS
+	cleared_stumps[stump_id] = true
+	tree_regrowth.erase(stump_id)
+	remove_object(stump)
+	stock[6] += 1
+	item_received(6)
+	if got_sapling:
+		stock[SAPLING_ITEM] += 1
+		item_received(SAPLING_ITEM)
+	sync_hotbar()
+	save_game()
+	notice("Toco removido! +1 tronco" + (" e +1 muda" if got_sapling else "") + ".")
+	return true
+
+
 func secondary() -> void:
 	var hit := ray()
 	if not hit.is_empty():
@@ -2474,7 +3244,7 @@ func secondary() -> void:
 			station_level = 2 if kind=="bench2" else 1
 			open_craft("station")
 			return
-		if kind in ["fire","wood_wall","wood_doorway","wood_window"]:
+		if kind in ["fire","wood_wall","wood_doorway","wood_window","wood_floor"]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
 		if item>=0:
@@ -2547,21 +3317,41 @@ func build_hut() -> void:
 	creature("guardian","guardiao",Vector3(3,0,-39),self)
 	notice("O guardião apareceu no Vale da Névoa.")
 
-func store_object(kind: String, pos: Vector3, yaw: float = 0.0) -> void:
+func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) -> void:
+	if kind in NET_SHARED_KINDS and net_role=="client" and not net_apply_in_progress:
+		if net_world_ready:
+			net_request_place.rpc_id(1,kind,pos,yaw,level)
+		else:
+			notice("Aguarde o mundo multiplayer sincronizar.")
+		return
 	var id := "item-"+str(Time.get_ticks_usec())+"-"+str(randi())
-	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw})
+	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
 	spawn_object(kind,id,pos,self,yaw)
+	if kind=="wood_floor" and level==0:
+		refresh_door_transitions(pos)
+	if kind in NET_SHARED_KINDS and net_role=="host" and not net_apply_in_progress:
+		net_shared_place.rpc(kind,id,pos,yaw,level)
 
 func remove_object(o: Node3D) -> void:
+	var removed_kind := str(o.get_meta("kind",""))
+	var id: String = str(o.get_meta("id",""))
+	if net_role=="client" and removed_kind in NET_SHARED_KINDS and not net_apply_in_progress:
+		if net_world_ready:
+			net_request_remove.rpc_id(1,id)
+		return
 	if o is CollisionObject3D:
 		o.collision_layer = 0
-	var id: String = o.get_meta("id")
+	var removed_pos := o.global_position
 	if id.begins_with("item-"):
 		placed = placed.filter(func(entry): return entry["id"]!=id)
 	elif id!="lobo-errante":
 		removed[id] = true
 	objects.erase(id)
 	o.queue_free()
+	if removed_kind=="wood_floor":
+		refresh_door_transitions(removed_pos)
+	if net_role=="host" and removed_kind in NET_SHARED_KINDS and not net_apply_in_progress:
+		net_shared_remove.rpc(id)
 
 func notice(message: String) -> void:
 	feedback = message
@@ -2601,6 +3391,8 @@ func load_game() -> void:
 			bar_items[i] = item
 	sync_hotbar()
 	removed = data.get("removed",{})
+	cleared_stumps = data.get("cleared_stumps",{})
+	tree_regrowth = data.get("tree_regrowth",{})
 	placed = data.get("placed",[])
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -2609,6 +3401,10 @@ func load_game() -> void:
 	set_meta("spawn",data.get("pos",[0,1,0]))
 
 func save_game() -> void:
+	# Nunca sobrescrever o progresso offline de um convidado com o mundo
+	# que pertence ao anfitriao. O host continua salvando normalmente.
+	if net_role=="client":
+		return
 	if not is_instance_valid(player):
 		return
 	sync_hotbar()
@@ -2616,7 +3412,7 @@ func save_game() -> void:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":removed,
-			"placed":placed,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots}))
 		file.close()
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE+".tmp"),ProjectSettings.globalize_path(SAVE))
@@ -2625,57 +3421,326 @@ func _notification(what: int) -> void:
 	if what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
 
+func lan_local_ipv4_addresses() -> PackedStringArray:
+	var addresses := PackedStringArray()
+	for ip in IP.get_local_addresses():
+		# Ignora IPv6, loopback, links locais e IPs publicos.
+		if ip.contains(":") or not ip.is_valid_ip_address():
+			continue
+		var octets := ip.split(".")
+		if octets.size()!=4:
+			continue
+		var second := int(octets[1])
+		var private_range := ip.begins_with("192.168.") or ip.begins_with("10.") or (int(octets[0])==172 and second>=16 and second<=31)
+		if private_range and not addresses.has(ip):
+			addresses.append(ip)
+	return addresses
+
+
 func host_game() -> void:
 	disconnect_game()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_server(24650,8)!=OK:
-		notice("Não foi possível abrir a porta UDP 24650.")
+	var error := peer.create_server(NET_PORT,7)
+	if error!=OK:
+		peer.close()
+		net_session_message = "Porta UDP %d indisponível. Feche outro servidor ou libere o firewall." % NET_PORT
+		notice(net_session_message)
 		show_menu()
 		return
+	net_role = "host"
+	net_connected = true
+	var ips := lan_local_ipv4_addresses()
+	net_session_message = "Compartilhe o IP local: %s (UDP %d)." % [", ".join(ips) if ips.size()>0 else "veja em ipconfig",NET_PORT]
 	multiplayer.multiplayer_peer = peer
-	notice("Rede local ativa na porta UDP 24650.")
+	notice("Partida hospedada. Porta UDP %d." % NET_PORT)
 	begin()
 
+
 func join_game() -> void:
+	if not is_instance_valid(address):
+		return
 	var ip := address.text.strip_edges()
-	if ip.is_empty():
-		notice("Informe o IP do anfitrião.")
+	join_at_address(ip)
+
+
+func join_at_address(ip: String) -> void:
+	if ip.is_empty() or (not ip.is_valid_ip_address() and ip!="localhost"):
+		net_session_message = "Informe o IPv4 local do anfitrião. Ex.: 192.168.1.10."
+		notice(net_session_message)
 		show_menu()
 		return
 	disconnect_game()
+	net_address = ip
+	net_world_backup = capture_net_world()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_client(ip,24650)!=OK:
-		notice("Não foi possível iniciar a conexão.")
+	var error := peer.create_client(ip,NET_PORT)
+	if error!=OK:
+		peer.close()
+		net_world_backup.clear()
+		net_session_message = "Falha ao iniciar a conexão. Verifique o IP e a porta UDP %d." % NET_PORT
+		notice(net_session_message)
 		show_menu()
 		return
+	net_role = "client"
+	net_connected = false
+	net_world_ready = false
+	net_session_message = "Conectando ao anfitrião %s..." % ip
 	multiplayer.multiplayer_peer = peer
-	notice("Conectando a "+ip+"…")
+	show_menu()
+
+
+func net_connected_to_server() -> void:
+	if net_role!="client":
+		return
+	net_connected = true
+	net_session_message = "Conectado. Sincronizando o mundo do anfitrião."
+	net_client_hello.rpc_id(1,NET_PROTOCOL)
+	notice(net_session_message)
+	# Nao iniciar antes de receber a copia compartilhada das construcoes.
+
+
+func net_connection_failed() -> void:
+	if net_role!="client":
+		return
+	disconnect_game()
+	net_session_message = "Não foi possível conectar. Confira o IPv4 local e o firewall UDP %d." % NET_PORT
+	notice(net_session_message)
+	show_menu()
+
+
+func net_peer_connected(peer_id: int) -> void:
+	if net_role!="host" or peer_id==1:
+		return
+	net_session_message = "Jogador %d entrou na sala." % peer_id
+	notice(net_session_message)
+
+
+func net_peer_disconnected(peer_id: int) -> void:
+	remove_remote(peer_id)
+	if net_role=="host":
+		net_remove_avatar.rpc(peer_id)
+		notice("Jogador %d saiu da sala." % peer_id)
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_client_hello(version: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1:
+		return
+	if version!=NET_PROTOCOL:
+		net_kick_message.rpc_id(peer_id,"A versão do jogo é diferente. Atualize nos dois computadores.")
+		return
+	net_send_snapshot.rpc_id(peer_id,capture_net_world())
+
+
+@rpc("authority","call_remote","reliable")
+func net_kick_message(message: String) -> void:
+	if multiplayer.get_remote_sender_id()!=1:
+		return
+	disconnect_game()
+	net_session_message = message
+	notice(message)
+	show_menu()
+
+
+func capture_net_world() -> Dictionary:
+	return {
+		"placed": placed.duplicate(true),
+		"removed": removed.duplicate(true),
+		"cleared_stumps": cleared_stumps.duplicate(true),
+		"tree_regrowth": tree_regrowth.duplicate(true),
+		"hut":hut,"won":won,"bench":bench,
+		"pos":[player.position.x,player.position.y,player.position.z]
+	}
+
+
+func apply_net_world(snapshot: Dictionary) -> void:
+	if not snapshot.has("placed") or not snapshot.has("removed"):
+		return
+	net_apply_in_progress = true
+	# Desfaz objetos do save local antes de receber o mundo hospedado.
+	for entry in placed:
+		var object_id := str(entry.get("id",""))
+		if objects.has(object_id):
+			var old: Node3D = objects[object_id]
+			objects.erase(object_id)
+			if is_instance_valid(old):
+				if old is CollisionObject3D:
+					old.collision_layer = 0
+				old.queue_free()
+	placed = (snapshot["placed"] as Array).duplicate(true)
+	removed = (snapshot["removed"] as Dictionary).duplicate(true)
+	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
+	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
+	hut = bool(snapshot.get("hut",false))
+	won = bool(snapshot.get("won",false))
+	bench = bool(snapshot.get("bench",false))
+	# Reconstroi recursos naturais de acordo com o estado compartilhado.
+	for key in chunks.keys():
+		var chunk: Node3D = chunks[key]
+		for child in chunk.get_children():
+			objects.erase(child.get_meta("id",""))
+		chunk.queue_free()
+	chunks.clear()
+	load_chunks()
+	for entry in placed:
+		var p: Array = entry["p"]
+		spawn_object(str(entry["kind"]),str(entry["id"]),
+			Vector3(float(p[0]),float(p[1]),float(p[2])),self,float(entry.get("r",0.0)))
+	net_apply_in_progress = false
+
+
+@rpc("authority","call_remote","reliable")
+func net_send_snapshot(snapshot: Dictionary) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or net_world_ready:
+		return
+	apply_net_world(snapshot)
+	net_world_ready = true
+	net_connected = true
+	var host_position: Array = snapshot.get("pos",[0,1,0])
+	var enter_x := float(host_position[0])+2.0
+	var enter_z := float(host_position[2])+2.0
+	player.position = Vector3(enter_x,ground(enter_x,enter_z)+.85,enter_z)
+	player.velocity = Vector3.ZERO
+	net_session_message = "Mundo sincronizado. Partida em rede ativa."
+	notice(net_session_message)
 	begin()
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
+	if net_role!="host" or kind not in NET_SHARED_KINDS:
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	if not pos.is_finite() or not is_finite(yaw) or level<0 or level>BUILD_MAX_LEVEL:
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	if not is_instance_valid(avatar) or avatar.global_position.distance_to(pos)>12.0:
+		return
+	store_object(kind,pos,yaw,level)
+	save_game()
+
+
+@rpc("authority","call_remote","reliable")
+func net_shared_place(kind: String,id: String,pos: Vector3,yaw: float,level: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	if kind not in NET_SHARED_KINDS or id.length()>100 or not pos.is_finite():
+		return
+	if objects.has(id):
+		return
+	net_apply_in_progress = true
+	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
+	spawn_object(kind,id,pos,self,yaw)
+	if kind=="wood_floor" and level==0:
+		refresh_door_transitions(pos)
+	net_apply_in_progress = false
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_remove(id: String) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS:
+		return
+	if not is_instance_valid(avatar) or avatar.global_position.distance_to(obj.global_position)>6.5:
+		return
+	remove_object(obj)
+	save_game()
+
+
+@rpc("authority","call_remote","reliable")
+func net_shared_remove(id: String) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not objects.has(id):
+		return
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj):
+		return
+	net_apply_in_progress = true
+	remove_object(obj)
+	net_apply_in_progress = false
+
+
+func net_create_avatar(peer_id: int) -> Node3D:
+	var avatar := Node3D.new()
+	avatar.name = "JogadorRede_%d" % peer_id
+	add_child(avatar)
+	var visual := Node3D.new()
+	avatar.add_child(visual)
+	visual.rotation.y = PI
+	goblin(visual,Color("#895938"),true)
+	remotes[peer_id] = avatar
+	return avatar
+
+
+func net_apply_avatar_position(peer_id: int,pos: Vector3,facing: float) -> void:
+	if peer_id==multiplayer.get_unique_id() or not pos.is_finite() or not is_finite(facing):
+		return
+	if pos.length()>50000:
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	if not is_instance_valid(avatar):
+		avatar = net_create_avatar(peer_id)
+		avatar.position = pos
+	if avatar.position.distance_to(pos)>15.0:
+		avatar.position = pos
+	avatar.set_meta("destination",pos)
+	avatar.rotation.y = facing
+
 
 @rpc("any_peer","call_remote","unreliable_ordered")
 func send_position(pos: Vector3,facing: float) -> void:
-	if not pos.is_finite() or not is_finite(facing):
+	var sender := multiplayer.get_remote_sender_id()
+	if sender<1:
 		return
-	var id := multiplayer.get_remote_sender_id()
-	if not remotes.has(id):
-		var avatar := Node3D.new()
-		add_child(avatar)
-		var visual := Node3D.new()
-		avatar.add_child(visual)
-		visual.rotation.y = PI
-		goblin(visual,Color("#895938"),true)
-		avatar.position = pos
-		remotes[id] = avatar
-	var remote: Node3D = remotes[id]
-	if remote.position.distance_to(pos)>15.:
-		remote.position = pos
-	remote.set_meta("destination",pos)
-	remote.rotation.y = facing
+	if net_role!="host":
+		# Cliente so aceita atualizacoes do anfitriao; nao de outros clientes.
+		if sender==1:
+			net_apply_avatar_position(1,pos,facing)
+		return
+	if not multiplayer.get_peers().has(sender):
+		return
+	net_apply_avatar_position(sender,pos,facing)
+	# O anfitriao encaminha posicoes para todos os outros clientes.
+	net_relay_position.rpc(sender,pos,facing)
+
+
+@rpc("authority","call_remote","unreliable_ordered")
+func net_relay_position(peer_id: int,pos: Vector3,facing: float) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	net_apply_avatar_position(peer_id,pos,facing)
+
+
+@rpc("authority","call_remote","reliable")
+func net_remove_avatar(peer_id: int) -> void:
+	if multiplayer.get_remote_sender_id()!=1:
+		return
+	remove_remote(peer_id)
+
 
 func remove_remote(id: int) -> void:
 	if remotes.has(id):
-		remotes[id].queue_free()
+		if is_instance_valid(remotes[id]):
+			remotes[id].queue_free()
 		remotes.erase(id)
+
+
+func disconnect_and_show_menu() -> void:
+	disconnect_game()
+	net_session_message = "Modo offline. Você pode hospedar ou entrar em outra sala."
+	notice(net_session_message)
+	show_menu()
+
 
 func disconnect_game() -> void:
 	if multiplayer.multiplayer_peer:
@@ -2683,10 +3748,21 @@ func disconnect_game() -> void:
 		multiplayer.multiplayer_peer = null
 	for id in remotes.keys():
 		remove_remote(id)
+	var restore := net_role=="client" and not net_world_backup.is_empty()
+	net_role = "solo"
+	net_connected = false
+	net_world_ready = false
+	if restore:
+		apply_net_world(net_world_backup)
+		var previous: Array = net_world_backup.get("pos",[0,1,0])
+		player.position = Vector3(float(previous[0]),float(previous[1]),float(previous[2]))
+	net_world_backup.clear()
+
 
 func disconnected() -> void:
-	for id in remotes.keys():
-		remove_remote(id)
-	multiplayer.multiplayer_peer = null
-	notice("Conexão de rede encerrada.")
+	if net_role=="solo":
+		return
+	disconnect_game()
+	net_session_message = "Anfitrião desconectado. Seu mundo offline foi restaurado."
+	notice(net_session_message)
 	show_menu()

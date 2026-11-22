@@ -1,0 +1,38 @@
+CLAREIRA DOS GOBLINS - MULTIPLAYER NA REDE LOCAL (LAN)
+
+RECURSOS DESTA VERSAO
+- Hospedar uma sala no computador da rede (anfitriao).
+- Ate 8 pessoas na mesma sala (1 anfitriao + 7 convidados).
+- Ver a posicao e os movimentos dos outros jogadores.
+- Compartilhar o mapa do anfitriao e as construcoes (bancadas, fogueira, paredes, pisos e teto).
+- Progresso do mundo salvo pelo anfitriao. O mundo offline do convidado nao e sobrescrito com o mundo recebido.
+
+COMO JOGAR ENTRE DOIS COMPUTADORES
+1. Instale o MESMO ZIP desta versao nos dois PCs.
+2. Conecte ambos ao mesmo roteador, via Wi-Fi ou cabo Ethernet.
+3. No primeiro PC: abra o jogo, clique em "Hospedar partida na rede local (LAN)".
+4. Pressione Esc para ver o menu da sala e o IPv4 local do anfitriao.
+5. No segundo PC: abra o jogo, digite o IPv4 do anfitriao (ex.: 192.168.1.10)
+   e clique em "Entrar na partida pelo IP".
+6. O segundo jogador entrara automaticamente quando o mundo terminar de sincronizar.
+
+FIREWALL DO WINDOWS
+- Se o Windows perguntar, permita o jogo em redes PRIVADAS.
+- Se a conexao nao funcionar, adicione no PC anfitriao uma regra de entrada para UDP 24650.
+- Em PowerShell aberto COMO ADMINISTRADOR, use:
+  New-NetFirewallRule -DisplayName "Clareira dos Goblins LAN" -Direction Inbound -Protocol UDP -LocalPort 24650 -Action Allow -Profile Private
+- Nao e necessario desligar o firewall, abrir porta no roteador ou instalar Hamachi para jogar na mesma LAN.
+
+DIAGNOSTICO
+- No Windows, ipconfig mostra o "Endereco IPv4" do Wi-Fi ou da Ethernet.
+- Se o jogo apresentar dois ou mais IPs, escolha o IPv4 da placa da rede compartilhada.
+- Evite redes Wi-Fi "Convidados" com isolamento entre dispositivos.
+- Se nao conectar, confira se os dois PCs executam o mesmo jogo e se nao ha outro
+  servidor usando a porta UDP 24650.
+- Para testar em um unico PC (duas instancias do jogo), use 127.0.0.1 no cliente.
+
+ATENCAO - ESCOPO DA PRIMEIRA VERSAO LAN
+- O mundo inicial e as construcoes sao compartilhados. Combate, IA de lobos e
+  coleta de todos os recursos ainda NAO estao totalmente sincronizados entre os PCs.
+- Nao se trata de servidor de internet publico. E uma sala para PCs da mesma rede.
+- O anfitriao precisa manter o jogo aberto. Se ele fechar, a sala se encerra.
