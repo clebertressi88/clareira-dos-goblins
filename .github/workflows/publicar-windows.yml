@@ -64,8 +64,14 @@ jobs:
       - name: Importar recursos e validar scripts
         run: |
           $ErrorActionPreference = 'Stop'
-          & $env:GODOT_EXE --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-import.log')
-          if ($LASTEXITCODE -ne 0) { throw 'Falha na importacao do Godot.' }
+          # Windows PowerShell 5.1 transforma stderr de programas nativos em NativeCommandError
+          # quando ErrorActionPreference=Stop, inclusive avisos normais de importacao GLB.
+          $ErrorActionPreference = 'Continue'
+          try {
+            & $env:GODOT_EXE --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-import.log')
+            $godotExit = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
+          if ($godotExit -ne 0) { throw 'Falha na importacao do Godot.' }
           $log = Get-Content (Join-Path $env:RUNNER_TEMP 'clareira-import.log') -Raw
           if ($log -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Erro de script na importacao.' }
 
@@ -82,9 +88,13 @@ jobs:
           )
           foreach ($test in $tests) {
             Write-Host "Executando $($test.path)"
-            $output = & $env:GODOT_EXE --headless --path Projeto-Godot --script $test.path 2>&1 | Out-String
+            $ErrorActionPreference = 'Continue'
+            try {
+              $output = & $env:GODOT_EXE --headless --path Projeto-Godot --script $test.path 2>&1 | Out-String
+              $godotExit = $LASTEXITCODE
+            } finally { $ErrorActionPreference = 'Stop' }
             Write-Host $output
-            if ($LASTEXITCODE -ne 0 -or -not $output.Contains($test.message)) {
+            if ($godotExit -ne 0 -or -not $output.Contains($test.message)) {
               throw "Teste falhou: $($test.path)"
             }
           }
@@ -95,9 +105,13 @@ jobs:
           $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
           $exe = Join-Path $dist 'Clareira-dos-Goblins.exe'
-          $output = & $env:GODOT_EXE --headless --path Projeto-Godot --export-release 'Windows Desktop' $exe 2>&1 | Out-String
+          $ErrorActionPreference = 'Continue'
+          try {
+            $output = & $env:GODOT_EXE --headless --path Projeto-Godot --export-release 'Windows Desktop' $exe 2>&1 | Out-String
+            $godotExit = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
           Write-Host $output
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { throw 'Exportacao Windows falhou.' }
+          if ($godotExit -ne 0 -or -not (Test-Path $exe)) { throw 'Exportacao Windows falhou.' }
           if ((Get-Item $exe).Length -le 0) { throw 'EXE vazio.' }
           if ($output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Erros de script na exportacao.' }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
