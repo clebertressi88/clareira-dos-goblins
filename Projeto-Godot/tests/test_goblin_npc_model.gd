@@ -50,9 +50,18 @@ func _run() -> void:
 		if not model_visible(game,npc_id):
 			fail("%s nao esta usando a malha GLB na cena." % npc_id)
 			return
+		var npc: Node3D = (game.get("objects") as Dictionary)[npc_id]
+		var pivot := npc.get_node("Visual/ModeloGoblinPivot") as Node3D
+		if absf(pivot.rotation.y) > 0.01:
+			fail("%s continua com o GLB invertido em 180 graus." % npc_id)
+			return
 	var guardian := game.call("creature","guardian","teste-guardiao-glb",Vector3(3.0,0.0,-15.0),game) as CharacterBody3D
 	if guardian == null or not model_visible(game,"teste-guardiao-glb"):
 		fail("Guardiao continua com a aparencia antiga.")
+		return
+	var guardian_pivot := guardian.get_node("Visual/ModeloGoblinPivot") as Node3D
+	if absf(guardian_pivot.rotation.y) > 0.01:
+		fail("Guardiao continua com o GLB invertido em 180 graus.")
 		return
 	var player_model := game.get("player_model") as Node3D
 	if player_model != null and player_model.has_meta("modelo_goblin_npc"):

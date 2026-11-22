@@ -1252,7 +1252,7 @@ func goblin_npc(o: Node3D, _garment: Color) -> void:
 	var ratio := 1.50/maxf(high.y-low.y,0.01)
 	model.scale = Vector3.ONE*ratio
 	model.position = Vector3(-(low.x+high.x)*0.5,-low.y,-(low.z+high.z)*0.5)*ratio
-	pivot.rotation.y = PI # Frente alinhada ao antigo goblin procedural (+Z).
+	pivot.rotation.y = 0.0 # O GLB ja aponta para +Z: girar PI fazia os NPCs andarem de costas.
 	o.set_meta("modelo_goblin_npc",true)
 
 
@@ -3088,7 +3088,8 @@ func update_mobs(dt: float) -> void:
 		mob.velocity.x = stride.x
 		mob.velocity.z = stride.z
 		if stride.length_squared()>.01:
-			mob.rotation.y = atan2(-stride.x,-stride.z)
+			# Goblins GLB olham para +Z; animais mantem orientacao original -Z.
+			mob.rotation.y = atan2(stride.x,stride.z) if kind=="guardian" else atan2(-stride.x,-stride.z)
 		if not mob.is_on_floor():
 			mob.velocity.y -= dt*15
 		mob.move_and_slide()
