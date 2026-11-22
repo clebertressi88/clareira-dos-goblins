@@ -120,6 +120,11 @@ func _run() -> void:
 			var contact := character.get_slide_collision(contact_idx)
 			var other := contact.get_collider()
 			print("ENTRY DEBUG colliding=",other," type=",other.get_class() if other!=null else "null"," kind=",other.get_meta("kind","") if other!=null else "", " normal=",contact.get_normal())
+			if other is CollisionObject3D:
+				var shape_index := contact.get_collider_shape_index()
+				var owner_id := other.shape_find_owner(shape_index)
+				var shape_node := other.shape_owner_get_owner(owner_id)
+				print("ENTRY DEBUG SHAPE INDEX=",shape_index," node=",shape_node.name if shape_node!=null else "?", " pos=",shape_node.position if shape_node is Node3D else "")
 		for child in doorway.get_children():
 			if child.name.begins_with("RampaPorta"):
 				print("ENTRY DEBUG ramp=",child.name," local=",child.position," rot=",child.rotation)
