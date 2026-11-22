@@ -993,9 +993,13 @@ func floor_height_near_door(door: StaticBody3D) -> float:
 
 
 func build_door_transitions(door: StaticBody3D) -> void:
-	# Um piso elevado sem rampa vira um degrau impossivel para CharacterBody3D.
-	# Cria entrada inclinada dentro e fora da porta, sem mudar seu save.
-	# A largura fica menor que a abertura de 0,85 m.
+	# Recalcula rampas quando um piso e colocado ou removido.
+	# Saves antigos mantem as mesmas paredes e posicoes.
+	for part in door.get_children():
+		if part.name in ["RampaPorta","ColisaoRampaPorta"]:
+			if part is CollisionShape3D:
+				part.disabled = true
+			part.queue_free()
 	var start_y := floor_height_near_door(door)
 	for side in [-1.0,1.0]:
 		var length := 1.65
@@ -1016,6 +1020,17 @@ func build_door_transitions(door: StaticBody3D) -> void:
 		col.position = ramp.position
 		col.rotation = ramp.rotation
 		door.add_child(col)
+
+
+func refresh_door_transitions(at: Vector3) -> void:
+	for obj in objects.values():
+		if not is_instance_valid(obj) or not (obj is StaticBody3D):
+			continue
+		if str(obj.get_meta("kind",""))!="wood_doorway":
+			continue
+		if Vector2(obj.global_position.x-at.x,obj.global_position.z-at.z).length()>WALL_SIZE*2.6:
+			continue
+		build_door_transitions(obj)
 
 
 func make_vine(parent: Node3D, offset: Vector3) -> void:
@@ -3222,17 +3237,23 @@ func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) 
 	var id := "item-"+str(Time.get_ticks_usec())+"-"+str(randi())
 	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
 	spawn_object(kind,id,pos,self,yaw)
+	if kind=="wood_floor" and level==0:
+		refresh_door_transitions(pos)
 
 func remove_object(o: Node3D) -> void:
 	if o is CollisionObject3D:
 		o.collision_layer = 0
 	var id: String = o.get_meta("id")
+	var removed_kind := str(o.get_meta("kind",""))
+	var removed_pos := o.global_position
 	if id.begins_with("item-"):
 		placed = placed.filter(func(entry): return entry["id"]!=id)
 	elif id!="lobo-errante":
 		removed[id] = true
 	objects.erase(id)
 	o.queue_free()
+	if removed_kind=="wood_floor":
+		refresh_door_transitions(removed_pos)
 
 func notice(message: String) -> void:
 	feedback = message
