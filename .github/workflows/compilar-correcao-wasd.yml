@@ -42,6 +42,9 @@ jobs:
           & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_forest_gameplay.gd 2>&1 | Tee-Object -FilePath temp/floresta.log
           if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/floresta.log -SimpleMatch 'FOREST GAMEPLAY OK')) { throw 'Falha teste de arvore/pa/som/lobos' }
           if (Select-String -Path temp/floresta.log -Pattern 'SCRIPT ERROR|FOREST GAMEPLAY FAIL' -CaseSensitive:$false) { throw 'Erros na floresta' }
+          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_build_levels.gd 2>&1 | Tee-Object -FilePath temp/construcao.log
+          if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/construcao.log -SimpleMatch 'BUILD LEVELS OK')) { throw 'Falha teste de paredes/piso-teto 3 andares' }
+          if (Select-String -Path temp/construcao.log -Pattern 'SCRIPT ERROR|BUILD LEVELS FAIL' -CaseSensitive:$false) { throw 'Erros no sistema de construcao' }
       - name: Preparar templates exportacao
         shell: pwsh
         run: |
