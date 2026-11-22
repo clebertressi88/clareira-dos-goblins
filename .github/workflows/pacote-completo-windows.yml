@@ -87,7 +87,10 @@ jobs:
           Copy-Item -LiteralPath builder/ferramentas/Pacote-Completo/ABRIR-NO-GODOT.cmd -Destination stage/ABRIR-NO-GODOT.cmd
           Copy-Item -LiteralPath builder/ferramentas/Pacote-Completo/ATUALIZAR.cmd -Destination stage/ATUALIZAR.cmd
           if (Test-Path stage/Jogo-Windows/Clareira-dos-Goblins.exe) { Write-Host 'Jogo Windows EXE exportado.' } else { Write-Host 'Jogo executavel pelo Godot portable incluido (JOGAR.cmd).' }
-          git -C stage/Codigo-Fonte status --porcelain
+          # Godot regenera arquivos .import existentes e um .uid novo na validacao.
+          # Reverte somente metadados de importacao na copia temporaria do CI.
+          git -C stage/Codigo-Fonte restore --worktree -- Projeto-Godot
+          git -C stage/Codigo-Fonte clean -f -- Projeto-Godot/landscape_terrain.gd.uid
           $state = git -C stage/Codigo-Fonte status --porcelain
           if ($state) { throw 'Arquivos locais alterados: o pacote precisa ter projeto Git limpo.' }
       - name: Compactar tudo em ZIP unico
