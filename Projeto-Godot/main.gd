@@ -33,6 +33,7 @@ const BUILD_MAX_LEVEL := 3
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
+const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb" # Aparência dos NPCs; mantém o modelo antigo quando ausente.
 const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
@@ -618,7 +619,7 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	var visual := Node3D.new()
 	visual.name = "Visual"
 	npc.add_child(visual)
-	goblin(visual,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
+	goblin_npc(visual,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
 	collider(npc,Vector3(.63,1.47,.55),Vector3.UP*.74)
 	objects[kind] = npc
 	villagers.append(npc)
@@ -726,7 +727,9 @@ func update_villagers(dt: float) -> void:
 			npc.global_position = Vector3(campfire.x+border.x,npc.global_position.y,campfire.z+border.y)
 			npc.velocity.x = 0.0
 			npc.velocity.z = 0.0
-		walk_pose(npc.get_node("Visual"),npc.get_real_velocity(),dt,npc.is_on_floor())
+		var npc_visual: Node3D = npc.get_node("Visual")
+		walk_pose(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
+		animate_npc_model(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
 
 func speak_to_goblin(npc: Node3D) -> void:
 	if player.global_position.distance_to(npc.global_position)>3.6:
@@ -838,7 +841,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			collider(o,Vector3(2,1.95,1.7),Vector3.UP*.975)
 		"Bruma","Talo":
 			o.collision_layer |= SOLID
-			goblin(o,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
+			goblin_npc(o,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
 			collider(o,Vector3(.63,1.47,.55),Vector3.UP*.74)
 		"fire":
 			collider(o,Vector3(.77,.41,.77),Vector3.UP*.205)
@@ -1206,6 +1209,69 @@ func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) ->
 			pivot.position.y = rest.y
 			if i%2==1:
 				pivot.position.y += maxf(0.,cos(phase+(PI if i%4==3 else 0.)))*.046*blend
+
+# Mantém toda a lógica do NPC (colisão, patrulha, interação e rede) independente da aparência.
+# O GLB fornecido não possui skeleton nem animações. Normaliza escala e chão
+# mesmo quando o recurso foi exportado com unidades muito grandes.
+func goblin_npc(o: Node3D, garment: Color) -> void:
+	if not ResourceLoader.exists(NPC_MODEL_PATH):
+		goblin(o,garment)
+		return
+	var packed: PackedScene = ResourceLoader.load(NPC_MODEL_PATH) as PackedScene
+	if packed == null:
+		goblin(o,garment)
+		return
+	var instance: Node = packed.instantiate()
+	if not instance is Node3D:
+		instance.queue_free()
+		goblin(o,garment)
+		return
+	var pivot := Node3D.new()
+	pivot.name = "ModeloGoblinPivot"
+	o.add_child(pivot)
+	var model: Node3D = instance as Node3D
+	model.name = "ModeloGoblin"
+	pivot.add_child(model)
+	var low := Vector3(INF,INF,INF)
+	var high := Vector3(-INF,-INF,-INF)
+	var found := false
+	for child in model.find_children("*","MeshInstance3D",true,false):
+		var part := child as MeshInstance3D
+		if part.mesh == null:
+			continue
+		var bounds := part.get_aabb()
+		for x in [0.0,1.0]:
+			for y in [0.0,1.0]:
+				for z in [0.0,1.0]:
+					var corner := bounds.position+Vector3(bounds.size.x*x,bounds.size.y*y,bounds.size.z*z)
+					var local_corner := model.to_local(part.to_global(corner))
+					low = low.min(local_corner)
+					high = high.max(local_corner)
+		found = true
+	if not found:
+		pivot.queue_free()
+		goblin(o,garment)
+		return
+	var ratio := 1.50/maxf(high.y-low.y,0.01)
+	model.scale = Vector3.ONE*ratio
+	model.position = Vector3(-(low.x+high.x)*0.5,-low.y,-(low.z+high.z)*0.5)*ratio
+	pivot.rotation.y = PI # Frente alinhada ao antigo goblin procedural (+Z).
+	o.set_meta("modelo_goblin_npc",true)
+
+
+func animate_npc_model(visual: Node3D, velocity: Vector3, dt: float, grounded: bool) -> void:
+	if not visual.has_meta("modelo_goblin_npc"):
+		return
+	var pivot := visual.get_node_or_null("ModeloGoblinPivot") as Node3D
+	if pivot == null:
+		return
+	var speed := Vector2(velocity.x,velocity.z).length()
+	var phase := float(visual.get_meta("npc_walk_phase",0.0))+speed*dt*6.5
+	visual.set_meta("npc_walk_phase",fposmod(phase,TAU))
+	var amount := minf(speed/1.2,1.0) if grounded else 0.0
+	pivot.position.y = maxf(0.0,sin(phase*2.0))*.026*amount
+	pivot.rotation.z = sin(phase)*.028*amount
+
 
 func goblin(o: Node3D, garment: Color, protagonist := false) -> void:
 	var guardian := garment==Color("#784d88")
