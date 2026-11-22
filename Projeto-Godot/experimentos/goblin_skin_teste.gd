@@ -72,7 +72,7 @@ func _spawn(script: GDScript, place: Vector3, title: String) -> void:
 	characters.append(rig)
 	var description := Label3D.new()
 	description.name="Legenda"
-	description.position=Vector3(0,2.35,0)
+	description.position=Vector3(0,1.42 if title=="GOBLIN ESCULPIDO V4" else 2.35,0)
 	description.text=title
 	description.font_size=42
 	description.pixel_size=.0025
@@ -160,11 +160,12 @@ func _zoom_out() -> void:
 func _update_camera() -> void:
 	if not is_instance_valid(inspection_camera):
 		return
-	var camera_size := 1.55 if view_mode=="rosto" else 3.5
+	var camera_size := 0.85 if view_mode=="rosto" else 3.5
 	inspection_camera.size=camera_size*zoom_factor
-	var target_height := 1.79 if view_mode=="rosto" else .85
-	inspection_camera.position=Vector3(0,target_height+.35,6.2)
-	inspection_camera.look_at(Vector3(0,target_height,0),Vector3.UP)
+	var target_height := 1.01 if view_mode=="rosto" else .85
+	var target_x := 1.3 if view_mode=="rosto" else 0.0
+	inspection_camera.position=Vector3(target_x,target_height+.35,6.2)
+	inspection_camera.look_at(Vector3(target_x,target_height,0),Vector3.UP)
 
 
 func _sword() -> void:
