@@ -783,7 +783,8 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var base := Node3D.new()
 			base.name = "BaseTronco"
 			visual.add_child(base)
-			cylinder(base,Vector3(0,.26,0),.23,.52,"tree_bark",Color.WHITE)
+			var stump_trunk := cylinder(base,Vector3(0,.26,0),.23,.52,"tree_bark",Color.WHITE)
+			stump_trunk.name = "TroncoToco"
 			for i in range(5):
 				var angle := float(i)*TAU/5.0
 				var root := cylinder(base,Vector3(cos(angle)*.36,.075,sin(angle)*.36),.075,.64,"tree_bark",Color.WHITE)
@@ -791,8 +792,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var growth := Node3D.new()
 			growth.name = "Crescimento"
 			visual.add_child(growth)
-			# O tronco alto encaixa na mesma base de raio .23, sem salto visual.
-			cylinder(growth,Vector3(0,1.36,0),.23,1.68,"tree_bark",Color.WHITE)
+			# Tronco adulto unico desde o solo ate a copa: elimina a emenda
+			# visivel entre dois cilindros sobrepostos no ponto de corte.
+			cylinder(growth,Vector3(0,1.10,0),.23,2.20,"tree_bark",Color.WHITE)
 			# Copas detalhadas, galhos e variacao deterministica por ID.
 			# O tronco continua sendo a unica colisao da arvore.
 			preload("res://forest_tree_visual.gd").decorate(growth,materials["tree_bark"],id)
@@ -1557,6 +1559,7 @@ func update_tree_visual(tree: Node3D) -> void:
 		return
 	var id: String = str(tree.get_meta("id",""))
 	var growth := tree.get_node("Visual/Crescimento") as Node3D
+	var stump_trunk := tree.get_node("Visual/BaseTronco/TroncoToco") as MeshInstance3D
 	var stump := tree.get_node("Visual/Toco") as Node3D
 	var sprout := tree.get_node("Visual/Broto") as Node3D
 	var sapling_stage := tree.get_node("Visual/Muda") as Node3D
@@ -1575,6 +1578,7 @@ func update_tree_visual(tree: Node3D) -> void:
 		tree.set_meta("kind","tree")
 		tree.collision_layer = SOLID|TARGET
 		stump.visible = false
+		stump_trunk.visible = false
 		growth.visible = true
 		growth.position = Vector3.ZERO
 		growth.scale = Vector3.ONE
@@ -1591,6 +1595,8 @@ func update_tree_visual(tree: Node3D) -> void:
 		return
 	tree.set_meta("kind","stump")
 	tree.collision_layer = SOLID|TARGET
+	# Ate a fase jovem o toco continua com o mesmo tronco e raizes.
+	stump_trunk.visible = progress < 0.75
 	var height := 0.54
 	if progress < 0.12:
 		stump.visible = true
@@ -1625,8 +1631,8 @@ func update_tree_visual(tree: Node3D) -> void:
 		var t := inverse_lerp(0.75,1.0,progress)
 		var factor := lerpf(0.72,1.0,t)
 		growth.scale = Vector3.ONE*factor
-		growth.position = Vector3.UP*(.52*(1.0-factor))
-		height = .52+2.20*factor
+		growth.position = Vector3.ZERO
+		height = 2.20*factor
 	# Sem colisor de folhas: apenas o tronco bloqueia o jogador e os NPCs.
 	shape.size = Vector3(.43,height,.43)
 	collision.position.y = height*.5
