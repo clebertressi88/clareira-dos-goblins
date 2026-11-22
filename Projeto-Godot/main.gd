@@ -48,7 +48,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 2
+const NET_PROTOCOL := 3 # Incompatível com clientes que simulavam mobs localmente
 const NET_SHARED_KINDS := ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor","block"]
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -134,6 +134,8 @@ var net_world_ready := false
 var net_world_backup: Dictionary = {}
 var net_apply_in_progress := false
 var net_session_message := ""
+var net_entities_clock := 0.0
+var net_last_hurt_by_peer: Dictionary = {}
 
 func _ready() -> void:
 	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
@@ -547,7 +549,7 @@ func create_chunk(key: Vector2i) -> void:
 			if not tree_regrowth.has(id):
 				tree_regrowth[id] = Time.get_unix_time_from_system()
 		if kind == "rabbit":
-			if not removed.has(id):
+			if not removed.has(id) and net_role!="client":
 				creature(kind,id,at,chunk)
 		elif not removed.has(id):
 			spawn_object(kind,id,at,chunk)
@@ -1335,6 +1337,7 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 	body.position = Vector3(at.x,ground(at.x,at.z)+.06,at.z)
 	body.set_meta("kind",kind)
 	body.set_meta("id",id)
+	objects[id] = body
 	body.set_meta("hp",2 if kind=="rabbit" else 5 if kind=="wolf" else 9)
 	mobs.append(body)
 	var visual := Node3D.new()
@@ -2800,13 +2803,15 @@ func _physics_process(dt: float) -> void:
 		if cell!=get_meta("chunk_center",Vector2i(100000,100000)):
 			set_meta("chunk_center",cell)
 			load_chunks()
-		update_wolf_spawns(dt)
-		update_mobs(dt)
+		if net_role!="client":
+			update_wolf_spawns(dt)
+			update_mobs(dt)
 		if elapsed>next_save:
 			next_save = elapsed+8
 			save_game()
 	# A rotina dos NPCs e o crescimento das arvores continuam durante os menus.
-	update_villagers(dt)
+	if net_role!="client":
+		update_villagers(dt)
 	tree_regrowth_clock += dt
 	if tree_regrowth_clock >= 2.0:
 		tree_regrowth_clock = 0.0
@@ -2815,6 +2820,11 @@ func _physics_process(dt: float) -> void:
 		next_net = elapsed+.10
 		if net_role=="host" or net_connected:
 			send_position.rpc(player.global_position,player.rotation.y)
+	if net_role=="host" and multiplayer.get_peers().size()>0:
+		net_entities_clock += dt
+		if net_entities_clock>=.15:
+			net_entities_clock = 0.0
+			net_sync_entities.rpc(net_capture_entities())
 	for remote in remotes.values():
 		var destination: Vector3 = remote.get_meta("destination",remote.position)
 		var next: Vector3 = remote.position.lerp(destination,1.-exp(-dt*16.))
@@ -2878,7 +2888,7 @@ func update_wolf_spawns(dt: float) -> void:
 	# Um lobo aparece numa area segura da floresta depois de poucos segundos.
 	# Nao exige mais andar 20 m e esperar dois minutos para encontra-lo.
 	if is_instance_valid(roaming_wolf) and not roaming_wolf.is_queued_for_deletion():
-		if player.position.distance_to(roaming_wolf.position)>43.0:
+		if nearest_player_distance(roaming_wolf.position)>43.0:
 			roaming_wolf.queue_free()
 			wolf_spawn_timer = 12.0
 		return
@@ -2930,7 +2940,9 @@ func update_mobs(dt: float) -> void:
 		if not is_instance_valid(mob) or mob.is_queued_for_deletion():
 			mobs.remove_at(i)
 			continue
-		var direction := player.position-mob.global_position
+		var target_id := nearest_player_id(mob.global_position)
+		var target_pos := player.global_position if target_id==1 else (remotes[target_id].global_position if remotes.has(target_id) else player.global_position)
+		var direction := target_pos-mob.global_position
 		direction.y = 0
 		var distance := direction.length()
 		if distance>28:
@@ -2954,12 +2966,15 @@ func update_mobs(dt: float) -> void:
 			speed = 2.25
 			# Inimigos soterrados, em outro nivel ou atras de objetos
 			# nao devem causar dano apenas pela distancia horizontal.
-			if distance<1.35 and absf(player.global_position.y-mob.global_position.y)<1.35 and elapsed>next_hurt:
-				if mob_has_clear_hit(mob):
-					next_hurt = elapsed+1
+			if distance<1.35 and absf(target_pos.y-mob.global_position.y)<1.35:
+				if target_id==1 and elapsed>next_hurt and mob_has_clear_hit(mob):
+					next_hurt = elapsed+1.0
 					health -= 15 if kind=="wolf" else 23
 					if health<=0:
 						respawn()
+				elif target_id>1 and elapsed-float(net_last_hurt_by_peer.get(target_id,-100.0))>1.0:
+					net_last_hurt_by_peer[target_id] = elapsed
+					net_receive_damage.rpc_id(target_id,15 if kind=="wolf" else 23)
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
 		var stride := (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
@@ -3123,6 +3138,10 @@ func primary() -> void:
 	if o.has_meta("hp"):
 		if bar_items[selected] not in [0,8,WOOD_AXE,STONE_AXE]:
 			notice("Equipe uma lança ou machado para atacar.")
+			return
+		if net_role=="client":
+			if net_world_ready:
+				net_request_hit_mob.rpc_id(1,str(o.get_meta("id","")),2 if bar_items[selected]==STONE_AXE else 1)
 			return
 		var hp := maxi(0, int(o.get_meta("hp"))-(2 if bar_items[selected]==STONE_AXE else 1))
 		o.set_meta("hp",hp)
@@ -3552,7 +3571,8 @@ func capture_net_world() -> Dictionary:
 		"cleared_stumps": cleared_stumps.duplicate(true),
 		"tree_regrowth": tree_regrowth.duplicate(true),
 		"hut":hut,"won":won,"bench":bench,
-		"pos":[player.position.x,player.position.y,player.position.z]
+		"pos":[player.position.x,player.position.y,player.position.z],
+		"entities":net_capture_entities()
 	}
 
 
@@ -3560,6 +3580,12 @@ func apply_net_world(snapshot: Dictionary) -> void:
 	if not snapshot.has("placed") or not snapshot.has("removed"):
 		return
 	net_apply_in_progress = true
+	# Desfaz mobs locais antes de receber os do servidor.
+	for mob in mobs:
+		if is_instance_valid(mob):
+			mob.queue_free()
+	mobs.clear()
+	roaming_wolf = null
 	# Desfaz objetos do save local antes de receber o mundo hospedado.
 	for entry in placed:
 		var object_id := str(entry.get("id",""))
@@ -3590,6 +3616,8 @@ func apply_net_world(snapshot: Dictionary) -> void:
 		spawn_object(str(entry["kind"]),str(entry["id"]),
 			Vector3(float(p[0]),float(p[1]),float(p[2])),self,float(entry.get("r",0.0)))
 	net_apply_in_progress = false
+	if net_role=="client":
+		net_apply_entities(snapshot.get("entities",[]))
 
 
 @rpc("authority","call_remote","reliable")
@@ -3669,6 +3697,124 @@ func net_shared_remove(id: String) -> void:
 	remove_object(obj)
 	net_apply_in_progress = false
 
+
+# O anfitriao e a unica maquina que executa a IA dos mobs. O ID dos
+# animais e estavel, e cada snapshot substitui posicao, rotacao e vida.
+func nearest_player_id(pos: Vector3) -> int:
+	var closest := player.global_position.distance_squared_to(pos)
+	var chosen := 1
+	if net_role=="host":
+		for peer_id in remotes.keys():
+			var avatar: Node3D = remotes[peer_id]
+			if not is_instance_valid(avatar):
+				continue
+			var d := avatar.global_position.distance_squared_to(pos)
+			if d < closest:
+				closest = d
+				chosen = int(peer_id)
+	return chosen
+
+func nearest_player_distance(pos: Vector3) -> float:
+	var id := nearest_player_id(pos)
+	if id==1:
+		return player.global_position.distance_to(pos)
+	return remotes[id].global_position.distance_to(pos)
+
+func net_capture_entities() -> Array:
+	var result: Array = []
+	for npc in villagers:
+		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
+			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1})
+	for mob in mobs:
+		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
+			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
+				"p":mob.global_position,"r":mob.rotation.y,"hp":int(mob.get_meta("hp",1))})
+	return result
+
+func net_apply_entities(states: Array) -> void:
+	if net_role!="client":
+		return
+	var visible_ids: Dictionary = {}
+	for data in states:
+		if not data is Dictionary:
+			continue
+		var id := str(data.get("id",""))
+		var kind := str(data.get("kind",""))
+		var pos: Variant = data.get("p",Vector3.ZERO)
+		if id.is_empty() or id.length()>100 or not pos is Vector3 or not (pos as Vector3).is_finite():
+			continue
+		if kind not in ["rabbit","wolf","guardian","Bruma","Talo"]:
+			continue
+		visible_ids[id] = true
+		var obj: Node3D = objects.get(id,null)
+		if not is_instance_valid(obj):
+			if kind in ["Bruma","Talo"]:
+				continue
+			obj = creature(kind,id,pos,self)
+			obj.set_meta("net_mob",true)
+		var angle := float(data.get("r",0.0))
+		if obj.has_meta("net_mob"):
+			var delta := (pos as Vector3)-obj.global_position
+			walk_pose(obj.get_node("Visual"),delta*7.0,.15,true)
+			obj.global_position = obj.global_position.lerp(pos,.65) if delta.length()<10.0 else pos
+		else:
+			var delta := (pos as Vector3)-obj.global_position
+			walk_pose(obj.get_node("Visual"),delta*7.0,.15,true)
+			obj.global_position = obj.global_position.lerp(pos,.65) if delta.length()<10.0 else pos
+		obj.rotation.y = angle
+		if int(data.get("hp",-1))>=0:
+			obj.set_meta("hp",int(data["hp"]))
+	for mob in mobs:
+		if is_instance_valid(mob) and mob.has_meta("net_mob"):
+			if not visible_ids.has(str(mob.get_meta("id",""))):
+				objects.erase(str(mob.get_meta("id","")))
+				mob.queue_free()
+	mobs = mobs.filter(func(m): return is_instance_valid(m) and not m.is_queued_for_deletion())
+
+@rpc("authority","call_remote","unreliable_ordered")
+func net_sync_entities(states: Array) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not net_world_ready:
+		return
+	net_apply_entities(states)
+
+@rpc("authority","call_remote","reliable")
+func net_receive_damage(amount: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	health = maxi(0,health-clampi(amount,0,30))
+	if health<=0:
+		respawn()
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_hit_mob(id: String,damage: int) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not remotes.has(peer_id):
+		return
+	var target: Node3D = objects[id]
+	if not is_instance_valid(target) or str(target.get_meta("kind","")) not in ["rabbit","wolf","guardian"]:
+		return
+	if target.global_position.distance_to(remotes[peer_id].global_position)>4.5:
+		return
+	var last := float(target.get_meta("last_hit_"+str(peer_id),-100.0))
+	if elapsed-last<.35:
+		return
+	target.set_meta("last_hit_"+str(peer_id),elapsed)
+	var hp := maxi(0,int(target.get_meta("hp",1))-clampi(damage,1,2))
+	target.set_meta("hp",hp)
+	if hp<=0:
+		var p := target.global_position
+		var kind := str(target.get_meta("kind",""))
+		remove_object(target)
+		if kind=="guardian":
+			won = true
+		else:
+			store_object("meat",p)
+			if kind=="rabbit":
+				store_object("hide",p+Vector3(.41,0,0))
+	net_sync_entities.rpc(net_capture_entities())
 
 func net_create_avatar(peer_id: int) -> Node3D:
 	var avatar := Node3D.new()
