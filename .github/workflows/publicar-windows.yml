@@ -71,6 +71,13 @@ jobs:
           "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_v3.gd 2>&1 | tee /tmp/goblin-v3-test.log
           grep -q "GOBLIN V3 OK" /tmp/goblin-v3-test.log
 
+      - name: Testar anatomia esculpida do goblin V4
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_v4.gd 2>&1 | tee /tmp/goblin-v4-test.log
+          grep -q "GOBLIN V4 OK" /tmp/goblin-v4-test.log
+
       - name: Exportar EXE Windows
         shell: bash
         run: |

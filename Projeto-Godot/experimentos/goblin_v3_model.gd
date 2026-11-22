@@ -92,13 +92,16 @@ func install() -> bool:
 		anchor.bone_name = NAMES[i]
 		skeleton.add_child(anchor)
 		joints[NAMES[i]] = anchor
-	_build_character()
-	VISUAL_DETAILS.enhance(self)
+	_construct_visuals()
 	set_equipment(false,false)
 	set_meta("skeleton_ready",true)
 	set_meta("modelo_goblin_v3",true)
 	set_meta("articulacao_sem_deformacao",true)
 	return part_count > 35
+
+func _construct_visuals() -> void:
+	_build_character()
+	VISUAL_DETAILS.enhance(self)
 
 func _mesh_on(bone_name: String, piece_name: String, mesh: Mesh,
 		location: Vector3, rotation: Vector3, dimensions: Vector3,

@@ -3,7 +3,7 @@ extends Node3D
 ## ESC ou botao "Voltar" retorna ao menu original.
 
 const OLD_RIG = preload("res://npc_goblin.gd")
-const NEW_RIG = preload("res://experimentos/goblin_v3_model.gd")
+const NEW_RIG = preload("res://experimentos/goblin_v4_model.gd")
 
 var characters: Array[Node3D] = []
 var mode := "idle"
@@ -16,7 +16,7 @@ func _ready() -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
 	_build_environment()
 	_spawn(OLD_RIG,Vector3(-1.3,0,0),"SKIN ATUAL")
-	_spawn(NEW_RIG,Vector3(1.3,0,0),"ESTRUTURA NOVA V3")
+	_spawn(NEW_RIG,Vector3(1.3,0,0),"GOBLIN ESCULPIDO V4")
 	_build_controls()
 
 
@@ -68,7 +68,7 @@ func _spawn(script: GDScript, place: Vector3, title: String) -> void:
 	characters.append(rig)
 	var description := Label3D.new()
 	description.name="Legenda"
-	description.position=Vector3(0,1.7,0)
+	description.position=Vector3(0,2.35,0)
 	description.text=title
 	description.font_size=42
 	description.pixel_size=.0025
@@ -91,10 +91,10 @@ func _build_controls() -> void:
 	title.add_theme_font_size_override("font_size",14)
 	column.add_child(title)
 	var subtitle := Label.new()
-	subtitle.text="Esquerda: atual\nDireita: V3 detalhado"
+	subtitle.text="Esquerda: atual\nDireita: novo V4 inspirado na imagem"
 	column.add_child(subtitle)
 	var explanation := Label.new()
-	explanation.text="Rosto e corpo remodelados.\nTeste isolado; saves preservados."
+	explanation.text="Novo rosto, orelhas, maos e botas.\nTeste isolado; saves preservados."
 	column.add_child(explanation)
 	_button(column,"Parado",_set_motion.bind("idle"))
 	_button(column,"Caminhar",_set_motion.bind("walk"))
