@@ -43,6 +43,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha na fisica do terreno/jogador/NPCs' }
           if (!(Select-String -Path fisica-terreno.log -SimpleMatch 'TERRAIN PHYSICS OK')) { throw 'Jogador/NPCs nao se deslocaram corretamente' }
           if (Select-String -Path fisica-terreno.log -Pattern 'SCRIPT ERROR|TERRAIN PHYSICS FAIL' -CaseSensitive:$false) { throw 'Erro no teste fisico' }
+      - name: Testar geometria visual, textura e camera no relevo
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_visual.gd 2>&1 | Tee-Object -FilePath visual-terreno.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na malha visual/camera' }
+          if (!(Select-String -Path visual-terreno.log -SimpleMatch 'TERRAIN RENDERING OK')) { throw 'Teste da renderizacao do terreno nao confirmou sucesso' }
+          if (Select-String -Path visual-terreno.log -Pattern 'SCRIPT ERROR|TERRAIN VISUAL FAIL' -CaseSensitive:$false) { throw 'Erro no teste visual' }
       - name: Enviar logs de teste
         if: always()
         uses: actions/upload-artifact@v4
@@ -52,4 +59,5 @@ jobs:
             import.log
             teste.log
             fisica-terreno.log
+            visual-terreno.log
           if-no-files-found: ignore
