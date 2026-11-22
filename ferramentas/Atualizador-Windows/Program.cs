@@ -155,7 +155,36 @@ internal sealed class App : Form
             var valid = Regex.IsMatch(remote.Text.Trim(), @"^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)clebertressi88/clareira-dos-goblins(\.git)?/?$", RegexOptions.IgnoreCase);
             if (!remote.Ok || !valid) throw new Exception("Esta pasta pertence a outro repositório. Nenhum arquivo foi modificado.");
             var dirty = await Git(path, "status", "--porcelain=v1");
-            if (!dirty.Ok || !string.IsNullOrWhiteSpace(dirty.Text)) throw new Exception("Há modificações locais. Faça commit ou backup e resolva as alterações antes de atualizar. Nada foi sobrescrito.");
+            if (!dirty.Ok) throw new Exception("Não foi possível conferir alterações locais.");
+            var changes = dirty.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            // O Godot 4.7 regenera arquivos .import e .gd.uid automaticamente na primeira abertura.
+            // Faz backup dos metadados regenerados e restaura APENAS os .import versionados,
+            // sem tocar em cenas, scripts, texturas ou configuracoes alteradas pelo usuario.
+            bool generatedOnly = changes.All(line =>
+                line.Length > 3 &&
+                line[3..].Replace('\\', '/').StartsWith("Projeto-Godot/", StringComparison.OrdinalIgnoreCase) &&
+                (line.EndsWith(".import", StringComparison.OrdinalIgnoreCase) ||
+                 (line.StartsWith("?? ") && line.EndsWith(".gd.uid", StringComparison.OrdinalIgnoreCase))));
+            if (changes.Length > 0 && !generatedOnly)
+                throw new Exception("Há modificações locais no projeto. Faça commit ou backup antes de atualizar. Nenhum arquivo foi sobrescrito.");
+            var imported = changes.Where(line => !line.StartsWith("?? ") && line.EndsWith(".import", StringComparison.OrdinalIgnoreCase))
+                                  .Select(line => line[3..].Replace('\\', '/')).ToArray();
+            if (imported.Length > 0)
+            {
+                var backupDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClareiraDosGoblins", "backups-importacao", DateTime.Now.ToString("yyyyMMdd-HHmmss-fff"));
+                foreach (var relative in imported)
+                {
+                    var original = Path.GetFullPath(Path.Combine(path, relative.Replace('/', Path.DirectorySeparatorChar)));
+                    if (!original.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        throw new Exception("Caminho de importação inválido.");
+                    var backup = Path.Combine(backupDir, relative.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                    File.Copy(original, backup, overwrite: false);
+                }
+                var restoreArgs = new[] { "restore", "--worktree", "--" }.Concat(imported).ToArray();
+                if (!(await Git(path, restoreArgs)).Ok) throw new Exception("Não foi possível restaurar arquivos .import. Backup preservado em " + backupDir);
+                Log("Metadados gerados pelo Godot copiados para: " + backupDir);
+            }
             Log("Baixando mudanças do GitHub...");
             var fetch = await Git(path, "fetch", "--prune", "origin");
             if (!fetch.Ok) throw new Exception("Falha na conexão com GitHub: " + Short(fetch.Text));
