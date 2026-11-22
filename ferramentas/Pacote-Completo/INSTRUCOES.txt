@@ -1,0 +1,28 @@
+CLAREIRA DOS GOBLINS - PACOTE COMPLETO PARA WINDOWS (64 BITS)
+
+1. EXTRAIA O ZIP INTEIRO PARA UMA PASTA. NAO EXECUTE DIRETO DENTRO DO ZIP.
+2. PARA JOGAR: dois cliques em JOGAR.cmd.
+3. PARA EDITAR: dois cliques em ABRIR-NO-GODOT.cmd.
+4. PARA ATUALIZAR: dois cliques em ATUALIZAR.cmd.
+
+PASTAS DO PACOTE:
+  Codigo-Fonte\Projeto-Godot   - jogo completo com assets, montanhas, vales, rios, arvore regenerativa, inventario, craft e NPCs.
+  Codigo-Fonte\.git          - historico Git para receber atualizacoes sem perder alteracoes.
+  Atualizador\ClareiraAtualizador.exe - app Windows de atualizacao.
+  Ferramentas\Godot.exe      - editor e motor Godot 4.7.2 portatil; dispensa instalacao do Godot.
+  Jogo-Windows\Clareira-dos-Goblins.exe - presente somente quando a exportacao Windows foi bem sucedida.
+
+ATUALIZADOR:
+  Para acessar o repositorio PRIVADO no GitHub, instale Git (https://git-scm.com/download/win)
+  e GitHub CLI (https://cli.github.com/). Execute o atualizador, clique Conectar GitHub e autorize sua conta.
+  O atualizador permite escolher a pasta Codigo-Fonte dentro deste pacote e a branch
+  feature/paisagem-montanhas-rios-regeneracao. Use a pasta que contem .git, NAO Projeto-Godot.
+  A atualizacao verifica novas alteracoes a cada 10 minutos somente enquanto o app estiver aberto.
+  Modificacoes locais nao salvas por commit impedem a atualizacao, para proteger seu trabalho.
+
+OBSERVACOES:
+  Este pacote contem a versao experimental da paisagem, nao mesclada na main.
+  O Godot incluido pode abrir e executar o projeto local mesmo sem Git ou GitHub CLI.
+  O executavel Windows do jogo, quando presente, permite jogar sem abrir o editor.
+  Seus saves ficam na pasta de dados do usuario usada pelo Godot e nao sao apagados pelo atualizador.
+  Nao distribua o pacote publicamente sem verificar licencas de imagens/modelos.
