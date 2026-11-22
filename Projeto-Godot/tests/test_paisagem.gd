@@ -59,6 +59,10 @@ func _run_test() -> void:
 	if player == null:
 		fail("Jogador nao foi criado.")
 		return
+	# Evita atravessar a fronteira da chunk no teste e gerar dezenas de chunks.
+	# O jogador continua dentro da clareira, a dois metros de obstaculos conhecidos.
+	player.position = Vector3(6.0, float(game.call("ground",6.0,6.0))+1.25, 6.0)
+	player.velocity = Vector3.ZERO
 	game.call("begin")
 	if not bool(game.get("moving")):
 		fail("O botao Jogar/continuar nao ativou a movimentacao.")
