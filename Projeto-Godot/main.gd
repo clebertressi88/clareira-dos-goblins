@@ -1618,24 +1618,26 @@ func update_tree_visual(tree: Node3D) -> void:
 		var factor := lerpf(0.55,1.0,t)
 		sprout.scale = Vector3.ONE*factor
 		# O novo broto nasce na origem local; sua base permanece em Y=.52.
-		sprout.position = Vector3.UP*.52
-		height = .52+.22*factor
+		sprout.position = Vector3.UP*.505
+		height = .505+.22*factor
 	elif progress < 0.45:
 		stump.visible = false
 		sapling_stage.visible = true
 		var t := inverse_lerp(0.25,0.45,progress)
 		var factor := lerpf(0.70,1.0,t)
 		sapling_stage.scale = Vector3.ONE*factor
-		sapling_stage.position = Vector3.UP*.52
-		height = .52+0.67*factor
+		# A base do toco termina em Y=.44. Embutir o tronco jovem
+		# 8 cm dentro dele elimina a abertura entre as duas malhas.
+		sapling_stage.position = Vector3.UP*.36
+		height = .36+0.67*factor
 	elif progress < 0.75:
 		stump.visible = false
 		young_stage.visible = true
 		var t := inverse_lerp(0.45,0.75,progress)
 		var factor := lerpf(0.67,1.0,t)
 		young_stage.scale = Vector3.ONE*factor
-		young_stage.position = Vector3.UP*.52
-		height = .52+1.37*factor
+		young_stage.position = Vector3.UP*.36
+		height = .36+1.37*factor
 	else:
 		stump.visible = false
 		growth.visible = true
