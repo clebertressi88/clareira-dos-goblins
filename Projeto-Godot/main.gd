@@ -47,6 +47,9 @@ var craft_cells: Array[Vector2i] = []
 var craft_material := -1
 const SOLID := 1
 const TARGET := 2
+const NET_PORT := 24650
+const NET_PROTOCOL := 1
+const NET_SHARED_KINDS := ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor","block"]
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -124,6 +127,12 @@ var next_net := 0.0
 var feedback := ""
 var feedback_until := 0.0
 var remotes: Dictionary = {}
+var net_role := "solo" # solo / host / client
+var net_address := ""
+var net_connected := false
+var net_world_backup: Dictionary = {}
+var net_apply_in_progress := false
+var net_session_message := ""
 
 func _ready() -> void:
 	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
@@ -144,9 +153,11 @@ func _ready() -> void:
 	village()
 	load_chunks()
 	show_menu()
-	multiplayer.peer_disconnected.connect(remove_remote)
+	multiplayer.peer_connected.connect(net_peer_connected)
+	multiplayer.peer_disconnected.connect(net_peer_disconnected)
+	multiplayer.connected_to_server.connect(net_connected_to_server)
 	multiplayer.server_disconnected.connect(disconnected)
-	multiplayer.connection_failed.connect(disconnected)
+	multiplayer.connection_failed.connect(net_connection_failed)
 
 func configure_movement_inputs() -> void:
 	# Acoes configuradas no inicio: layouts de teclado diferentes e setas.
@@ -1794,14 +1805,25 @@ func show_menu() -> void:
 	label("WASD ou setas: andar/iniciar · Shift correr · Espaço pular · X agachar")
 	label("Mouse para mirar · Direito pegar/usar · Esquerdo atacar/construir")
 	label("E inventário · B abrigo · Q largar · V câmera · F10 retornar à clareira")
+	if net_role=="host":
+		label("Sala aberta · UDP %d · jogadores: %d/8" % [NET_PORT,multiplayer.get_peers().size()+1])
+	elif net_role=="client":
+		label(("Conectado em " if net_connected else "Conectando a ")+net_address)
+	if not net_session_message.is_empty():
+		label(net_session_message)
 	button("Jogar / continuar", begin)
-	address = LineEdit.new()
-	address.placeholder_text = "IP do anfitrião na rede local"
-	address.focus_mode = Control.FOCUS_CLICK
-	menu.add_child(address)
-	address.release_focus()
-	button("Hospedar na rede local", host_game)
-	button("Entrar na rede local", join_game)
+	if net_role=="solo":
+		address = LineEdit.new()
+		address.placeholder_text = "IP da rede local, Hamachi ou 127.0.0.1"
+		address.text = net_address
+		address.focus_mode = Control.FOCUS_CLICK
+		menu.add_child(address)
+		address.release_focus()
+		label("Todos precisam ter a mesma versão · Porta UDP %d" % NET_PORT)
+		button("Hospedar partida (LAN ou Hamachi)", host_game)
+		button("Entrar na partida pelo IP", join_game)
+	else:
+		button("Desconectar da partida", disconnect_and_show_menu)
 	if not feedback.is_empty():
 		label(feedback)
 	button("Salvar e sair", func(): save_game(); get_tree().quit())
@@ -2781,9 +2803,10 @@ func _physics_process(dt: float) -> void:
 	if tree_regrowth_clock >= 2.0:
 		tree_regrowth_clock = 0.0
 		update_regrowing_trees()
-	if multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
+	if net_role!="solo" and multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
-		send_position.rpc(player.global_position,player.rotation.y)
+		if net_role=="host" or net_connected:
+			send_position.rpc(player.global_position,player.rotation.y)
 	for remote in remotes.values():
 		var destination: Vector3 = remote.get_meta("destination",remote.position)
 		var next: Vector3 = remote.position.lerp(destination,1.-exp(-dt*16.))
@@ -2804,6 +2827,10 @@ func _physics_process(dt: float) -> void:
 	if elapsed>feedback_until and moving:
 		feedback = ""
 	hud.text = "Clareira dos Goblins  ·  "+("Vale conquistado" if won else "Explore o vale" if hut else "Construa a bancada e o abrigo")
+	if net_role=="host":
+		hud.text += "  ·  Rede: anfitrião (%d conectados)" % multiplayer.get_peers().size()
+	elif net_role=="client":
+		hud.text += "  ·  Rede: conectado" if net_connected else "  ·  Rede: conectando..."
 	update_player_hud()
 	if moving and elapsed>=next_interaction_hint:
 		next_interaction_hint = elapsed+.12
@@ -3371,54 +3398,239 @@ func _notification(what: int) -> void:
 func host_game() -> void:
 	disconnect_game()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_server(24650,8)!=OK:
-		notice("Não foi possível abrir a porta UDP 24650.")
+	var error := peer.create_server(NET_PORT,7)
+	if error!=OK:
+		peer.close()
+		net_session_message = "Porta UDP %d indisponível. Feche outro servidor ou libere o firewall." % NET_PORT
+		notice(net_session_message)
 		show_menu()
 		return
+	net_role = "host"
+	net_connected = true
+	net_session_message = "Sala hospedada: compartilhe seu IPv4 local ou IPv4 do Hamachi (UDP %d)." % NET_PORT
 	multiplayer.multiplayer_peer = peer
-	notice("Rede local ativa na porta UDP 24650.")
+	notice("Partida hospedada. Porta UDP %d." % NET_PORT)
 	begin()
 
+
 func join_game() -> void:
+	if not is_instance_valid(address):
+		return
 	var ip := address.text.strip_edges()
-	if ip.is_empty():
-		notice("Informe o IP do anfitrião.")
+	join_at_address(ip)
+
+
+func join_at_address(ip: String) -> void:
+	if ip.is_empty() or (not IP.is_valid_ip_address(ip) and ip!="localhost"):
+		net_session_message = "Informe um IP válido. Exemplo: 192.168.1.10 ou IPv4 do Hamachi."
+		notice(net_session_message)
 		show_menu()
 		return
 	disconnect_game()
+	net_address = ip
+	net_world_backup = capture_net_world()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_client(ip,24650)!=OK:
-		notice("Não foi possível iniciar a conexão.")
+	var error := peer.create_client(ip,NET_PORT)
+	if error!=OK:
+		peer.close()
+		net_world_backup.clear()
+		net_session_message = "Falha ao iniciar a conexão. Verifique o IP e a porta UDP %d." % NET_PORT
+		notice(net_session_message)
 		show_menu()
 		return
+	net_role = "client"
+	net_connected = false
+	net_session_message = "Conectando ao anfitrião %s..." % ip
 	multiplayer.multiplayer_peer = peer
-	notice("Conectando a "+ip+"…")
+	show_menu()
+
+
+func net_connected_to_server() -> void:
+	if net_role!="client":
+		return
+	net_connected = true
+	net_session_message = "Conectado. Sincronizando o mundo do anfitrião."
+	net_client_hello.rpc_id(1,NET_PROTOCOL)
+	notice(net_session_message)
+	# Nao iniciar antes de receber a copia compartilhada das construcoes.
+
+
+func net_connection_failed() -> void:
+	if net_role!="client":
+		return
+	disconnect_game()
+	net_session_message = "Não foi possível conectar. Confira IP, Hamachi e firewall UDP %d." % NET_PORT
+	notice(net_session_message)
+	show_menu()
+
+
+func net_peer_connected(peer_id: int) -> void:
+	if net_role!="host" or peer_id==1:
+		return
+	net_send_snapshot.rpc_id(peer_id,capture_net_world())
+	net_session_message = "Jogador %d entrou na sala." % peer_id
+	notice(net_session_message)
+
+
+func net_peer_disconnected(peer_id: int) -> void:
+	remove_remote(peer_id)
+	if net_role=="host":
+		net_remove_avatar.rpc(peer_id)
+		notice("Jogador %d saiu da sala." % peer_id)
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_client_hello(version: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1:
+		return
+	if version!=NET_PROTOCOL:
+		net_kick_message.rpc_id(peer_id,"A versão do jogo é diferente. Atualize nos dois computadores.")
+		return
+	net_send_snapshot.rpc_id(peer_id,capture_net_world())
+
+
+@rpc("authority","call_remote","reliable")
+func net_kick_message(message: String) -> void:
+	if multiplayer.get_remote_sender_id()!=1:
+		return
+	disconnect_game()
+	net_session_message = message
+	notice(message)
+	show_menu()
+
+
+func capture_net_world() -> Dictionary:
+	return {
+		"placed": placed.duplicate(true),
+		"removed": removed.duplicate(true),
+		"cleared_stumps": cleared_stumps.duplicate(true),
+		"tree_regrowth": tree_regrowth.duplicate(true),
+		"hut":hut,"won":won,"bench":bench,
+		"pos":[player.position.x,player.position.y,player.position.z]
+	}
+
+
+func apply_net_world(snapshot: Dictionary) -> void:
+	if not snapshot.has("placed") or not snapshot.has("removed"):
+		return
+	net_apply_in_progress = true
+	# Desfaz objetos do save local antes de receber o mundo hospedado.
+	for entry in placed:
+		var object_id := str(entry.get("id",""))
+		if objects.has(object_id):
+			var old: Node3D = objects[object_id]
+			objects.erase(object_id)
+			if is_instance_valid(old):
+				if old is CollisionObject3D:
+					old.collision_layer = 0
+				old.queue_free()
+	placed = (snapshot["placed"] as Array).duplicate(true)
+	removed = (snapshot["removed"] as Dictionary).duplicate(true)
+	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
+	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
+	hut = bool(snapshot.get("hut",false))
+	won = bool(snapshot.get("won",false))
+	bench = bool(snapshot.get("bench",false))
+	# Reconstroi recursos naturais de acordo com o estado compartilhado.
+	for key in chunks.keys():
+		var chunk: Node3D = chunks[key]
+		for child in chunk.get_children():
+			objects.erase(child.get_meta("id",""))
+		chunk.queue_free()
+	chunks.clear()
+	load_chunks()
+	for entry in placed:
+		var p: Array = entry["p"]
+		spawn_object(str(entry["kind"]),str(entry["id"]),
+			Vector3(float(p[0]),float(p[1]),float(p[2])),self,float(entry.get("r",0.0)))
+	net_apply_in_progress = false
+
+
+@rpc("authority","call_remote","reliable")
+func net_send_snapshot(snapshot: Dictionary) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	apply_net_world(snapshot)
+	net_connected = true
+	net_session_message = "Mundo sincronizado. Partida em rede ativa."
+	notice(net_session_message)
 	begin()
+
+
+func net_create_avatar(peer_id: int) -> Node3D:
+	var avatar := Node3D.new()
+	avatar.name = "JogadorRede_%d" % peer_id
+	add_child(avatar)
+	var visual := Node3D.new()
+	avatar.add_child(visual)
+	visual.rotation.y = PI
+	goblin(visual,Color("#895938"),true)
+	remotes[peer_id] = avatar
+	return avatar
+
+
+func net_apply_avatar_position(peer_id: int,pos: Vector3,facing: float) -> void:
+	if peer_id==multiplayer.get_unique_id() or not pos.is_finite() or not is_finite(facing):
+		return
+	if pos.length()>50000:
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	if not is_instance_valid(avatar):
+		avatar = net_create_avatar(peer_id)
+		avatar.position = pos
+	if avatar.position.distance_to(pos)>15.0:
+		avatar.position = pos
+	avatar.set_meta("destination",pos)
+	avatar.rotation.y = facing
+
 
 @rpc("any_peer","call_remote","unreliable_ordered")
 func send_position(pos: Vector3,facing: float) -> void:
-	if not pos.is_finite() or not is_finite(facing):
+	var sender := multiplayer.get_remote_sender_id()
+	if sender<1:
 		return
-	var id := multiplayer.get_remote_sender_id()
-	if not remotes.has(id):
-		var avatar := Node3D.new()
-		add_child(avatar)
-		var visual := Node3D.new()
-		avatar.add_child(visual)
-		visual.rotation.y = PI
-		goblin(visual,Color("#895938"),true)
-		avatar.position = pos
-		remotes[id] = avatar
-	var remote: Node3D = remotes[id]
-	if remote.position.distance_to(pos)>15.:
-		remote.position = pos
-	remote.set_meta("destination",pos)
-	remote.rotation.y = facing
+	if net_role!="host":
+		# Cliente so aceita atualizacoes do anfitriao; nao de outros clientes.
+		if sender==1:
+			net_apply_avatar_position(1,pos,facing)
+		return
+	if not multiplayer.get_peers().has(sender):
+		return
+	net_apply_avatar_position(sender,pos,facing)
+	# O anfitriao encaminha posicoes para todos os outros clientes.
+	net_relay_position.rpc(sender,pos,facing)
+
+
+@rpc("authority","call_remote","unreliable_ordered")
+func net_relay_position(peer_id: int,pos: Vector3,facing: float) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	net_apply_avatar_position(peer_id,pos,facing)
+
+
+@rpc("authority","call_remote","reliable")
+func net_remove_avatar(peer_id: int) -> void:
+	if multiplayer.get_remote_sender_id()!=1:
+		return
+	remove_remote(peer_id)
+
 
 func remove_remote(id: int) -> void:
 	if remotes.has(id):
-		remotes[id].queue_free()
+		if is_instance_valid(remotes[id]):
+			remotes[id].queue_free()
 		remotes.erase(id)
+
+
+func disconnect_and_show_menu() -> void:
+	disconnect_game()
+	net_session_message = "Modo offline. Você pode hospedar ou entrar em outra sala."
+	notice(net_session_message)
+	show_menu()
+
 
 func disconnect_game() -> void:
 	if multiplayer.multiplayer_peer:
@@ -3426,10 +3638,20 @@ func disconnect_game() -> void:
 		multiplayer.multiplayer_peer = null
 	for id in remotes.keys():
 		remove_remote(id)
+	var restore := net_role=="client" and not net_world_backup.is_empty()
+	net_role = "solo"
+	net_connected = false
+	if restore:
+		apply_net_world(net_world_backup)
+		var previous: Array = net_world_backup.get("pos",[0,1,0])
+		player.position = Vector3(float(previous[0]),float(previous[1]),float(previous[2]))
+	net_world_backup.clear()
+
 
 func disconnected() -> void:
-	for id in remotes.keys():
-		remove_remote(id)
-	multiplayer.multiplayer_peer = null
-	notice("Conexão de rede encerrada.")
+	if net_role=="solo":
+		return
+	disconnect_game()
+	net_session_message = "Anfitrião desconectado. Seu mundo offline foi restaurado."
+	notice(net_session_message)
 	show_menu()
