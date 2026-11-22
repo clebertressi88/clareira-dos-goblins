@@ -38,7 +38,7 @@ static func build(game: Node3D, body: StaticBody3D) -> void:
 		for floor_data in [[.56,1.12],[2.52,.96]]:
 			piece(game,body,Vector3(x,float(floor_data[0]),0),Vector3(.16,float(floor_data[1]),1.70),"plank",wood)
 		# Duas aguas: cumeeira ~4.25 m e beirais ~2.9 m.
-		piece(game,body,Vector3(float(side)*1.35,3.56,0),Vector3(3.15,.16,6.05),"roof",Color("#68452f"),float(side)*.46)
+		piece(game,body,Vector3(float(side)*1.35,3.56,0),Vector3(3.15,.16,6.05),"roof",Color("#68452f"),-float(side)*.46)
 	# Caixilhos e vidro sem colisao: permitem visibilidade e passagem de luz.
 	for z in [-2.75]:
 		for x in [-.85,.85]:
