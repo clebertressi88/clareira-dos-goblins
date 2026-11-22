@@ -18,7 +18,7 @@ concurrency:
 jobs:
   windows:
     # Qualquer runner Windows proprio que tenha acesso a este repositorio.
-    runs-on: [self-hosted, Windows]
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
     timeout-minutes: 60
     defaults:
       run:
