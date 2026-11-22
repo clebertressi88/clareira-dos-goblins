@@ -2461,34 +2461,41 @@ func update_crouch(requested: bool) -> bool:
 	return requested
 
 func update_wolf_spawns(dt: float) -> void:
+	# Um lobo aparece numa area segura da floresta depois de poucos segundos.
+	# Nao exige mais andar 20 m e esperar dois minutos para encontra-lo.
 	if is_instance_valid(roaming_wolf) and not roaming_wolf.is_queued_for_deletion():
-		if player.position.distance_to(roaming_wolf.position)>44.:
+		if player.position.distance_to(roaming_wolf.position)>43.0:
 			roaming_wolf.queue_free()
-		return
-	if Vector2(player.position.x,player.position.z).length()<20.:
+			wolf_spawn_timer = 12.0
 		return
 	wolf_spawn_timer -= dt
-	if wolf_spawn_timer>0.:
+	if wolf_spawn_timer>0.0:
 		return
 	var space := get_world_3d().direct_space_state
 	var clearance := SphereShape3D.new()
-	clearance.radius = .60
-	for attempt in range(8):
-		var offset := Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)*randf_range(16.,24.)
+	clearance.radius = .48
+	for attempt in range(24):
+		var offset := Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)*randf_range(15.,22.)
 		var position := player.position+offset
-		if Vector2(position.x,position.z).length()<24.:
+		if Vector2(position.x,position.z).length()<12.0 or TERRAIN.is_river(position.x,position.z):
 			continue
-		position.y = ground(position.x,position.z)+.06
+		var h := ground(position.x,position.z)
+		if absf(ground(position.x+.65,position.z)-h)>.46 or absf(ground(position.x,position.z+.65)-h)>.46:
+			continue
+		position.y = h+.06
 		var query := PhysicsShapeQueryParameters3D.new()
 		query.shape = clearance
-		query.transform.origin = position+Vector3.UP*.71
+		query.transform.origin = position+Vector3.UP*.85
 		query.collision_mask = SOLID|TARGET|4
+		query.exclude = [player.get_rid()]
 		if not space.intersect_shape(query,1).is_empty():
 			continue
 		roaming_wolf = creature("wolf","lobo-errante",position,self)
-		wolf_spawn_timer = randf_range(95.0,175.0)
+		roaming_wolf.set_meta("wolf_home",position)
+		roaming_wolf.set_meta("wander_direction",Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU))
+		wolf_spawn_timer = randf_range(50.0,80.0)
 		return
-	wolf_spawn_timer = 12.0
+	wolf_spawn_timer = 8.0
 
 func update_mobs(dt: float) -> void:
 	for i in range(mobs.size()-1,-1,-1):
@@ -2506,6 +2513,16 @@ func update_mobs(dt: float) -> void:
 		if kind=="rabbit":
 			update_rabbit(mob,direction,distance,dt)
 			continue
+		var wander := Vector3.ZERO
+		if kind=="wolf" and distance>=10.0:
+			var home: Vector3 = mob.get_meta("wolf_home",mob.position)
+			if elapsed>=float(mob.get_meta("wolf_next_turn",0.0)) or mob.is_on_wall() or mob.position.distance_to(home)>13.0:
+				wander = (home-mob.position).normalized() if mob.position.distance_to(home)>13.0 else Vector3.FORWARD.rotated(Vector3.UP,randf()*TAU)
+				wander.y = 0.0
+				mob.set_meta("wander_direction",wander)
+				mob.set_meta("wolf_next_turn",elapsed+randf_range(2.0,5.0))
+			wander = mob.get_meta("wander_direction",Vector3.FORWARD)
+			speed = 1.15
 		if distance<10:
 			speed = 2.25
 			if distance<1.35 and elapsed>next_hurt:
@@ -2515,7 +2532,7 @@ func update_mobs(dt: float) -> void:
 					respawn()
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
-		var stride := direction.normalized()*speed
+		var stride := (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
 		mob.velocity.x = stride.x
 		mob.velocity.z = stride.z
 		if stride.length_squared()>.01:
