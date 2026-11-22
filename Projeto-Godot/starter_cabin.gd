@@ -51,14 +51,18 @@ static func build(game, body: StaticBody3D) -> void:
 	# Parede traseira; janela central.
 	for x in [-1.78,1.78]:
 		piece(game,body,Vector3(x,1.5,-2.65),Vector3(1.86,3,.16),"plank",plaster)
-	for y,h in [[.56,1.12],[2.52,.96]]:
+	for dimensions in [[.56,1.12],[2.52,.96]]:
+		var y: float = dimensions[0]
+		var h: float = dimensions[1]
 		piece(game,body,Vector3(0,float(y),-2.65),Vector3(1.70,float(h),.16),"plank",clay)
 	# Laterais com janelas e molduras de madeira.
 	for side in [-1,1]:
 		var x := float(side)*2.65
 		for z in [-1.78,1.78]:
 			piece(game,body,Vector3(x,1.5,z),Vector3(.16,3,1.86),"plank",clay)
-		for y,h in [[.56,1.12],[2.52,.96]]:
+		for dimensions in [[.56,1.12],[2.52,.96]]:
+			var y: float = dimensions[0]
+			var h: float = dimensions[1]
 			piece(game,body,Vector3(x,float(y),0),Vector3(.16,float(h),1.70),"plank",plaster)
 		# Travessas tortas nas paredes, fora do caminho do jogador.
 		for z in [-1.85,1.85]:
