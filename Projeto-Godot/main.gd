@@ -470,20 +470,72 @@ func make_player() -> void:
 	stone_axe_head.hide()
 	stone_axe_sprite.hide()
 
+# Malha de machado: silhueta curva com fio fino na extremidade, nao um bloco.
+# Compartilhada por madeira e pedra para garantir formato IDENTICO.
+func axe_blade_mesh() -> ArrayMesh:
+	var outline := PackedVector2Array([
+		Vector2(-.055,.205), Vector2(.035,.175), Vector2(.150,.125),
+		Vector2(.275,.105), Vector2(.385,.095), Vector2(.455,.110),
+		Vector2(.422,.225), Vector2(.408,.340), Vector2(.448,.455),
+		Vector2(.365,.465), Vector2(.240,.430), Vector2(.100,.395),
+		Vector2(-.045,.380)
+	])
+	var mesh := SurfaceTool.new()
+	mesh.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Extrusao espessa junto ao cabo e mais fina no fio (lado direito).
+	var center := Vector2(.15,.28)
+	for i in range(outline.size()):
+		var j := (i+1)%outline.size()
+		var a := outline[i]
+		var b := outline[j]
+		var za := lerpf(.065,.012,clampf((a.x-.10)/.35,0.,1.))
+		var zb := lerpf(.065,.012,clampf((b.x-.10)/.35,0.,1.))
+		for side in [-1.,1.]:
+			var p0 := Vector3(center.x,center.y,side*.078)
+			var p1 := Vector3(a.x,a.y,side*za)
+			var p2 := Vector3(b.x,b.y,side*zb)
+			if side>0.:
+				mesh.set_uv(Vector2(.5,.5))
+				mesh.add_vertex(p0)
+				mesh.set_uv(Vector2(a.x,a.y))
+				mesh.add_vertex(p2)
+				mesh.set_uv(Vector2(b.x,b.y))
+				mesh.add_vertex(p1)
+			else:
+				mesh.set_uv(Vector2(.5,.5))
+				mesh.add_vertex(p0)
+				mesh.set_uv(Vector2(a.x,a.y))
+				mesh.add_vertex(p1)
+				mesh.set_uv(Vector2(b.x,b.y))
+				mesh.add_vertex(p2)
+		var v0 := Vector3(a.x,a.y,-za)
+		var v1 := Vector3(b.x,b.y,-zb)
+		var v2 := Vector3(a.x,a.y,za)
+		var v3 := Vector3(b.x,b.y,zb)
+		for pt in [v0,v2,v1,v1,v2,v3]:
+			mesh.set_uv(Vector2(pt.x,pt.y))
+			mesh.add_vertex(pt)
+	mesh.generate_normals()
+	return mesh.commit()
+
+func make_axe_head(parent: Node3D, wooden: bool) -> void:
+	var blade_mat: Material = material("wood_axe_blade_v2",Color("#ae743c")) if wooden else materials["rock"]
+	mesh_part(parent,axe_blade_mesh(),Vector3.ZERO,Vector3.ONE,blade_mat)
+	# Lascas/fibras na madeira e marcas de pedra sem modificar a silhueta.
+	if wooden:
+		for i in range(3):
+			var grain := box(parent,Vector3(.13+i*.08,.245+i*.018,.066),Vector3(.075,.010,.005),"wood_axe_grain",Color("#704622"))
+			grain.rotation.z = -.24
+	# Amarracao frontal e traseira no encaixe do cabo.
+	for i in range(4):
+		var binding := cylinder(parent,Vector3(.012,.235+i*.031,0),.061,.014,"axe_binding",Color("#d4b282"))
+		binding.rotation.z = .13
+
 func make_wood_axe_head(parent: Node3D) -> void:
-	# Mesma silhueta do machado de pedra, com lamina entalhada em madeira.
-	var blade := mesh_part(parent,rock_mesh,Vector3(.10,.30,0),Vector3(.31,.25,.108),material("wood_axe_blade",Color("#ad7844")))
-	blade.rotation.z = -.22
-	for i in range(3):
-		var binding := cylinder(parent,Vector3(.009,.255+i*.029,0),.057,.014,"rope",Color("#cfb17e"))
-		binding.rotation.z = .19
+	make_axe_head(parent,true)
 
 func make_stone_axe_head(parent: Node3D) -> void:
-	var blade := mesh_part(parent,rock_mesh,Vector3(.10,.30,0),Vector3(.31,.25,.108),materials["rock"])
-	blade.rotation.z = -.22
-	for i in range(3):
-		var binding := cylinder(parent,Vector3(.009,.255+i*.029,0),.057,.014,"rope",Color("#cfb17e"))
-		binding.rotation.z = .19
+	make_axe_head(parent,false)
 
 func ground(x: float,z: float) -> float:
 	return TERRAIN.height_at(x,z)
@@ -3037,10 +3089,11 @@ func _physics_process(dt: float) -> void:
 		spear_tip.material_override = materials["rock"] if held==0 else material("wood",Color("#855b36"))
 	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
 	wood_axe_head.visible = held==WOOD_AXE
-	stone_axe_head.visible = false
+	stone_axe_head.visible = held==STONE_AXE
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
-	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
-	axe.get_node("CaboMachadoMadeira").visible = held in [WOOD_AXE,SHOVEL_ITEM]
+	# A antiga Sprite3D nao acompanha corretamente a rotacao 3D do golpe.
+	stone_axe_sprite.visible = false
+	axe.get_node("CaboMachadoMadeira").visible = held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
 	# Corte frontal: preparacao elevada, descida rapida com o fio, retorno neutro.
 	var chop_t := 1.0-clampf((next_attack-elapsed)/.46,0.0,1.0)
 	var chop_angle := -.44
