@@ -45,6 +45,9 @@ jobs:
           & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_build_levels.gd 2>&1 | Tee-Object -FilePath temp/construcao.log
           if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/construcao.log -SimpleMatch 'BUILD LEVELS OK')) { throw 'Falha teste de paredes/piso-teto 3 andares' }
           if (Select-String -Path temp/construcao.log -Pattern 'SCRIPT ERROR|BUILD LEVELS FAIL' -CaseSensitive:$false) { throw 'Erros no sistema de construcao' }
+          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_door_floor_entry.gd 2>&1 | Tee-Object -FilePath temp/entrada-piso.log
+          if ($LASTEXITCODE -ne 0 -or !(Select-String -Path temp/entrada-piso.log -SimpleMatch 'DOOR FLOOR TEST OK')) { throw 'Falha entrada por porta, snap ou teto' }
+          if (Select-String -Path temp/entrada-piso.log -Pattern 'SCRIPT ERROR|DOOR FLOOR FAIL' -CaseSensitive:$false) { throw 'Erro na entrada do piso' }
       - name: Preparar templates exportacao
         shell: pwsh
         run: |
