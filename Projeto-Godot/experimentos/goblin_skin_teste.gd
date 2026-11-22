@@ -11,6 +11,9 @@ var angle := 0.0
 var sword_on := false
 var shield_on := false
 var caption: Label
+var inspection_camera: Camera3D
+var view_mode := "corpo"
+var zoom_factor := 1.0
 
 func _ready() -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
@@ -51,6 +54,7 @@ func _build_environment() -> void:
 	camera.current=true
 	camera.projection=Camera3D.PROJECTION_ORTHOGONAL
 	camera.size=3.5
+	inspection_camera=camera
 
 
 func _spawn(script: GDScript, place: Vector3, title: String) -> void:
@@ -100,6 +104,10 @@ func _build_controls() -> void:
 	_button(column,"Caminhar",_set_motion.bind("walk"))
 	_button(column,"Correr",_set_motion.bind("run"))
 	_button(column,"Girar ambos 90 graus",_turn)
+	_button(column,"Ver corpo inteiro",_inspect_body)
+	_button(column,"Aproximar rosto",_inspect_face)
+	_button(column,"Zoom +",_zoom_in)
+	_button(column,"Zoom -",_zoom_out)
 	_button(column,"Equipar / retirar espada",_sword)
 	_button(column,"Equipar / retirar escudo",_shield)
 	_button(column,"Voltar ao jogo (ESC)",_back)
@@ -126,6 +134,37 @@ func _turn() -> void:
 	for rig in characters:
 		if is_instance_valid(rig) and is_instance_valid(rig.get_parent()):
 			(rig.get_parent() as Node3D).rotation.y=angle
+
+
+
+func _inspect_body() -> void:
+	view_mode="corpo"
+	_update_camera()
+
+
+func _inspect_face() -> void:
+	view_mode="rosto"
+	_update_camera()
+
+
+func _zoom_in() -> void:
+	zoom_factor=clampf(zoom_factor*.8,.55,2.0)
+	_update_camera()
+
+
+func _zoom_out() -> void:
+	zoom_factor=clampf(zoom_factor*1.25,.55,2.0)
+	_update_camera()
+
+
+func _update_camera() -> void:
+	if not is_instance_valid(inspection_camera):
+		return
+	var camera_size := 1.55 if view_mode=="rosto" else 3.5
+	inspection_camera.size=camera_size*zoom_factor
+	var target_height := 1.79 if view_mode=="rosto" else .85
+	inspection_camera.position=Vector3(0,target_height+.35,6.2)
+	inspection_camera.look_at(Vector3(0,target_height,0),Vector3.UP)
 
 
 func _sword() -> void:
