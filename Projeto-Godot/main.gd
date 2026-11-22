@@ -444,7 +444,9 @@ func make_player() -> void:
 	axe.rotation_degrees = Vector3(-25,0,-20)
 	var axe_handle := cylinder(axe,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
 	axe_handle.name = "CaboMachadoMadeira"
-	wood_axe_head = box(axe,Vector3(.09,.30,0),Vector3(.25,.18,.077),"plank",Color("#ac7749"))
+	wood_axe_head = Node3D.new()
+	axe.add_child(wood_axe_head)
+	make_wood_axe_head(wood_axe_head)
 	stone_axe_head = Node3D.new()
 	axe.add_child(stone_axe_head)
 	make_stone_axe_head(stone_axe_head)
@@ -465,6 +467,14 @@ func make_player() -> void:
 	axe.add_child(stone_axe_sprite)
 	stone_axe_head.hide()
 	stone_axe_sprite.hide()
+
+func make_wood_axe_head(parent: Node3D) -> void:
+	# Mesma silhueta do machado de pedra, com lamina entalhada em madeira.
+	var blade := mesh_part(parent,rock_mesh,Vector3(.10,.30,0),Vector3(.31,.25,.108),material("wood_axe_blade",Color("#ad7844")))
+	blade.rotation.z = -.22
+	for i in range(3):
+		var binding := cylinder(parent,Vector3(.009,.255+i*.029,0),.057,.014,"rope",Color("#cfb17e"))
+		binding.rotation.z = .19
 
 func make_stone_axe_head(parent: Node3D) -> void:
 	var blade := mesh_part(parent,rock_mesh,Vector3(.10,.30,0),Vector3(.31,.25,.108),materials["rock"])
@@ -913,13 +923,16 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			ball(o,Vector3(-.11,.36,0),Vector3(.26,.13,.19),"sprout_leaf",Color("#79b54d"))
 			ball(o,Vector3(.12,.42,0),Vector3(.23,.14,.19),"sprout_leaf2",Color("#9ec85b"))
 			collider(o,Vector3(.40,.45,.40),Vector3.UP*.22)
-		"stone_axe":
+		"wood_axe","stone_axe":
 			var tool := Node3D.new()
 			o.add_child(tool)
 			tool.position = Vector3(0,.10,0)
 			tool.rotation.x = PI/2
 			cylinder(tool,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
-			make_stone_axe_head(tool)
+			if kind=="wood_axe":
+				make_wood_axe_head(tool)
+			else:
+				make_stone_axe_head(tool)
 			collider(o,Vector3(.4,.22,.76),Vector3.UP*.11)
 		_:
 			var item_colors := {"meat":Color("#a95842"),"hide":Color("#ad7c59"),"foot":Color("#eadcc1"),"spear":Color("#8e744d")}
@@ -3016,7 +3029,18 @@ func _physics_process(dt: float) -> void:
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
 	axe.get_node("CaboMachadoMadeira").visible = held in [WOOD_AXE,SHOVEL_ITEM]
-	axe.rotation.x = -.44-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.67
+	# Corte frontal: preparacao elevada, descida rapida com o fio, retorno neutro.
+	var chop_t := 1.0-clampf((next_attack-elapsed)/.46,0.0,1.0)
+	var chop_angle := -.44
+	if next_attack>elapsed:
+		if chop_t<.25:
+			chop_angle = lerpf(-.44,-1.35,chop_t/.25)
+		elif chop_t<.67:
+			chop_angle = lerpf(-1.35,.60,(chop_t-.25)/.42)
+		else:
+			chop_angle = lerpf(.60,-.44,(chop_t-.67)/.33)
+	axe.rotation = Vector3(chop_angle,0.0,-.08)
+	axe.position = Vector3(.40,-.43,-.76) + Vector3(0.0,.07,-.09)*sin(chop_t*PI) if next_attack>elapsed else Vector3(.40,-.43,-.76)
 	spear.position.z = -.77-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.31
 	if elapsed>feedback_until and moving:
 		feedback = ""
