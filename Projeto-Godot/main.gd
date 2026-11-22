@@ -454,7 +454,9 @@ func create_chunk(key: Vector2i) -> void:
 		for x in range(CHUNK):
 			var left := float(key.x*CHUNK+x)
 			var near := float(key.y*CHUNK+z)
-			for corner in [Vector2(0,0),Vector2(0,1),Vector2(1,0),Vector2(1,0),Vector2(0,1),Vector2(1,1)]:
+			# Godot usa frente horaria: inversao dos indices fazia as normais
+			# apontarem para -Y e ocultava o chao visto de cima.
+			for corner in [Vector2(0,0),Vector2(1,0),Vector2(0,1),Vector2(1,0),Vector2(1,1),Vector2(0,1)]:
 				var px: float = left+corner.x
 				var pz: float = near+corner.y
 				mesh.set_uv(Vector2(px,pz)/2.)
@@ -528,7 +530,8 @@ func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
 		var right_a := Vector3(ca + TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,za)
 		var left_b := Vector3(cb - TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,zb)
 		var right_b := Vector3(cb + TERRAIN.RIVER_HALF_WIDTH,TERRAIN.WATER_LEVEL,zb)
-		for point in [left_a,left_b,right_a,right_a,left_b,right_b]:
+		# Agua com normais voltadas para +Y, mesma orientacao do terreno.
+		for point in [left_a,right_a,left_b,right_a,right_b,left_b]:
 			surface.set_uv(Vector2(point.x,point.z) * .06)
 			surface.add_vertex(point)
 	surface.generate_normals()
