@@ -122,6 +122,12 @@ var feedback_until := 0.0
 var remotes: Dictionary = {}
 
 func _ready() -> void:
+	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
+	# inexistentes. Sempre complete estoques antes de carregar inventario.
+	while stock.size()<ITEMS.size():
+		stock.append(0)
+	while reserve.size()<ITEMS.size():
+		reserve.append(0)
 	inventory_slots.resize(ITEMS.size())
 	inventory_slots.fill(-1)
 	backpack_slots.resize(BACKPACK_SIZE)
@@ -1513,7 +1519,7 @@ func sync_inventory_slots() -> void:
 	# Tipos sem unidades são liberados; a ordem escolhida pelo jogador permanece.
 	for index in range(inventory_slots.size()):
 		var item: int = inventory_slots[index]
-		if item>=0 and stock[item]<=0 and reserve[item]<=0:
+		if item>=ITEMS.size() or (item>=0 and stock[item]<=0 and reserve[item]<=0):
 			inventory_slots[index] = -1
 	for item in range(ITEMS.size()):
 		if (stock[item]>0 or reserve[item]>0) and not inventory_slots.has(item):
