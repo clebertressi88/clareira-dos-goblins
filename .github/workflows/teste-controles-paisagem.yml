@@ -64,6 +64,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha de montagem das estruturas' }
           if (!(Select-String -Path construcao.log -SimpleMatch 'BUILD LEVELS OK')) { throw 'Teste de construcoes nao confirmou sucesso' }
           if (Select-String -Path construcao.log -Pattern 'SCRIPT ERROR|BUILD LEVELS FAIL' -CaseSensitive:$false) { throw 'Erro no teste de construcao' }
+      - name: Testar entrada na casa sem pulo e teto encaixado
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_door_floor_entry.gd 2>&1 | Tee-Object -FilePath entrada-piso.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha entrada na porta com piso' }
+          if (!(Select-String -Path entrada-piso.log -SimpleMatch 'DOOR FLOOR TEST OK')) { throw 'Entrada com piso e teto nao passou' }
+          if (Select-String -Path entrada-piso.log -Pattern 'SCRIPT ERROR|DOOR FLOOR FAIL' -CaseSensitive:$false) { throw 'Erro no teste de entrada' }
       - name: Enviar logs de teste
         if: always()
         uses: actions/upload-artifact@v4
@@ -76,4 +83,5 @@ jobs:
             visual-terreno.log
             floresta.log
             construcao.log
+            entrada-piso.log
           if-no-files-found: ignore
