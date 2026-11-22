@@ -3,6 +3,7 @@ extends RefCounted
 ## couro em camadas, botas de biqueira larga e dedos articulados.
 ## Malhas independentes ligadas a BoneAttachment3D, sem "borracha".
 const FACE = preload("res://experimentos/goblin_v4_face.gd")
+const MATERIALS = preload("res://experimentos/goblin_v4_materials.gd")
 
 static func _part(model: Node3D,bone: String,label: String,
 		mesh: Mesh,mat: Material) -> MeshInstance3D:
@@ -58,28 +59,28 @@ static func _member(model: Node3D,bone: String,label: String,path: Array,
 		widths: Array,mat: Material) -> void:
 	_part(model,bone,label,_tube(path,widths),mat)
 
-static func _palette(model: Node3D) -> Dictionary:
-	# Aproxima a paleta da referencia, sem marcas-d'agua.
-	var mat: Dictionary={}
-	mat["skin"]=model.call("_material","#879d69",.83,.0)
-	mat["skin_light"]=model.call("_material","#a0ae7a",.78,.0)
-	mat["shadow"]=model.call("_material","#647c53",.89,.0)
-	mat["ear"]=model.call("_material","#b98978",.82,.0,true)
-	mat["ear_skin"]=model.call("_material","#879d69",.83,.0,true)
-	mat["nose"]=model.call("_material","#c89d7c",.68,.0)
-	mat["white"]=model.call("_material","#f1e8cf",.44,.0)
-	mat["iris"]=model.call("_material","#b7a453",.40,.0)
-	mat["dark"]=model.call("_material","#302923",.50,.0)
-	mat["leather"]=model.call("_material","#755040",.82,.0,true)
-	mat["leather_light"]=model.call("_material","#986b4b",.77,.0,true)
-	mat["leather_dark"]=model.call("_material","#4b3229",.93,.0,true)
-	mat["skirt"]=model.call("_material","#79503b",.91,.0,true)
-	mat["skirt_light"]=model.call("_material","#936443",.86,.0,true)
-	mat["boot"]=model.call("_material","#9f6840",.78,.0)
-	mat["boot_dark"]=model.call("_material","#69462f",.84,.0)
-	mat["gold"]=model.call("_material","#cba054",.39,.47)
-	mat["steel"]=model.call("_material","#afb7b7",.33,.70)
-	mat["nail"]=model.call("_material","#c1c394",.65,.0)
+static func _palette(_model: Node3D) -> Dictionary:
+	# Variacao tonal sem UV: pele porosa, orelhas rosadas, couro gasto e metal PBR.
+	var mat: Dictionary = {}
+	mat["skin"] = MATERIALS.make("#879d69", "skin", .83)
+	mat["skin_light"] = MATERIALS.make("#a0ae7a", "skin", .78)
+	mat["shadow"] = MATERIALS.make("#647c53", "skin_detail", .89)
+	mat["ear"] = MATERIALS.make("#b98978", "skin_detail", .82)
+	mat["ear_skin"] = MATERIALS.make("#879d69", "skin", .83)
+	mat["nose"] = MATERIALS.make("#c89d7c", "skin", .68)
+	mat["white"] = MATERIALS.make("#f1e8cf", "eye", .30)
+	mat["iris"] = MATERIALS.make("#b7a453", "eye", .36)
+	mat["dark"] = MATERIALS.make("#302923", "eye", .24)
+	mat["leather"] = MATERIALS.make("#755040", "leather", .82)
+	mat["leather_light"] = MATERIALS.make("#986b4b", "leather", .77)
+	mat["leather_dark"] = MATERIALS.make("#4b3229", "leather", .93)
+	mat["skirt"] = MATERIALS.make("#79503b", "leather", .91)
+	mat["skirt_light"] = MATERIALS.make("#936443", "leather", .86)
+	mat["boot"] = MATERIALS.make("#9f6840", "boot", .78)
+	mat["boot_dark"] = MATERIALS.make("#69462f", "boot", .84)
+	mat["gold"] = MATERIALS.make("#cba054", "metal", .39, .47)
+	mat["steel"] = MATERIALS.make("#afb7b7", "metal", .33, .70)
+	mat["nail"] = MATERIALS.make("#c1c394", "skin_detail", .65)
 	return mat
 
 static func _strap(model: Node3D,side: float,mat: Dictionary) -> void:
