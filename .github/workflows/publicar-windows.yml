@@ -17,102 +17,110 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Qualquer runner Windows proprio que tenha acesso a este repositorio.
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Baixar codigo do jogo
         uses: actions/checkout@v4
 
-      - name: Instalar Godot 4.7.2 e templates oficiais
-        shell: bash
+      - name: Preparar Godot 4.7.2 Windows e export templates
         run: |
-          set -euo pipefail
-          BASE="https://github.com/godotengine/godot/releases/download/4.7.2-stable"
-          curl -fL --retry 3 "$BASE/Godot_v4.7.2-stable_linux.x86_64.zip" -o /tmp/godot.zip
-          curl -fL --retry 3 "$BASE/Godot_v4.7.2-stable_export_templates.tpz" -o /tmp/templates.tpz
-          mkdir -p /tmp/godot-bin "$HOME/.local/share/godot/export_templates/4.7.2.stable"
-          unzip -oq /tmp/godot.zip -d /tmp/godot-bin
-          GODOT="$(find /tmp/godot-bin -maxdepth 1 -type f -name 'Godot*' | head -n 1)"
-          test -n "$GODOT"
-          chmod +x "$GODOT"
-          echo "GODOT=$GODOT" >> "$GITHUB_ENV"
-          unzip -oq -j /tmp/templates.tpz 'templates/windows_release_x86_64.exe' 'templates/windows_debug_x86_64.exe' -d "$HOME/.local/share/godot/export_templates/4.7.2.stable"
-          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/windows_release_x86_64.exe"
+          $ErrorActionPreference = 'Stop'
+          $version = '4.7.2'
+          $base = "https://github.com/godotengine/godot/releases/download/$version-stable"
+          $toolsDir = Join-Path $env:RUNNER_TEMP 'clareira-godot'
+          $godotExe = Join-Path $toolsDir "Godot_v$version-stable_win64_console.exe"
+          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+          if (-not (Test-Path $godotExe)) {
+            $archive = Join-Path $toolsDir 'godot.zip'
+            Invoke-WebRequest -Uri "$base/Godot_v$version-stable_win64.exe.zip" -OutFile $archive
+            Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
+          }
+          if (-not (Test-Path $godotExe)) {
+            $godotExe = (Get-ChildItem $toolsDir -Filter '*console*.exe' -File -Recurse | Select-Object -First 1 -ExpandProperty FullName)
+          }
+          if (-not $godotExe -or -not (Test-Path $godotExe)) { throw 'Executavel do Godot nao encontrado.' }
+          $templateDir = Join-Path $env:APPDATA "Godot/export_templates/$version.stable"
+          $templateExe = Join-Path $templateDir 'windows_release_x86_64.exe'
+          if (-not (Test-Path $templateExe)) {
+            $templateZip = Join-Path $toolsDir 'templates.zip'
+            Invoke-WebRequest -Uri "$base/Godot_v$version-stable_export_templates.tpz" -OutFile $templateZip
+            $extractDir = Join-Path $toolsDir 'template-files'
+            Expand-Archive -Path $templateZip -DestinationPath $extractDir -Force
+            New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+            $files = Get-ChildItem $extractDir -Filter 'windows_*_x86_64.exe' -File -Recurse
+            foreach ($file in $files) { Copy-Item $file.FullName (Join-Path $templateDir $file.Name) -Force }
+          }
+          if (-not (Test-Path $templateExe)) { throw 'Template Windows release nao encontrado.' }
+          "GODOT_EXE=$godotExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $godotExe --version
+          if ($LASTEXITCODE -ne 0) { throw 'Godot nao iniciou.' }
 
       - name: Importar recursos e validar scripts
-        shell: bash
         run: |
-          set -euo pipefail
-          "$GODOT" --headless --path Projeto-Godot --import 2>&1 | tee /tmp/import.log
-          if grep -Ei '^([[:space:]]*SCRIPT ERROR:|[[:space:]]*ERROR:.*Parse Error)' /tmp/import.log; then
-            echo 'Erro de script na importacao' >&2
-            exit 1
-          fi
+          $ErrorActionPreference = 'Stop'
+          & $env:GODOT_EXE --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-import.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na importacao do Godot.' }
+          $log = Get-Content (Join-Path $env:RUNNER_TEMP 'clareira-import.log') -Raw
+          if ($log -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Erro de script na importacao.' }
 
-      - name: Testar modelo 3D do machado de madeira
-        shell: bash
+      - name: Testar modelos do machado e goblins
         run: |
-          set -euo pipefail
-          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_wood_axe_model.gd 2>&1 | tee /tmp/wood-axe-model-test.log
-          grep -q "WOOD AXE MODEL OK" /tmp/wood-axe-model-test.log
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'Projeto-Godot/modelos/goblin_npc.glb')) { throw 'GLB dos goblins ausente.' }
+          $tests = @(
+            @{path='res://tests/test_wood_axe_model.gd'; message='WOOD AXE MODEL OK'},
+            @{path='res://tests/test_goblin_npc_model.gd'; message='GOBLIN MODEL OK'},
+            @{path='res://tests/test_goblin_skin_v2.gd'; message='SKIN V2 OK'},
+            @{path='res://tests/test_goblin_v3.gd'; message='GOBLIN V3 OK'},
+            @{path='res://tests/test_goblin_v4.gd'; message='GOBLIN V4 OK'}
+          )
+          foreach ($test in $tests) {
+            Write-Host "Executando $($test.path)"
+            $output = & $env:GODOT_EXE --headless --path Projeto-Godot --script $test.path 2>&1 | Out-String
+            Write-Host $output
+            if ($LASTEXITCODE -ne 0 -or -not $output.Contains($test.message)) {
+              throw "Teste falhou: $($test.path)"
+            }
+          }
 
-      - name: Testar visual 3D dos goblins NPC
-        shell: bash
+      - name: Exportar EXE Windows e gerar ZIP
         run: |
-          set -euo pipefail
-          test -s Projeto-Godot/modelos/goblin_npc.glb
-          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_npc_model.gd 2>&1 | tee /tmp/goblin-model-test.log
-          grep -q "GOBLIN MODEL OK" /tmp/goblin-model-test.log
-
-      - name: Testar skin V2 no laboratorio isolado
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_skin_v2.gd 2>&1 | tee /tmp/goblin-v2.log
-          grep -q "SKIN V2 OK" /tmp/goblin-v2.log
-
-      - name: Testar estrutura 3D articulada do goblin V3
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_v3.gd 2>&1 | tee /tmp/goblin-v3-test.log
-          grep -q "GOBLIN V3 OK" /tmp/goblin-v3-test.log
-
-      - name: Testar anatomia esculpida do goblin V4
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_v4.gd 2>&1 | tee /tmp/goblin-v4-test.log
-          grep -q "GOBLIN V4 OK" /tmp/goblin-v4-test.log
-
-      - name: Exportar EXE Windows
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          "$GODOT" --headless --path Projeto-Godot --export-release 'Windows Desktop' "$GITHUB_WORKSPACE/dist/Clareira-dos-Goblins.exe" 2>&1 | tee /tmp/export.log
-          test -s dist/Clareira-dos-Goblins.exe
-          # Validar a presenca do GLB na origem e o EXE gerado.
-          # O Godot nao garante que recursos incluidos aparecam no texto do log.
-          test -s Projeto-Godot/modelos/goblin_npc.glb
-          test -s dist/Clareira-dos-Goblins.exe
-          if grep -Ei '^([[:space:]]*SCRIPT ERROR:|[[:space:]]*ERROR:.*Parse Error)' /tmp/export.log; then
-            echo 'Erro durante exportacao' >&2
-            exit 1
-          fi
-          printf '%s\n' "$GITHUB_SHA" > dist/versao-github.txt
-          (cd dist && sha256sum Clareira-dos-Goblins.exe > SHA256SUMS.txt)
-          (cd dist && zip -q -9 ../Clareira-dos-Goblins-Windows.zip Clareira-dos-Goblins.exe versao-github.txt SHA256SUMS.txt)
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          $exe = Join-Path $dist 'Clareira-dos-Goblins.exe'
+          $output = & $env:GODOT_EXE --headless --path Projeto-Godot --export-release 'Windows Desktop' $exe 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { throw 'Exportacao Windows falhou.' }
+          if ((Get-Item $exe).Length -le 0) { throw 'EXE vazio.' }
+          if ($output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Erros de script na exportacao.' }
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  Clareira-dos-Goblins.exe" | Set-Content (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii
+          $env:GITHUB_SHA | Set-Content (Join-Path $dist 'versao-github.txt') -Encoding ascii
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'Clareira-dos-Goblins-Windows.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path $exe,(Join-Path $dist 'versao-github.txt'),(Join-Path $dist 'SHA256SUMS.txt') -DestinationPath $zip -CompressionLevel Optimal
+          if (-not (Test-Path $zip)) { throw 'ZIP da release nao gerado.' }
 
       - name: Publicar versao pronta na Release do GitHub
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
-          set -euo pipefail
-          if ! gh release view jogo-windows >/dev/null 2>&1; then
-            gh release create jogo-windows --title 'Clareira dos Goblins - Windows' --notes 'Versao compilada automaticamente da branch main. Baixe e extraia o ZIP para jogar.' --latest
-          fi
-          gh release upload jogo-windows Clareira-dos-Goblins-Windows.zip --clobber
-          gh release edit jogo-windows --notes "Build Windows gerado do commit \`$GITHUB_SHA\`. Baixe o ZIP e extraia antes de jogar."
+          $ErrorActionPreference = 'Stop'
+          gh --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI (gh) nao esta instalado no runner Windows.' }
+          gh release view jogo-windows *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create jogo-windows --title 'Clareira dos Goblins - Windows' --notes 'Versao compilada automaticamente da branch main. Baixe o ZIP e extraia antes de jogar.' --latest
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar Release.' }
+          }
+          gh release upload jogo-windows 'Clareira-dos-Goblins-Windows.zip' --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falha no upload da Release.' }
+          gh release edit jogo-windows --notes "Build Windows gerado do commit $env:GITHUB_SHA. Baixe o ZIP e extraia antes de jogar."
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar notas da Release.' }
