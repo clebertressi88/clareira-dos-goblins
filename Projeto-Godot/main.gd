@@ -2762,26 +2762,7 @@ func primary() -> void:
 		notice("Toco removido! +1 tronco" + (" e +1 muda" if got_sapling else "") + ".")
 		return
 	if kind=="tree":
-		# Machado de madeira: cinco golpes. Machado de pedra: quatro.
-		# O machado de pedra nao derruba mais a arvore com um unico golpe.
-		if held not in [WOOD_AXE,STONE_AXE]:
-			notice("Use um machado para cortar esta árvore.")
-			return
-		var needed := 4 if held==STONE_AXE else 5
-		var cuts := int(o.get_meta("cuts",0))+1
-		o.set_meta("cuts",cuts)
-		impact(hit["position"],hit["normal"],true)
-		var pos := o.global_position
-		timber(o,cuts>=needed)
-		if cuts>=needed:
-			for i in range(3):
-				store_object("log",pos+Vector3((i-1)*.65,0,.39))
-			if randf()<.35:
-				store_object("sapling",pos+Vector3(.82,0,.55))
-			notice("Árvore derrubada. O mesmo tronco com raízes ficou no chão.")
-			save_game()
-		else:
-			notice("Cortando a árvore: %d/%d golpes" % [cuts,needed])
+		chop_tree(o,held,hit["position"],hit["normal"])
 		return
 	if bar_items[selected]==2 and stock[2]>0 and (kind=="" or kind=="block" or kind=="stone"):
 		var point: Vector3 = hit["position"]
@@ -2806,6 +2787,31 @@ func primary() -> void:
 			stock[2] -= 1
 		else:
 			notice("Escolha um espaço livre para a pedra.")
+
+func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
+	# Cinco golpes com madeira; quatro com pedra. Nao cortar com as maos.
+	if tool not in [WOOD_AXE,STONE_AXE]:
+		notice("Use um machado para cortar esta árvore.")
+		return false
+	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
+		return false
+	var needed := 4 if tool==STONE_AXE else 5
+	var cuts := int(tree.get_meta("cuts",0))+1
+	tree.set_meta("cuts",cuts)
+	impact(pos,normal,true)
+	var tree_pos := tree.global_position
+	timber(tree,cuts>=needed)
+	if cuts>=needed:
+		for i in range(3):
+			store_object("log",tree_pos+Vector3((i-1)*.65,0,.39))
+		if randf()<.35:
+			store_object("sapling",tree_pos+Vector3(.82,0,.55))
+		notice("Árvore derrubada. O mesmo tronco com raízes ficou no chão.")
+		save_game()
+		return true
+	notice("Cortando a árvore: %d/%d golpes" % [cuts,needed])
+	return false
+
 
 func secondary() -> void:
 	var hit := ray()
