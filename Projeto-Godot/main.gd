@@ -2941,10 +2941,10 @@ func update_mobs(dt: float) -> void:
 			mobs.remove_at(i)
 			continue
 		var target_id := nearest_player_id(mob.global_position)
-		var target_pos := player.global_position if target_id==1 else (remotes[target_id].global_position if remotes.has(target_id) else player.global_position)
-		var direction := target_pos-mob.global_position
+		var target_pos: Vector3 = player.global_position if target_id==1 else (remotes[target_id].global_position if remotes.has(target_id) else player.global_position)
+		var direction: Vector3 = target_pos-mob.global_position
 		direction.y = 0
-		var distance := direction.length()
+		var distance: float = direction.length()
 		if distance>28:
 			continue
 		var kind: String = mob.get_meta("kind")
@@ -2977,7 +2977,7 @@ func update_mobs(dt: float) -> void:
 					net_receive_damage.rpc_id(target_id,15 if kind=="wolf" else 23)
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
-		var stride := (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
+		var stride: Vector3 = (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
 		mob.velocity.x = stride.x
 		mob.velocity.z = stride.z
 		if stride.length_squared()>.01:
