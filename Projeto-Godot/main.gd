@@ -292,6 +292,8 @@ func make_player() -> void:
 	add_child(player)
 	var spawn: Array = get_meta("spawn", [0,1,0])
 	player.position = Vector3(float(spawn[0]),float(spawn[1]),float(spawn[2]))
+	# Protege saves antigos: novo relevo nao pode fazer o jogador nascer soterrado.
+	player.position.y = maxf(player.position.y,ground(player.position.x,player.position.z)+.35)
 	var shape := CapsuleShape3D.new()
 	shape.radius = .27
 	shape.height = 1.64
@@ -389,7 +391,7 @@ func create_chunk(key: Vector2i) -> void:
 		for x in range(8):
 			var left := float(key.x*CHUNK+x*2)
 			var near := float(key.y*CHUNK+z*2)
-			for corner in [Vector2(0,0),Vector2(2,0),Vector2(0,2),Vector2(2,0),Vector2(2,2),Vector2(0,2)]:
+			for corner in [Vector2(0,0),Vector2(0,2),Vector2(2,0),Vector2(2,0),Vector2(0,2),Vector2(2,2)]:
 				var px: float = left+corner.x
 				var pz: float = near+corner.y
 				mesh.set_uv(Vector2(px,pz)/2.)
@@ -404,7 +406,7 @@ func create_chunk(key: Vector2i) -> void:
 	for i in range(15):
 		var x := key.x*CHUNK+rng.randf_range(1,15)
 		var z := key.y*CHUNK+rng.randf_range(1,15)
-		if Vector2(x,z).length()<5:
+		if Vector2(x,z).length()<5 or TERRAIN.is_river(x,z):
 			continue
 		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "vine_bush"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
