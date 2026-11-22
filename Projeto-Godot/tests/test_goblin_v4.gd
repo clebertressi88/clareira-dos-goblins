@@ -14,6 +14,9 @@ func _run() -> void:
 	var goblin := MODEL.new() as Node3D
 	root.add_child(goblin)
 	await process_frame
+	if absf(goblin.scale.y * 2.233 - 1.25) > .015:
+		fail("Altura final do V4 diferente de 1,25 m")
+		return
 	if not goblin.has_meta("modelo_goblin_v4"):
 		fail("Escultura V4 nao foi carregada")
 		return
