@@ -64,14 +64,6 @@ jobs:
           (cd dist && sha256sum Clareira-dos-Goblins.exe > SHA256SUMS.txt)
           (cd dist && zip -q -9 ../Clareira-dos-Goblins-Windows.zip Clareira-dos-Goblins.exe versao-github.txt SHA256SUMS.txt)
 
-      - name: Guardar pacote como artefato
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clareira-dos-Goblins-Windows
-          path: Clareira-dos-Goblins-Windows.zip
-          if-no-files-found: error
-          retention-days: 30
-
       - name: Publicar versao pronta na Release do GitHub
         if: github.ref == 'refs/heads/main'
         env:
