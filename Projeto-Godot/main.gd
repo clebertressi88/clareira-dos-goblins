@@ -933,6 +933,42 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 		else:
 			box(parent,Vector3(0,high,.105),Vector3(CELL,.095,.075),
 				"wall_frame",Color("#60402a"))
+	# A base de cada parede acompanha o relevo. Em saves antigos,
+	# pilares sustentam as partes que antes ficavam suspensas.
+	add_wall_foundations(parent)
+
+func build_wood_floor(parent: StaticBody3D) -> void:
+	# Painel fechado de 2,55 x 2,55 m: piso e teto usam a mesma peca.
+	# A face superior suporta andar e construir o proximo pavimento.
+	for row in range(3):
+		var z := (float(row)-1.0)*CELL
+		box(parent,Vector3(0,.01,z),Vector3(WALL_SIZE*.995,.16,CELL*1.01),
+			"floor_planks_%d" % row,Color("#b58a57").darkened(.045*float(row%2)))
+		for column in range(3):
+			var x := (float(column)-1.0)*CELL
+			box(parent,Vector3(x,.098,z+CELL*.25),Vector3(CELL*.72,.014,.018),
+				"floor_seam",Color("#684328"))
+	for x in [-WALL_SIZE*.39,0.0,WALL_SIZE*.39]:
+		box(parent,Vector3(x,-.115,0),Vector3(.14,.21,WALL_SIZE*.99),
+			"floor_joist",Color("#704c31"))
+	collider(parent,Vector3(WALL_SIZE*.995,.18,WALL_SIZE*.995),Vector3(0,.01,0))
+
+
+func add_wall_foundations(parent: StaticBody3D) -> void:
+	# Compatibilidade com paredes ja construidas: nao deslocar o save,
+	# preencher com pilares os vaos deixados pelo terreno irregular.
+	# Paredes nos pavimentos superiores sao apoiadas pelo piso, nao por estacas.
+	for x in [-WALL_SIZE*.45,-WALL_SIZE*.15,WALL_SIZE*.15,WALL_SIZE*.45]:
+		var world := parent.to_global(Vector3(x,0,0))
+		var gap := parent.global_position.y - ground(world.x,world.z)
+		if gap <= .13 or gap > WALL_SIZE*.92:
+			continue
+		var post := box(parent,Vector3(x,-gap*.5,0),Vector3(.17,gap+.11,.18),
+			"wall_foundation",Color("#79563b"))
+		post.rotation.y = 0.0
+		# Volume fisico abaixo da parede para impedir atravessar as estacas.
+		collider(parent,Vector3(.17,gap+.11,.18),Vector3(x,-gap*.5,0))
+
 
 func make_vine(parent: Node3D, offset: Vector3) -> void:
 	for i in range(4):
