@@ -1,0 +1,38 @@
+name: Compilar Atualizador Windows
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ferramentas/Atualizador-Windows/**'
+      - '.github/workflows/compilar-atualizador.yml'
+  pull_request:
+    paths:
+      - 'ferramentas/Atualizador-Windows/**'
+      - '.github/workflows/compilar-atualizador.yml'
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+      - name: Instalar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compilar EXE para Windows
+        shell: pwsh
+        run: |
+          dotnet publish ferramentas/Atualizador-Windows/AtualizadorClareira.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -o dist
+      - name: Verificar arquivo
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/ClareiraAtualizador.exe')) { throw 'EXE nao gerado.' }
+          Get-Item 'dist/ClareiraAtualizador.exe' | Select-Object FullName, Length
+      - name: Publicar download
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clareira-Atualizador-Windows-x64
+          path: dist/ClareiraAtualizador.exe
+          if-no-files-found: error
+          retention-days: 30
