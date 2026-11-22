@@ -3089,10 +3089,11 @@ func _physics_process(dt: float) -> void:
 		spear_tip.material_override = materials["rock"] if held==0 else material("wood",Color("#855b36"))
 	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
 	wood_axe_head.visible = held==WOOD_AXE
-	stone_axe_head.visible = held==STONE_AXE
+	# Machado de pedra aprovado: usar a arte dedicada, e nao a malha
+	# volumosa de rocha que escondia o formato correto na primeira pessoa.
+	stone_axe_head.visible = false
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
-	# A antiga Sprite3D nao acompanha corretamente a rotacao 3D do golpe.
-	stone_axe_sprite.visible = false
+	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
 	axe.get_node("CaboMachadoMadeira").visible = held in [STONE_AXE,SHOVEL_ITEM]
 	# Corte frontal: preparacao elevada, descida rapida com o fio, retorno neutro.
 	var chop_t := 1.0-clampf((next_attack-elapsed)/.46,0.0,1.0)
