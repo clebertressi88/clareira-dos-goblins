@@ -13,7 +13,10 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 	var foliage_materials: Array[StandardMaterial3D] = []
 	for col in green_colors:
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = col
+		# Textura de pequenas folhas inspirada na referencia aprovada.
+		mat.albedo_color = col.lerp(Color.WHITE,0.72)
+		mat.albedo_texture = preload("res://forest_leaf_pattern.gd").make_texture()
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		mat.roughness = 1.0
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		foliage_materials.append(mat)
