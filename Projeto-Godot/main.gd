@@ -180,7 +180,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if moving or inventory or not is_instance_valid(panel) or not panel.visible:
 		return
-	if is_instance_valid(address) and address.has_focus():
+	if is_instance_valid(address) and address.has_focus() and not address.text.is_empty():
+		# Nao interrompe digitacao de IP ja iniciada no campo de rede.
 		return
 	# Permite iniciar com WASD/setas sem depender do foco do botao Jogar.
 	if key in [KEY_W,KEY_A,KEY_S,KEY_D,KEY_UP,KEY_DOWN,KEY_LEFT,KEY_RIGHT,KEY_ENTER,KEY_KP_ENTER]:
@@ -1545,7 +1546,9 @@ func show_menu() -> void:
 	button("Jogar / continuar", begin)
 	address = LineEdit.new()
 	address.placeholder_text = "IP do anfitrião na rede local"
+	address.focus_mode = Control.FOCUS_CLICK
 	menu.add_child(address)
+	address.release_focus()
 	button("Hospedar na rede local", host_game)
 	button("Entrar na rede local", join_game)
 	if not feedback.is_empty():
