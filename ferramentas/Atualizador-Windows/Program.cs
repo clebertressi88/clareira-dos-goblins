@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -49,7 +50,7 @@ internal sealed class App : Form
         ForeColor = Color.White;
         var heading = new Label { Text = "CLAREIRA DOS GOBLINS", Font = new Font("Segoe UI Semibold", 21, FontStyle.Bold), ForeColor = Color.FromArgb(221, 197, 135) };
         heading.SetBounds(24, 18, 750, 50); Controls.Add(heading);
-        Label("Atualização segura do projeto Godot pelo repositório privado no GitHub.", 24, 67, 840);
+        Label("Atualize a mesma pasta. Alterações locais podem ser substituídas após backup confirmado.", 24, 67, 840);
         Label("PASTA LOCAL DO PROJETO", 24, 112, 500);
         folder.SetBounds(24, 140, 690, 33); folder.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; Controls.Add(folder);
         var browse = Button("Escolher", 726, 140, 140, 33); browse.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -142,7 +143,26 @@ internal sealed class App : Form
             if (!root.Ok)
             {
                 if (Directory.EnumerateFileSystemEntries(path).Any())
-                    throw new Exception("Esta pasta contém arquivos mas não é um clone Git. Para proteger o projeto existente, selecione uma pasta VAZIA. Nada foi sobrescrito.");
+                {
+                    // Pastas antigas (sem .git) podem ser migradas SEM APAGAR a instalação.
+                    // O original é renomeado para backup ao lado da pasta de destino.
+                    if (automatic)
+                    {
+                        status.Text = "Pasta antiga: confirme a instalação por cima";
+                        Log("Pasta existente sem Git. Abra o atualizador e clique em Atualizar para autorizar o backup.");
+                        return;
+                    }
+                    if (!File.Exists(Path.Combine(path, "Projeto-Godot", "project.godot")) &&
+                        !File.Exists(Path.Combine(path, "project.godot")))
+                        throw new Exception("A pasta não parece ser o jogo Clareira dos Goblins. Escolha uma pasta do jogo ou uma pasta vazia.");
+                    if (!ConfirmOverwrite("A pasta selecionada não contém um repositório Git.\\n\\n" +
+                        "Deseja INSTALAR A NOVA VERSÃO NA MESMA PASTA?\\n" +
+                        "A pasta antiga será guardada INTEIRA ao lado, como backup.\\n" +
+                        "O aplicativo não apagará o projeto antigo.\\n\\nFeche o Godot antes de continuar."))
+                        return;
+                    await InstallOverLegacy(path, selected);
+                    return;
+                }
                 Log("Baixando o projeto na pasta escolhida...");
                 var clone = await Run("git", "clone", "--branch", selected, Remote, path);
                 if (!clone.Ok) throw new Exception("Falha no primeiro download: " + Short(clone.Text));
@@ -150,7 +170,10 @@ internal sealed class App : Form
                 status.Text = "Projeto baixado com sucesso";
                 return;
             }
-            path = Path.GetFullPath(root.Text.Trim().Split('\n', '\r')[0]);
+            var selectedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+            path = Path.GetFullPath(root.Text.Trim().Split('\n', '\r')[0]).TrimEnd(Path.DirectorySeparatorChar);
+            if (!string.Equals(path, selectedPath, StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Escolha a pasta raiz do jogo (Codigo-Fonte), não Projeto-Godot ou uma subpasta.");
             var remote = await Git(path, "remote", "get-url", "origin");
             var valid = Regex.IsMatch(remote.Text.Trim(), @"^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)clebertressi88/clareira-dos-goblins(\.git)?/?$", RegexOptions.IgnoreCase);
             if (!remote.Ok || !valid) throw new Exception("Esta pasta pertence a outro repositório. Nenhum arquivo foi modificado.");
@@ -166,7 +189,21 @@ internal sealed class App : Form
                 (line.EndsWith(".import", StringComparison.OrdinalIgnoreCase) ||
                  (line.StartsWith("?? ") && line.EndsWith(".gd.uid", StringComparison.OrdinalIgnoreCase))));
             if (changes.Length > 0 && !generatedOnly)
-                throw new Exception("Há modificações locais no projeto. Faça commit ou backup antes de atualizar. Nenhum arquivo foi sobrescrito.");
+            {
+                if (automatic)
+                {
+                    status.Text = "Existem alterações locais. Atualização manual necessária.";
+                    Log("Atualização automática interrompida para preservar edições. Clique em Atualizar para fazer backup e instalar por cima.");
+                    return;
+                }
+                if (!ConfirmOverwrite("Há arquivos modificados no projeto local.\\n\\n" +
+                    "Deseja SUBSTITUÍ-LOS pela versão do GitHub?\\n" +
+                    "Antes disso, criarei um ZIP com o PROJETO INTEIRO em uma pasta de backup.\\n" +
+                    "Suas alterações permanecerão dentro desse ZIP.\\n\\nFeche o Godot antes de continuar."))
+                    return;
+                await ReplaceGitWithBackup(path, selected);
+                return;
+            }
             var imported = changes.Where(line => !line.StartsWith("?? ") && line.EndsWith(".import", StringComparison.OrdinalIgnoreCase))
                                   .Select(line => line[3..].Replace('\\', '/')).ToArray();
             if (imported.Length > 0)
@@ -191,12 +228,38 @@ internal sealed class App : Form
             if (!(await Git(path, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" + selected)).Ok) throw new Exception("Versão não encontrada no GitHub.");
             bool exists = (await Git(path, "show-ref", "--verify", "--quiet", "refs/heads/" + selected)).Ok;
             var checkout = exists ? await Git(path, "checkout", selected) : await Git(path, "checkout", "-b", selected, "--track", "origin/" + selected);
-            if (!checkout.Ok) throw new Exception("Não foi possível trocar de versão: " + Short(checkout.Text));
+            if (!checkout.Ok)
+            {
+                if (!automatic && ConfirmOverwrite("Não foi possível trocar de versão sem conflitos.\\n\\n" +
+                    "Deseja criar um BACKUP completo e instalar por cima da pasta atual?"))
+                {
+                    await ReplaceGitWithBackup(path, selected);
+                    return;
+                }
+                throw new Exception("Não foi possível trocar de versão: " + Short(checkout.Text));
+            }
             var before = await Git(path, "rev-parse", "--short", "HEAD");
             if (!(await Git(path, "merge-base", "--is-ancestor", "HEAD", "origin/" + selected)).Ok)
-                throw new Exception("Há commits locais divergentes. Atualização bloqueada para não perder trabalho.");
+            {
+                if (!automatic && ConfirmOverwrite("Esta pasta tem commits locais divergentes.\\n\\n" +
+                    "Deseja fazer BACKUP integral e substituir pelo conteúdo do GitHub?"))
+                {
+                    await ReplaceGitWithBackup(path, selected);
+                    return;
+                }
+                throw new Exception("Há commits locais divergentes. Clique em Atualizar e confirme o backup para instalar por cima.");
+            }
             var merge = await Git(path, "merge", "--ff-only", "origin/" + selected);
-            if (!merge.Ok) throw new Exception("Git recusou a atualização: " + Short(merge.Text));
+            if (!merge.Ok)
+            {
+                if (!automatic && ConfirmOverwrite("A atualização não pôde ser aplicada sem conflitos.\\n\\n" +
+                    "Deseja fazer BACKUP integral e instalar por cima?"))
+                {
+                    await ReplaceGitWithBackup(path, selected);
+                    return;
+                }
+                throw new Exception("Git recusou a atualização: " + Short(merge.Text));
+            }
             var after = await Git(path, "rev-parse", "--short", "HEAD");
             status.Text = before.Text.Trim() == after.Text.Trim() ? "O projeto já está atualizado" : "Atualização concluída";
             status.ForeColor = Color.LightGreen;
@@ -208,6 +271,109 @@ internal sealed class App : Form
             else Alert(ex.Message);
         }
         finally { busy = false; update.Enabled = true; }
+    }
+
+
+    bool ConfirmOverwrite(string message)
+    {
+        return MessageBox.Show(this, message.Replace("\\n", Environment.NewLine),
+            "Atualizar na mesma pasta (backup obrigatório)",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+    }
+
+    async Task<string> BackupProject(string path)
+    {
+        var parent = Directory.GetParent(path)?.FullName
+            ?? throw new Exception("A pasta raiz do disco não pode ser substituída.");
+        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(name)) throw new Exception("Pasta do projeto inválida.");
+        string archivePath = Path.Combine(parent, name + "-BACKUP-" +
+            DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".zip");
+        if (archivePath.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) +
+            Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new Exception("O backup não pode ficar dentro da pasta que será atualizada.");
+        Log("Criando backup completo antes de substituir qualquer arquivo...");
+        status.Text = "Criando backup do projeto...";
+        await Task.Run(() =>
+        {
+            try
+            {
+                ZipFile.CreateFromDirectory(path, archivePath, CompressionLevel.Fastest, true);
+                using var archive = ZipFile.OpenRead(archivePath);
+                if (archive.Entries.Count == 0 || new FileInfo(archivePath).Length == 0)
+                    throw new Exception("Arquivo de backup vazio.");
+            }
+            catch
+            {
+                try { if (File.Exists(archivePath)) File.Delete(archivePath); } catch { }
+                throw;
+            }
+        });
+        Log("Backup confirmado: " + archivePath);
+        return archivePath;
+    }
+
+    async Task ReplaceGitWithBackup(string path, string selected)
+    {
+        // Backup integral inclusive de arquivos nao rastreados. Nunca apague o backup.
+        string archive = await BackupProject(path);
+        Log("Buscando arquivos da versão " + selected + "...");
+        var fetch = await Git(path, "fetch", "--prune", "origin");
+        if (!fetch.Ok) throw new Exception("Falhou o download. Sua pasta não foi substituída. Backup: " + archive + "\n" + Short(fetch.Text));
+        if (!(await Git(path, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" + selected)).Ok)
+            throw new Exception("Versão indisponível. Pasta original preservada. Backup: " + archive);
+        // Substituicao intencional somente apos confirmacao e backup verificado.
+        var checkout = await Git(path, "checkout", "-f", "-B", selected, "origin/" + selected);
+        if (!checkout.Ok) throw new Exception("Falhou a troca da versão. O backup está em: " + archive + "\n" + Short(checkout.Text));
+        var reset = await Git(path, "reset", "--hard", "origin/" + selected);
+        if (!reset.Ok) throw new Exception("Não foi possível finalizar a instalação. Backup: " + archive + "\n" + Short(reset.Text));
+        var clean = await Git(path, "clean", "-fd");
+        if (!clean.Ok) throw new Exception("Versão atualizada, mas sobram arquivos antigos. Backup: " + archive + "\n" + Short(clean.Text));
+        status.Text = "Instalado por cima — backup criado";
+        status.ForeColor = Color.LightGreen;
+        Log("Atualizado na MESMA pasta: " + path);
+        Log("Versão anterior salva em: " + archive);
+        MessageBox.Show(this, "Atualização concluída na mesma pasta!\n\nBackup da versão anterior:\n" +
+            archive, "Clareira dos Goblins", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    async Task InstallOverLegacy(string path, string selected)
+    {
+        string parent = Directory.GetParent(path)?.FullName
+            ?? throw new Exception("Não é permitido substituir a raiz do disco.");
+        string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+        string staging = Path.Combine(parent, name + "-NOVA-VERSAO-" + stamp);
+        string backup = Path.Combine(parent, name + "-BACKUP-" + stamp);
+        Log("Baixando uma cópia limpa antes de mexer na pasta existente...");
+        var clone = await Run("git", "clone", "--branch", selected, "--", Remote, staging);
+        if (!clone.Ok)
+            throw new Exception("Falha ao baixar projeto novo. A pasta original permanece intacta.\n" + Short(clone.Text));
+        // A instalacao antiga continua INTEIRA, somente com novo nome. Nao precisa copiar/deletar.
+        try
+        {
+            Directory.Move(path, backup);
+            try { Directory.Move(staging, path); }
+            catch
+            {
+                // Melhor esforco para devolver o nome original.
+                try { if (!Directory.Exists(path)) Directory.Move(backup, path); } catch { }
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Não foi possível substituir a pasta (feche o Godot e o jogo). " +
+                "Pasta antiga ou backup preservado: " + backup + ". Detalhes: " + ex.Message);
+        }
+        status.Text = "Instalado na pasta anterior, com backup";
+        status.ForeColor = Color.LightGreen;
+        Log("Instalação nova: " + path);
+        Log("Pasta antiga INTEIRA preservada em: " + backup);
+        MessageBox.Show(this, "Instalado na mesma pasta!\n\n" +
+            "Sua instalação antiga continua salva em:\n" + backup,
+            "Clareira dos Goblins", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     static string Short(string s) => s.Length > 260 ? s[..260] : s;
