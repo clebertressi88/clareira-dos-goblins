@@ -1,83 +1,79 @@
 extends RefCounted
-## Copas organicas de baixo custo. Apenas visual: a colisao permanece no tronco.
-## A semente vem do ID persistente da arvore; cliente e servidor veem o mesmo formato.
+## Folhagem 3D com folhas realmente visiveis, sem bolas de SphereMesh.
+## Cartoes de folhas recortadas e cruzadas, semente estavel por arvore.
+static var shared_leaf_material: StandardMaterial3D
+static var shared_leaf_mesh: QuadMesh
+
+static func _leaf_material() -> StandardMaterial3D:
+	if shared_leaf_material != null:
+		return shared_leaf_material
+	shared_leaf_material = StandardMaterial3D.new()
+	shared_leaf_material.albedo_color = Color.WHITE
+	shared_leaf_material.albedo_texture = preload("res://forest_leaf_pattern.gd").make_texture()
+	shared_leaf_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	shared_leaf_material.alpha_scissor_threshold = 0.45
+	shared_leaf_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	shared_leaf_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	shared_leaf_material.roughness = 1.0
+	shared_leaf_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return shared_leaf_material
+
+static func _leaf_mesh() -> QuadMesh:
+	if shared_leaf_mesh == null:
+		shared_leaf_mesh = QuadMesh.new()
+		shared_leaf_mesh.size = Vector2(1.0,1.0)
+	return shared_leaf_mesh
 
 static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi(hash(tree_id))
-	var variation := rng.randi_range(0, 3)
-	var green_colors := [
-		Color("#294b2d"), Color("#345c32"), Color("#426e39"),
-		Color("#527d43"), Color("#60834a"), Color("#789456")
-	]
-	var foliage_materials: Array[StandardMaterial3D] = []
-	for col in green_colors:
-		var mat := StandardMaterial3D.new()
-		# Textura de pequenas folhas inspirada na referencia aprovada.
-		mat.albedo_color = col.lerp(Color.WHITE,0.72)
-		mat.albedo_texture = preload("res://forest_leaf_pattern.gd").make_texture()
-		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		mat.roughness = 1.0
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		foliage_materials.append(mat)
-	var leaf_mesh := SphereMesh.new()
-	leaf_mesh.radius = 0.5
-	leaf_mesh.height = 1.0
-	leaf_mesh.radial_segments = 8
-	leaf_mesh.rings = 4
-	# Galhos saem do tronco e apontam para a copa; nao possuem colisao.
-	for i in range(5):
-		var angle := TAU * (float(i) / 5.0) + rng.randf_range(-0.21, 0.21)
-		var height := 1.48 + float(i % 3) * 0.31
-		var radius := 0.85 + rng.randf_range(-0.13, 0.23)
-		var start := Vector3(cos(angle) * 0.12, height, sin(angle) * 0.12)
-		var tip := Vector3(cos(angle) * radius, height + 0.50, sin(angle) * radius)
-		_add_branch(growth, start, tip, bark)
-	# Grandes tufos em alturas e larguras alternadas, evitando a forma de bola unica.
-	var crown_height := 2.34 + float(variation) * 0.10
-	for i in range(9):
-		var angle := TAU * (float(i) / 9.0) + rng.randf_range(-0.25, 0.25)
-		var ring := 0.43 if i >= 6 else 0.76
-		var lateral := ring + rng.randf_range(-0.14, 0.14)
-		var y := crown_height + (float(i % 3) - 1.0) * 0.27 + rng.randf_range(-0.13, 0.13)
-		var pos := Vector3(cos(angle) * lateral, y, sin(angle) * lateral)
-		var width := rng.randf_range(0.96, 1.33)
-		var depth := rng.randf_range(0.90, 1.24)
-		_add_leaf(growth, leaf_mesh, pos, Vector3(width, rng.randf_range(0.85, 1.20), depth), foliage_materials[(i + variation) % foliage_materials.size()])
-	# Tufos externos menores desenham bordas irregulares como ramos com folhas.
-	# Sao malhas visuais leves; nao recebem collider nem impedem a passagem.
-	for i in range(12):
-		var angle := TAU * (float(i) / 12.0) + rng.randf_range(-0.17, 0.17)
-		var radius := rng.randf_range(0.77, 1.17)
-		var y := rng.randf_range(2.00, 2.94) + float(variation) * 0.07
-		var pos := Vector3(cos(angle) * radius, y, sin(angle) * radius)
-		var size := rng.randf_range(0.43, 0.73)
-		_add_leaf(growth, leaf_mesh, pos, Vector3(size * 1.25, size, size), foliage_materials[(i + variation + 1) % foliage_materials.size()])
-	# Pequenos preenchimentos fecham buracos visuais debaixo da copa.
-	for i in range(5):
-		var angle := TAU * float(i) / 5.0
-		_add_leaf(growth, leaf_mesh, Vector3(cos(angle) * 0.34, 1.99 + rng.randf_range(-0.14, 0.15), sin(angle) * 0.34), Vector3(0.82, 0.72, 0.82), foliage_materials[(i + variation) % 3])
-	# Topo estreito para dar uma silhueta de arvore em vez de um bloco arredondado.
-	_add_leaf(growth, leaf_mesh, Vector3(0.0, 3.02 + float(variation) * 0.10, 0.0), Vector3(1.08, 1.02, 1.08), foliage_materials[(variation + 2) % foliage_materials.size()])
+	var variation := rng.randf_range(-0.16,0.20)
+	# Galhos visiveis mas sem colisao: apenas o tronco bloqueia passagem.
+	for i in range(7):
+		var angle := TAU*float(i)/7.0+rng.randf_range(-0.24,0.24)
+		var height := rng.randf_range(1.45,2.24)
+		var radius := rng.randf_range(0.65,1.02)
+		var start := Vector3(cos(angle)*0.11,height,sin(angle)*0.11)
+		var tip := Vector3(cos(angle)*radius,height+0.36,sin(angle)*radius)
+		_add_branch(growth,start,tip,bark)
+
+	# Copas compostas de ramos e folhas pequenas em varias profundidades.
+	# Duas cartas cruzadas em cada volume deixam as folhas visiveis de todos os lados.
+	for i in range(37):
+		var angle := rng.randf_range(0.0,TAU)
+		var radial := sqrt(rng.randf())*1.17
+		var height := rng.randf_range(1.91,2.93)+variation
+		var taper := clampf((3.22-height)/1.25,0.24,1.0)
+		var pos := Vector3(cos(angle)*radial*taper,height,sin(angle)*radial*taper)
+		var scale_size := rng.randf_range(0.62,0.98)
+		_add_leaf_cluster(growth,pos,scale_size,rng.randf_range(0.0,TAU),rng)
+	# Silhueta de folhas no topo, em vez de um unico poligono arredondado.
+	for i in range(6):
+		var angle := float(i)*TAU/6.0
+		_add_leaf_cluster(growth,Vector3(cos(angle)*0.24,3.04+variation,sin(angle)*0.24),0.59,angle,rng)
 
 static func _add_branch(parent: Node3D, start: Vector3, tip: Vector3, bark: Material) -> void:
-	var delta := tip - start
+	var delta := tip-start
 	var mesh := CylinderMesh.new()
-	mesh.bottom_radius = 0.09
-	mesh.top_radius = 0.035
+	mesh.bottom_radius = 0.07
+	mesh.top_radius = 0.025
 	mesh.height = delta.length()
 	mesh.radial_segments = 6
 	var part := MeshInstance3D.new()
 	part.mesh = mesh
 	part.material_override = bark
-	part.position = (start + tip) * 0.5
-	part.quaternion = Quaternion(Vector3.UP, delta.normalized())
+	part.position = (start+tip)*0.5
+	part.quaternion = Quaternion(Vector3.UP,delta.normalized())
 	parent.add_child(part)
 
-static func _add_leaf(parent: Node3D, mesh: Mesh, pos: Vector3, dimensions: Vector3, mat: Material) -> void:
-	var part := MeshInstance3D.new()
-	part.mesh = mesh
-	part.material_override = mat
-	part.position = pos
-	part.scale = dimensions
-	parent.add_child(part)
+static func _add_leaf_cluster(parent: Node3D, pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> void:
+	var leaf_material := _leaf_material()
+	var leaf_mesh := _leaf_mesh()
+	for side in range(2):
+		var part := MeshInstance3D.new()
+		part.mesh = leaf_mesh
+		part.material_override = leaf_material
+		part.position = pos
+		part.rotation = Vector3(rng.randf_range(-0.26,0.26),yaw+float(side)*PI*0.5,rng.randf_range(-0.15,0.15))
+		part.scale = Vector3(extent*1.45,extent*1.25,1.0)
+		parent.add_child(part)
