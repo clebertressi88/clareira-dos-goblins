@@ -23,7 +23,7 @@ const BENCH2_ITEM := 19
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
-const BUILD_TAG := "Atualização 21/11 · patrulha 8 m · paredes encaixadas · inventário arrastável"
+const BUILD_TAG := "Atualização 22/11 · LAN corrigida · patrulha 8 m · construção"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
 var backpack_equipped := false
@@ -125,8 +125,9 @@ func _ready() -> void:
 	load_chunks()
 	show_menu()
 	multiplayer.peer_disconnected.connect(remove_remote)
+	multiplayer.connected_to_server.connect(connected_to_server)
 	multiplayer.server_disconnected.connect(disconnected)
-	multiplayer.connection_failed.connect(disconnected)
+	multiplayer.connection_failed.connect(connection_failed)
 
 func character_texture(family: String) -> ImageTexture:
 	if surface_textures.has(family):
@@ -2156,7 +2157,11 @@ func _physics_process(dt: float) -> void:
 	update_villagers(dt)
 	if multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
-		send_position.rpc(player.global_position,player.rotation.y)
+		if multiplayer.is_server():
+			for peer_id in multiplayer.get_peers():
+				receive_remote_position.rpc_id(peer_id,1,player.global_position,player.rotation.y)
+		else:
+			send_position.rpc_id(1,player.global_position,player.rotation.y)
 	for remote in remotes.values():
 		var destination: Vector3 = remote.get_meta("destination",remote.position)
 		var next: Vector3 = remote.position.lerp(destination,1.-exp(-dt*16.))
@@ -2625,15 +2630,18 @@ func _notification(what: int) -> void:
 	if what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
 
+# O servidor é a autoridade sobre a lista de jogadores. Clientes enviam somente
+# ao servidor, que retransmite para todos os demais jogadores conectados.
 func host_game() -> void:
 	disconnect_game()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_server(24650,8)!=OK:
-		notice("Não foi possível abrir a porta UDP 24650.")
+	var err := peer.create_server(24650,8)
+	if err != OK:
+		notice("Falha ao hospedar (UDP 24650): " + error_string(err))
 		show_menu()
 		return
 	multiplayer.multiplayer_peer = peer
-	notice("Rede local ativa na porta UDP 24650.")
+	notice("Servidor LAN iniciado na porta UDP 24650. Compartilhe seu IP local.")
 	begin()
 
 func join_game() -> void:
@@ -2644,21 +2652,33 @@ func join_game() -> void:
 		return
 	disconnect_game()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_client(ip,24650)!=OK:
-		notice("Não foi possível iniciar a conexão.")
+	var err := peer.create_client(ip,24650)
+	if err != OK:
+		notice("Não foi possível iniciar a conexão: " + error_string(err))
 		show_menu()
 		return
 	multiplayer.multiplayer_peer = peer
-	notice("Conectando a "+ip+"…")
+	notice("Conectando a " + ip + " na porta UDP 24650…")
+	# Aguarde o sinal connected_to_server antes de iniciar o jogo.
+	show_menu()
+
+func connected_to_server() -> void:
+	notice("Conectado ao servidor LAN.")
 	begin()
 
-@rpc("any_peer","call_remote","unreliable_ordered")
-func send_position(pos: Vector3,facing: float) -> void:
+func connection_failed() -> void:
+	disconnect_game()
+	notice("Conexão LAN falhou. Confira IP, mesma rede/Hamachi e firewall UDP 24650.")
+	show_menu()
+
+func set_remote_position(id: int,pos: Vector3,facing: float) -> void:
+	if id <= 0 or id == multiplayer.get_unique_id():
+		return
 	if not pos.is_finite() or not is_finite(facing):
 		return
-	var id := multiplayer.get_remote_sender_id()
 	if not remotes.has(id):
 		var avatar := Node3D.new()
+		avatar.name = "Jogador_" + str(id)
 		add_child(avatar)
 		var visual := Node3D.new()
 		avatar.add_child(visual)
@@ -2667,12 +2687,39 @@ func send_position(pos: Vector3,facing: float) -> void:
 		avatar.position = pos
 		remotes[id] = avatar
 	var remote: Node3D = remotes[id]
-	if remote.position.distance_to(pos)>15.:
+	if remote.position.distance_to(pos) > 15.0:
 		remote.position = pos
 	remote.set_meta("destination",pos)
 	remote.rotation.y = facing
 
+@rpc("any_peer","call_remote","unreliable_ordered")
+func send_position(pos: Vector3,facing: float) -> void:
+	if not multiplayer.is_server():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if id <= 1 or not pos.is_finite() or not is_finite(facing):
+		return
+	set_remote_position(id,pos,facing)
+	# O servidor repassa o movimento para todos os clientes, exceto o autor.
+	for peer_id in multiplayer.get_peers():
+		if peer_id != id:
+			receive_remote_position.rpc_id(peer_id,id,pos,facing)
+
+@rpc("authority","call_remote","unreliable_ordered")
+func receive_remote_position(id: int,pos: Vector3,facing: float) -> void:
+	set_remote_position(id,pos,facing)
+
 func remove_remote(id: int) -> void:
+	if remotes.has(id):
+		remotes[id].queue_free()
+		remotes.erase(id)
+	if multiplayer.is_server():
+		for peer_id in multiplayer.get_peers():
+			if peer_id != id:
+				remove_remote_avatar.rpc_id(peer_id,id)
+
+@rpc("authority","call_remote","reliable")
+func remove_remote_avatar(id: int) -> void:
 	if remotes.has(id):
 		remotes[id].queue_free()
 		remotes.erase(id)
@@ -2685,8 +2732,6 @@ func disconnect_game() -> void:
 		remove_remote(id)
 
 func disconnected() -> void:
-	for id in remotes.keys():
-		remove_remote(id)
-	multiplayer.multiplayer_peer = null
-	notice("Conexão de rede encerrada.")
+	disconnect_game()
+	notice("Conexão com o servidor encerrada.")
 	show_menu()
