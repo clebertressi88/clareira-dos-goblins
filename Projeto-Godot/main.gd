@@ -36,6 +36,7 @@ const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir d
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
 # Preload obrigatorio: se o GLB nao for importado, o jogo nao compila uma aparencia antiga por engano.
 const NPC_MODEL_SCENE: PackedScene = preload("res://modelos/goblin_npc.glb")
+const NPC_MOTION_SHADER: Shader = preload("res://modelos/goblin_motion.gdshader")
 const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
@@ -411,7 +412,7 @@ func make_player() -> void:
 	player_model.name = "Protagonista"
 	player.add_child(player_model)
 	player_model.rotation.y = PI
-	goblin(player_model,Color("#895938"),true)
+	goblin_npc(player_model,Color("#895938"))
 	backpack_visual = Node3D.new()
 	backpack_visual.name = "MochilaVestida"
 	player_model.add_child(backpack_visual)
@@ -1252,7 +1253,24 @@ func goblin_npc(o: Node3D, _garment: Color) -> void:
 	var ratio := 1.50/maxf(high.y-low.y,0.01)
 	model.scale = Vector3.ONE*ratio
 	model.position = Vector3(-(low.x+high.x)*0.5,-low.y,-(low.z+high.z)*0.5)*ratio
-	pivot.rotation.y = 0.0 # O GLB ja aponta para +Z: girar PI fazia os NPCs andarem de costas.
+	pivot.rotation.y = 0.0 # O GLB ja aponta para +Z; avatar do jogador usa Visual em PI.
+	var animation_materials: Array = []
+	for child in model.find_children("*","MeshInstance3D",true,false):
+		var part := child as MeshInstance3D
+		if part.mesh == null:
+			continue
+		var source_material := part.get_active_material(0) as BaseMaterial3D
+		if source_material == null or source_material.albedo_texture == null:
+			push_warning("Goblin GLB sem atlas no material: mantendo material original desta malha.")
+			continue
+		var animated_material := ShaderMaterial.new()
+		animated_material.shader = NPC_MOTION_SHADER
+		animated_material.set_shader_parameter("atlas_texture",source_material.albedo_texture)
+		animated_material.set_shader_parameter("atlas_tint",source_material.albedo_color)
+		animated_material.set_shader_parameter("phase_offset",float(o.get_instance_id()%17)*.38)
+		part.material_override = animated_material
+		animation_materials.append(animated_material)
+	o.set_meta("npc_anim_materials",animation_materials)
 	o.set_meta("modelo_goblin_npc",true)
 
 
@@ -1263,11 +1281,18 @@ func animate_npc_model(visual: Node3D, velocity: Vector3, dt: float, grounded: b
 	if pivot == null:
 		return
 	var speed := Vector2(velocity.x,velocity.z).length()
-	var phase := float(visual.get_meta("npc_walk_phase",0.0))+speed*dt*6.5
-	visual.set_meta("npc_walk_phase",fposmod(phase,TAU))
-	var amount := minf(speed/1.2,1.0) if grounded else 0.0
-	pivot.position.y = maxf(0.0,sin(phase*2.0))*.026*amount
+	var phase := fposmod(float(visual.get_meta("npc_walk_phase",0.0))+dt*(4.0+speed*2.3),TAU)
+	visual.set_meta("npc_walk_phase",phase)
+	var target := clampf(speed/1.4,0.0,1.0) if grounded else 0.0
+	var amount := move_toward(float(visual.get_meta("npc_walk_amount",0.0)),target,dt*5.0)
+	visual.set_meta("npc_walk_amount",amount)
+	pivot.position.y = maxf(0.0,sin(phase*2.0))*.019*amount + sin(elapsed*1.7)*.003
 	pivot.rotation.z = sin(phase)*.028*amount
+	pivot.rotation.x = sin(phase)*.009*amount
+	for anim_material in visual.get_meta("npc_anim_materials",[]):
+		if anim_material is ShaderMaterial:
+			anim_material.set_shader_parameter("move_strength",amount)
+			anim_material.set_shader_parameter("move_rate",clampf(speed/1.4,.65,2.5))
 
 
 func goblin(o: Node3D, garment: Color, protagonist := false) -> void:
@@ -2903,7 +2928,7 @@ func _physics_process(dt: float) -> void:
 			if player.position.y < wading_level:
 				player.position.y = wading_level
 				player.velocity.y = 0.0
-		walk_pose(player_model,player.get_real_velocity(),dt,player.is_on_floor())
+		animate_npc_model(player_model,player.get_real_velocity(),dt,player.is_on_floor())
 		eye_height = move_toward(eye_height,.96 if crouch else 1.49,dt*4.5)
 		update_camera()
 		var cell := Vector2i(floori(player.position.x/CHUNK),floori(player.position.z/CHUNK))
@@ -2916,7 +2941,20 @@ func _physics_process(dt: float) -> void:
 		if elapsed>next_save:
 			next_save = elapsed+8
 			save_game()
-	# A rotina dos NPCs e o crescimento das arvores continuam durante os menus.
+	# Animacao continua em idle nos menus; clientes interpolam animacoes recebidas da rede.
+	if not moving:
+		animate_npc_model(player_model,Vector3.ZERO,dt,true)
+	if net_role=="client":
+		for npc in villagers:
+			if is_instance_valid(npc):
+				var net_vel: Vector3 = npc.get_meta("net_animation_velocity",Vector3.ZERO)
+				animate_npc_model(npc.get_node("Visual"),net_vel,dt,true)
+				npc.set_meta("net_animation_velocity",net_vel.move_toward(Vector3.ZERO,dt*3.5))
+		for mob in mobs:
+			if is_instance_valid(mob) and str(mob.get_meta("kind",""))=="guardian":
+				var net_vel: Vector3 = mob.get_meta("net_animation_velocity",Vector3.ZERO)
+				animate_npc_model(mob.get_node("Visual"),net_vel,dt,true)
+				mob.set_meta("net_animation_velocity",net_vel.move_toward(Vector3.ZERO,dt*3.5))
 	if net_role!="client":
 		update_villagers(dt)
 	tree_regrowth_clock += dt
@@ -2935,7 +2973,7 @@ func _physics_process(dt: float) -> void:
 	for remote in remotes.values():
 		var destination: Vector3 = remote.get_meta("destination",remote.position)
 		var next: Vector3 = remote.position.lerp(destination,1.-exp(-dt*16.))
-		walk_pose(remote.get_child(0),(next-remote.position)/maxf(dt,.001),dt)
+		animate_npc_model(remote.get_child(0),(next-remote.position)/maxf(dt,.001),dt,true)
 		remote.position = next
 	var held: int = bar_items[selected]
 	spear.visible = not third_person and held in [0,8]
@@ -3905,11 +3943,11 @@ func net_apply_entities(states: Array) -> void:
 		var angle := float(data.get("r",0.0))
 		if obj.has_meta("net_mob"):
 			var delta := (pos as Vector3)-obj.global_position
-			walk_pose(obj.get_node("Visual"),delta*7.0,.15,true)
+			obj.set_meta("net_animation_velocity",delta*7.0)
 			obj.global_position = obj.global_position.lerp(pos,.65) if delta.length()<10.0 else pos
 		else:
 			var delta := (pos as Vector3)-obj.global_position
-			walk_pose(obj.get_node("Visual"),delta*7.0,.15,true)
+			obj.set_meta("net_animation_velocity",delta*7.0)
 			obj.global_position = obj.global_position.lerp(pos,.65) if delta.length()<10.0 else pos
 		obj.rotation.y = angle
 		if int(data.get("hp",-1))>=0:
@@ -4054,7 +4092,7 @@ func net_create_avatar(peer_id: int) -> Node3D:
 	var visual := Node3D.new()
 	avatar.add_child(visual)
 	visual.rotation.y = PI
-	goblin(visual,Color("#895938"),true)
+	goblin_npc(visual,Color("#895938"))
 	remotes[peer_id] = avatar
 	return avatar
 

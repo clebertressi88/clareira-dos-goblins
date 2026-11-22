@@ -64,8 +64,30 @@ func _run() -> void:
 		fail("Guardiao continua com o GLB invertido em 180 graus.")
 		return
 	var player_model := game.get("player_model") as Node3D
-	if player_model != null and player_model.has_meta("modelo_goblin_npc"):
-		fail("Protagonista mudou sem autorizacao.")
+	if player_model == null or not player_model.has_meta("modelo_goblin_npc"):
+		fail("Jogador local nao esta usando o modelo texturizado GLB.")
 		return
-	print("GOBLIN MODEL OK: Bruma, Talo e Guardiao renderizam o GLB; jogador preservado.")
+	var avatar := game.call("net_create_avatar",92) as Node3D
+	if avatar == null or not (avatar.get_child(0) as Node3D).has_meta("modelo_goblin_npc"):
+		fail("Jogador remoto nao esta usando o GLB texturizado.")
+		return
+	for visual in [player_model,avatar.get_child(0),guardian.get_node("Visual"),
+			(game.get("objects") as Dictionary)["Bruma"].get_node("Visual"),
+			(game.get("objects") as Dictionary)["Talo"].get_node("Visual")]:
+		var anim_materials: Array = visual.get_meta("npc_anim_materials",[])
+		if anim_materials.size() < 2:
+			fail("Modelo sem material animado/texturizado: " + visual.name)
+			return
+		for animated_material in anim_materials:
+			if not animated_material is ShaderMaterial:
+				fail("Material nao e ShaderMaterial: " + visual.name)
+				return
+			if not (animated_material as ShaderMaterial).get_shader_parameter("atlas_texture") is Texture2D:
+				fail("Textura GLB nao esta conectada ao shader: " + visual.name)
+				return
+		game.call("animate_npc_model",visual,Vector3(2.0,0.0,0.0),0.2,true)
+		if float((anim_materials[0] as ShaderMaterial).get_shader_parameter("move_strength")) <= 0.0:
+			fail("A animacao nao reagiu a caminhada de " + visual.name)
+			return
+	print("GOBLIN MODEL OK: NPCs e jogadores usam atlas GLB e animacao procedural.")
 	quit(0)
