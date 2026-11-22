@@ -99,6 +99,15 @@ func _run() -> void:
 			arrived = true
 			break
 	if not arrived:
+		print("ENTRY DEBUG pos=",character.global_position," floor=",character.is_on_floor()," wall=",character.is_on_wall()," ceiling=",character.is_on_ceiling())
+		print("ENTRY DEBUG terreno=",game.call("ground",character.position.x,character.position.z)," shape=",character.get_slide_collision_count())
+		for contact_idx in range(character.get_slide_collision_count()):
+			var contact := character.get_slide_collision(contact_idx)
+			var other := contact.get_collider()
+			print("ENTRY DEBUG colliding=",other," type=",other.get_class() if other!=null else "null"," kind=",other.get_meta("kind","") if other!=null else "", " normal=",contact.get_normal())
+		for child in doorway.get_children():
+			if child.name.begins_with("RampaPorta"):
+				print("ENTRY DEBUG ramp=",child.name," local=",child.position," rot=",child.rotation)
 		fail("Jogador preso na entrada: z=%.2f; porta z=%.2f" % [character.position.z,pz])
 		return
 	if character.position.y < h-.35:
