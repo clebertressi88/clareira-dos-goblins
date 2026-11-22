@@ -50,6 +50,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha na malha visual/camera' }
           if (!(Select-String -Path visual-terreno.log -SimpleMatch 'TERRAIN RENDERING OK')) { throw 'Teste da renderizacao do terreno nao confirmou sucesso' }
           if (Select-String -Path visual-terreno.log -Pattern 'SCRIPT ERROR|TERRAIN VISUAL FAIL' -CaseSensitive:$false) { throw 'Erro no teste visual' }
+      - name: Testar arvores com raizes, cortes, som, pa e lobos
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_forest_gameplay.gd 2>&1 | Tee-Object -FilePath floresta.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha teste de arvore/raiz/som/pa/lobo' }
+          if (!(Select-String -Path floresta.log -SimpleMatch 'FOREST GAMEPLAY OK')) { throw 'Teste de floresta nao confirmou sucesso' }
+          if (Select-String -Path floresta.log -Pattern 'SCRIPT ERROR|FOREST GAMEPLAY FAIL' -CaseSensitive:$false) { throw 'Erros no teste de floresta' }
       - name: Enviar logs de teste
         if: always()
         uses: actions/upload-artifact@v4
@@ -60,4 +67,5 @@ jobs:
             teste.log
             fisica-terreno.log
             visual-terreno.log
+            floresta.log
           if-no-files-found: ignore
