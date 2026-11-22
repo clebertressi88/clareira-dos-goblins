@@ -95,6 +95,14 @@ internal sealed class App : Form
     void LoadConfig()
     {
         Settings s = new();
+        // No pacote completo, a pasta Codigo-Fonte ja e um clone Git pronto para receber updates.
+        try
+        {
+            var packaged = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Codigo-Fonte"));
+            if (Directory.Exists(Path.Combine(packaged, ".git")) && File.Exists(Path.Combine(packaged, "Projeto-Godot", "project.godot")))
+                s.Folder = packaged;
+        }
+        catch { /* Usa pasta padrao se estiver fora do pacote. */ }
         try { if (File.Exists(Config)) s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(Config)) ?? s; }
         catch { /* Preferências danificadas: inicia com valores seguros. */ }
         folder.Text = s.Folder; branch.SelectedItem = s.Branch is "main" or Feature ? s.Branch : Feature;
