@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -36,6 +37,7 @@ internal sealed class App : Form
     readonly RichTextBox log = new();
     readonly Label status = new();
     readonly Button update = new();
+    readonly Button updateGame = new();
     readonly System.Windows.Forms.Timer timer = new() { Interval = 600000 };
     bool busy;
 
@@ -61,14 +63,17 @@ internal sealed class App : Form
         branch.SelectedIndexChanged += (_, _) => Save();
         auto.Text = "Baixar atualizações a cada 10 minutos enquanto este aplicativo estiver aberto";
         auto.SetBounds(24, 274, 820, 30); auto.CheckedChanged += (_, _) => Save(); Controls.Add(auto);
-        update.Text = "BAIXAR / ATUALIZAR AGORA"; update.SetBounds(24, 324, 290, 43);
-        update.FlatStyle = FlatStyle.Flat; update.BackColor = Color.FromArgb(85, 116, 65); update.ForeColor = Color.White;
+        update.Text = "ATUALIZAR CÓDIGO"; update.SetBounds(24, 324, 190, 43);
+        update.FlatStyle = FlatStyle.Flat; update.BackColor = Color.FromArgb(65, 88, 63); update.ForeColor = Color.White;
         update.Click += async (_, _) => await Update(false); Controls.Add(update);
-        var auth = Button("Conectar GitHub", 326, 324, 166, 43);
+        updateGame.Text = "ATUALIZAR JOGO (EXE)"; updateGame.SetBounds(223, 324, 230, 43);
+        updateGame.FlatStyle = FlatStyle.Flat; updateGame.BackColor = Color.FromArgb(85, 116, 65); updateGame.ForeColor = Color.White;
+        updateGame.Click += async (_, _) => await UpdateGameExe(false); Controls.Add(updateGame);
+        var auth = Button("Conectar GitHub", 462, 324, 145, 43);
         auth.Click += (_, _) => { try { Process.Start(new ProcessStartInfo("cmd.exe", "/k gh auth login --web --hostname github.com && gh auth setup-git") { UseShellExecute = true }); Log("Conclua o login na janela aberta e clique em atualizar."); } catch (Exception ex) { Alert(ex.Message); } };
-        var open = Button("Abrir pasta", 504, 324, 144, 43);
+        var open = Button("Abrir pasta", 615, 324, 120, 43);
         open.Click += (_, _) => { if (Directory.Exists(folder.Text)) Process.Start(new ProcessStartInfo("explorer.exe", "\"" + folder.Text + "\"") { UseShellExecute = true }); else Alert("A pasta ainda não existe."); };
-        var github = Button("Ver GitHub", 660, 324, 144, 43);
+        var github = Button("Ver GitHub", 743, 324, 120, 43);
         github.Click += (_, _) => Process.Start(new ProcessStartInfo("https://github.com/" + Repo) { UseShellExecute = true });
         status.SetBounds(24, 381, 850, 28); status.Text = "Pronto para atualizar"; status.ForeColor = Color.FromArgb(209, 215, 185); Controls.Add(status);
         log.ReadOnly = true; log.BackColor = Color.FromArgb(15, 23, 18); log.ForeColor = Color.FromArgb(222, 231, 213);
@@ -270,9 +275,167 @@ internal sealed class App : Form
             if (automatic) { Log("Verificação automática não concluída: " + ex.Message); status.Text = "Atualização requer atenção"; status.ForeColor = Color.Salmon; }
             else Alert(ex.Message);
         }
-        finally { busy = false; update.Enabled = true; }
+        finally { busy = false; update.Enabled = true; updateGame.Enabled = true; }
     }
 
+    async Task UpdateGameExe(bool automatic)
+    {
+        if (busy) return;
+        var selected = branch.SelectedItem?.ToString() ?? Feature;
+        if (selected != Feature)
+        {
+            if (!automatic) Alert("O EXE compilado está disponível na versão experimental da paisagem. Selecione essa versão.");
+            return;
+        }
+
+        var sourceFolder = folder.Text.Trim();
+        string target = "";
+        try
+        {
+            // Layout oficial: Codigo-Fonte/ e Jogo-Windows/ sao pastas irmas.
+            var root = Path.GetFullPath(sourceFolder);
+            var baseFolder = Directory.GetParent(root)?.FullName ?? "";
+            if (!string.IsNullOrWhiteSpace(baseFolder))
+                target = Path.Combine(baseFolder, "Jogo-Windows", "Clareira-dos-Goblins.exe");
+
+            if (string.IsNullOrWhiteSpace(target) || !File.Exists(target))
+            {
+                if (automatic) return;
+                using var picker = new OpenFileDialog
+                {
+                    Title = "Selecione o EXE atual na pasta Jogo-Windows",
+                    Filter = "Jogo Clareira dos Goblins|Clareira-dos-Goblins.exe",
+                    CheckFileExists = true,
+                    FileName = "Clareira-dos-Goblins.exe"
+                };
+                if (picker.ShowDialog(this) != DialogResult.OK) return;
+                target = picker.FileName;
+            }
+            target = Path.GetFullPath(target);
+            if (!string.Equals(Path.GetFileName(target), "Clareira-dos-Goblins.exe", StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Selecione o executável correto do jogo.");
+        }
+        catch (Exception ex) { if (!automatic) Alert("Local do jogo inválido: " + ex.Message); return; }
+
+        busy = true;
+        update.Enabled = false;
+        updateGame.Enabled = false;
+        status.Text = "Consultando versão compilada do jogo...";
+        var temporary = "";
+        try
+        {
+            if (Process.GetProcessesByName("Clareira-dos-Goblins").Length > 0)
+                throw new Exception("Feche o jogo antes de atualizar o executável.");
+            if (!(await Run("gh", "--version")).Ok)
+                throw new Exception("Instale GitHub CLI: https://cli.github.com");
+            if (!(await Run("gh", "auth", "status", "-h", "github.com")).Ok)
+                throw new Exception("Clique em Conectar GitHub para acessar o repositório privado.");
+
+            // Somente arquivos produzidos pela workflow oficial de compilacao desta branch.
+            var head = await Run("gh", "api",
+                "repos/" + Repo + "/git/ref/heads/" + selected, "--jq", ".object.sha");
+            if (!head.Ok || !Regex.IsMatch(head.Text.Trim(), "^[0-9a-fA-F]{40}$"))
+                throw new Exception("Não foi possível confirmar o commit atual no GitHub.");
+
+            var list = await Run("gh", "run", "list", "-R", Repo,
+                "--workflow", "compilar-correcao-wasd.yml",
+                "--branch", selected, "--status", "success",
+                "--json", "databaseId,headSha", "--limit", "30");
+            if (!list.Ok) throw new Exception("Não foi possível consultar as compilações do jogo: " + Short(list.Text));
+
+            long runId = 0;
+            using (var document = JsonDocument.Parse(list.Text))
+            {
+                foreach (var item in document.RootElement.EnumerateArray())
+                {
+                    if (item.TryGetProperty("headSha", out var sha) &&
+                        string.Equals(sha.GetString(), head.Text.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        item.TryGetProperty("databaseId", out var id))
+                    {
+                        runId = id.GetInt64();
+                        break;
+                    }
+                }
+            }
+            if (runId == 0)
+                throw new Exception("Ainda não existe EXE aprovado para o último commit do jogo. Consulte GitHub Actions → Compilar correcao controles WASD Windows.");
+
+            var marker = Path.Combine(Path.GetDirectoryName(target)!, ".clareira-exe-versao.txt");
+            if (File.Exists(marker))
+            {
+                var values = File.ReadAllLines(marker);
+                if (values.Length >= 3 && values[0] == runId.ToString() &&
+                    values[1].Equals(head.Text.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    values[2].Equals(HashFile(target), StringComparison.OrdinalIgnoreCase))
+                {
+                    status.Text = "O executável do jogo já está atualizado";
+                    status.ForeColor = Color.LightGreen;
+                    Log("O EXE instalado corresponde à compilação " + runId);
+                    return;
+                }
+            }
+
+            Log("Baixando executável da compilação validada #" + runId + "...");
+            temporary = Path.Combine(Path.GetTempPath(), "Clareira-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(temporary);
+            var result = await Run("gh", "run", "download", runId.ToString(), "-R", Repo,
+                "--name", "Clareira-Correcao-WASD-Windows",
+                "--dir", temporary);
+            if (!result.Ok) throw new Exception("Falha ao baixar o executável: " + Short(result.Text));
+            var downloaded = Path.Combine(temporary, "Clareira-dos-Goblins.exe");
+            if (!File.Exists(downloaded)) throw new Exception("O arquivo EXE não veio no pacote do GitHub.");
+            using (var stream = File.OpenRead(downloaded))
+            {
+                if (stream.Length < 1000000 || stream.ReadByte() != 0x4D || stream.ReadByte() != 0x5A)
+                    throw new Exception("Executável baixado inválido. Nenhum arquivo foi substituído.");
+            }
+
+            // Copia em staging na mesma unidade e troca atomicamente (com backup).
+            var destFolder = Path.GetDirectoryName(target)!;
+            Directory.CreateDirectory(destFolder);
+            var staging = Path.Combine(destFolder, ".Clareira-Nova-" + Guid.NewGuid().ToString("N") + ".exe");
+            var backup = target + ".backup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            File.Copy(downloaded, staging);
+            try
+            {
+                if (Process.GetProcessesByName("Clareira-dos-Goblins").Length > 0)
+                    throw new Exception("O jogo foi aberto durante o download. Feche-o e tente novamente.");
+                if (File.Exists(target))
+                    File.Replace(staging, target, backup, true);
+                else
+                    File.Move(staging, target);
+            }
+            finally
+            {
+                if (File.Exists(staging)) File.Delete(staging);
+            }
+            File.WriteAllLines(marker, new[] { runId.ToString(), head.Text.Trim(), HashFile(target) });
+            status.Text = "Jogo (EXE) atualizado com sucesso";
+            status.ForeColor = Color.LightGreen;
+            Log(status.Text + " — compilação #" + runId);
+            if (File.Exists(backup)) Log("Backup do executável anterior: " + backup);
+            if (!automatic)
+                MessageBox.Show(this, "Jogo atualizado na mesma pasta. Abra JOGAR.cmd para testar.",
+                    "Clareira dos Goblins", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            if (automatic) { Log("EXE ainda não atualizado: " + ex.Message); status.Text = "Atualização do EXE requer atenção"; }
+            else Alert(ex.Message);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(temporary))
+                try { if (Directory.Exists(temporary)) Directory.Delete(temporary, true); } catch { }
+            busy = false; update.Enabled = true; updateGame.Enabled = true;
+        }
+    }
+
+    static string HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
 
     bool ConfirmOverwrite(string message)
     {
