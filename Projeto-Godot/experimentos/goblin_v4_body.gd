@@ -50,7 +50,7 @@ static func _tube(path: Array,radii: Array,segments := 24,subdivisions := 4) -> 
 		for k in range(segments+1):
 			var phi:=TAU*float(k)/float(segments)
 			var radius: Vector2=radii_out[i]
-			var at:=center+normal*cos(phi)*radius.x+bitangent*sin(phi)*radius.y
+			var at:=center+normal*cos(phi)*radius.x-bitangent*sin(phi)*radius.y
 			points.append(at)
 	return FACE.smooth_mesh(points,segments+1,rows.size())
 
@@ -239,7 +239,7 @@ static func _boot_mesh(x: float) -> ArrayMesh:
 		for k in range(cols):
 			var a:=TAU*float(k)/float(cols-1)
 			var at:=Vector3(x+cos(a)*profile.y,
-				profile.w+sin(a)*profile.z,
+				profile.w-sin(a)*profile.z,
 				profile.x)
 			points.append(at)
 	return FACE.smooth_mesh(points,cols,rows)
