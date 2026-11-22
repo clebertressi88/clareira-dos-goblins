@@ -3,6 +3,21 @@ extends RefCounted
 ## A origem de ambos e a base do caule, posicionada no topo do toco (Y=.52).
 const FOLIAGE := preload("res://forest_tree_visual.gd")
 
+static func make_bud(root: Node3D, tree_id: String) -> void:
+	# Broto curto: caule fino marrom-esverdeado e folhas individuais recortadas.
+	# Origem local = ponto de corte do toco, sem escalas que criem haste gigante.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = absi(hash(tree_id + "-broto"))
+	var stem_mat := StandardMaterial3D.new()
+	stem_mat.albedo_color = Color("#6d7739")
+	stem_mat.roughness = 1.0
+	_add_wood(root,Vector3.ZERO,Vector3(0,0.19,0),0.015,stem_mat)
+	for i in range(3):
+		var a := TAU*float(i)/3.0 + rng.randf_range(-0.2,0.2)
+		var radius := 0.065 if i<2 else 0.025
+		var center := Vector3(cos(a)*radius,0.14+float(i)*0.028,sin(a)*radius)
+		_add_foliage(root,center,0.16,a,rng)
+
 static func make_stage(root: Node3D, bark: Material, tree_id: String, young: bool) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi(hash(tree_id + ("-jovem" if young else "-muda")))
