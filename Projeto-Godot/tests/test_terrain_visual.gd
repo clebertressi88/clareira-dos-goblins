@@ -1,4 +1,5 @@
 extends SceneTree
+const TERRAIN := preload("res://landscape_terrain.gd")
 ## Valida que o visual e a fisica compartilham a mesma altura no relevo
 ## e que o jogador nao fica visualmente embaixo do solo ou do rio.
 func _initialize() -> void:
@@ -76,14 +77,13 @@ func _run() -> void:
 	print("SPAWN SAFETY TEST OK: jogador recuperado acima do relevo.")
 
 	# Rio: a camera nao deve ficar submersa caso o jogador alcance o leito.
-	var terrain := load("res://landscape_terrain.gd")
-	var river_x: float = terrain.river_x(0.0)
-	player.position = Vector3(river_x,terrain.WATER_LEVEL-3.0,0.0)
+	var river_x: float = TERRAIN.river_x(0.0)
+	player.position = Vector3(river_x,TERRAIN.WATER_LEVEL-3.0,0.0)
 	player.velocity = Vector3.ZERO
 	for i in range(3):
 		await physics_frame
 	var camera := game.get("camera") as Camera3D
-	if camera.global_position.y < terrain.WATER_LEVEL+.1:
+	if camera.global_position.y < TERRAIN.WATER_LEVEL+.1:
 		fail("Camera continua submersa no rio: " + str(camera.global_position.y))
 		return
 	print("WATER CAMERA TEST OK: camera acima do rio.")
