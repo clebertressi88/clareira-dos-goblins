@@ -457,7 +457,29 @@ func create_chunk(key: Vector2i) -> void:
 	mesh.generate_normals()
 	var geometry := mesh.commit()
 	var land := mesh_part(chunk,geometry,Vector3.ZERO,Vector3.ONE,materials["grass"])
-	land.create_trimesh_collision()
+	land.name = "TerrenoVisual"
+	# Colisao independente da malha visual. O metodo create_trimesh_collision()
+	# nao estava produzindo superficie fisica detectavel no teste de caminhada.
+	# HeightMapShape3D fornece solo continuo, sem costas de triangulos abertas.
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "TerrenoFisico"
+	floor_body.collision_layer = SOLID
+	floor_body.collision_mask = 0
+	floor_body.position = Vector3(float(key.x*CHUNK)+float(CHUNK)*.5,0.0,float(key.y*CHUNK)+float(CHUNK)*.5)
+	chunk.add_child(floor_body)
+	var height_shape := HeightMapShape3D.new()
+	height_shape.map_width = CHUNK+1
+	height_shape.map_depth = CHUNK+1
+	var heights := PackedFloat32Array()
+	heights.resize((CHUNK+1)*(CHUNK+1))
+	for zi in range(CHUNK+1):
+		for xi in range(CHUNK+1):
+			heights[zi*(CHUNK+1)+xi] = ground(float(key.x*CHUNK+xi),float(key.y*CHUNK+zi))
+	height_shape.map_data = heights
+	var floor_collision := CollisionShape3D.new()
+	floor_collision.name = "ColisaoTerreno"
+	floor_collision.shape = height_shape
+	floor_body.add_child(floor_collision)
 	create_river_chunk(chunk,key)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
