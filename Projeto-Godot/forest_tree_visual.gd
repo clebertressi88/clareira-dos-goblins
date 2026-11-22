@@ -3,6 +3,7 @@ extends RefCounted
 ## Cartoes de folhas recortadas e cruzadas, semente estavel por arvore.
 static var shared_leaf_material: StandardMaterial3D
 static var shared_leaf_mesh: QuadMesh
+const WOOD := preload("res://forest_wood_geometry.gd")
 
 static func _leaf_material() -> StandardMaterial3D:
 	if shared_leaf_material != null:
@@ -33,9 +34,9 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 		var angle := TAU*float(i)/7.0+rng.randf_range(-0.24,0.24)
 		var height := rng.randf_range(1.45,2.24)
 		var radius := rng.randf_range(0.65,1.02)
-		var start := Vector3(cos(angle)*0.11,height,sin(angle)*0.11)
-		var tip := Vector3(cos(angle)*radius,height+0.36,sin(angle)*radius)
-		_add_branch(growth,start,tip,bark)
+		var start := Vector3(cos(angle)*0.055,height,sin(angle)*0.055)
+		var tip := Vector3(cos(angle)*radius,height+rng.randf_range(0.24,0.55),sin(angle)*radius)
+		WOOD.make_branch(growth,start,tip,rng.randf_range(0.078,0.117),bark)
 
 	# Copas compostas de ramos e folhas pequenas em varias profundidades.
 	# Duas cartas cruzadas em cada volume deixam as folhas visiveis de todos os lados.
@@ -51,20 +52,6 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 	for i in range(6):
 		var angle := float(i)*TAU/6.0
 		_add_leaf_cluster(growth,Vector3(cos(angle)*0.24,3.04+variation,sin(angle)*0.24),0.59,angle,rng)
-
-static func _add_branch(parent: Node3D, start: Vector3, tip: Vector3, bark: Material) -> void:
-	var delta := tip-start
-	var mesh := CylinderMesh.new()
-	mesh.bottom_radius = 0.07
-	mesh.top_radius = 0.025
-	mesh.height = delta.length()
-	mesh.radial_segments = 6
-	var part := MeshInstance3D.new()
-	part.mesh = mesh
-	part.material_override = bark
-	part.position = (start+tip)*0.5
-	part.quaternion = Quaternion(Vector3.UP,delta.normalized())
-	parent.add_child(part)
 
 static func _add_leaf_cluster(parent: Node3D, pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> void:
 	var leaf_material := _leaf_material()
