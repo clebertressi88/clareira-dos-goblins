@@ -27,6 +27,8 @@ jobs:
           echo 'Nenhum executavel ou cache versionado.'
       - name: Validar modularizacao e compatibilidade
         run: python3 tests/verificar_estrutura.py
+      - name: Validar modelo GLB e integracao dos goblins
+        run: python3 tests/verificar_goblin.py
       - name: Instalar Godot 4.7.2 (Linux headless)
         shell: bash
         run: |
@@ -43,3 +45,7 @@ jobs:
         shell: bash
         run: |
           timeout 120 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 --headless --path Projeto-Godot --quit-after 3
+      - name: Testar goblin 3D no Godot (headless)
+        shell: bash
+        run: |
+          timeout 90 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 --headless --path Projeto-Godot --script res://tests/testar_goblin.gd

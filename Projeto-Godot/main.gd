@@ -9,6 +9,7 @@ const InterfaceSistema = preload("res://sistemas/interface.gd")
 const ReceitasSistema = preload("res://sistemas/receitas.gd")
 const SalvamentoSistema = preload("res://sistemas/salvamento.gd")
 const ConstrucaoSistema = preload("res://sistemas/construcao.gd")
+const GoblinModelo = preload("res://personagens/goblin_visual.gd")
 
 const SAVE := "user://clareira-nativa.json"
 const CELL := 0.85
@@ -747,6 +748,9 @@ func move_parts_to_limb(parent: Node3D, pivot: Node3D, start: int) -> void:
 		part.position = local
 
 func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) -> void:
+	if model.has_meta("goblin_glb"):
+		GoblinModelo.animar(model, velocity, dt, grounded)
+		return
 	if not model.has_meta("gait"):
 		return
 	var speed := minf(Vector2(velocity.x,velocity.z).length(),8.)
@@ -775,6 +779,9 @@ func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) ->
 				pivot.position.y += maxf(0.,cos(phase+(PI if i%4==3 else 0.)))*.046*blend
 
 func goblin(o: Node3D, garment: Color, protagonist := false) -> void:
+	# NPCs passam a usar o GLB enviado; protagonista permanece com a aparencia original.
+	if not protagonist and GoblinModelo.anexar(o):
+		return
 	var guardian := garment==Color("#784d88")
 	var bruma := garment==Color("#9b4b78")
 	var skin := Color("#8c9a53") if protagonist else Color("#77706a") if guardian else Color("#889352") if bruma else Color("#65794b")
