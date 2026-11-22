@@ -7,8 +7,8 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 	rng.seed = absi(hash(tree_id))
 	var variation := rng.randi_range(0, 3)
 	var green_colors := [
-		Color("#345c32"), Color("#426e39"), Color("#527d43"),
-		Color("#60834a"), Color("#728d50")
+		Color("#294b2d"), Color("#345c32"), Color("#426e39"),
+		Color("#527d43"), Color("#60834a"), Color("#789456")
 	]
 	var foliage_materials: Array[StandardMaterial3D] = []
 	for col in green_colors:
@@ -41,6 +41,19 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 		var width := rng.randf_range(0.96, 1.33)
 		var depth := rng.randf_range(0.90, 1.24)
 		_add_leaf(growth, leaf_mesh, pos, Vector3(width, rng.randf_range(0.85, 1.20), depth), foliage_materials[(i + variation) % foliage_materials.size()])
+	# Tufos externos menores desenham bordas irregulares como ramos com folhas.
+	# Sao malhas visuais leves; nao recebem collider nem impedem a passagem.
+	for i in range(12):
+		var angle := TAU * (float(i) / 12.0) + rng.randf_range(-0.17, 0.17)
+		var radius := rng.randf_range(0.77, 1.17)
+		var y := rng.randf_range(2.00, 2.94) + float(variation) * 0.07
+		var pos := Vector3(cos(angle) * radius, y, sin(angle) * radius)
+		var size := rng.randf_range(0.43, 0.73)
+		_add_leaf(growth, leaf_mesh, pos, Vector3(size * 1.25, size, size), foliage_materials[(i + variation + 1) % foliage_materials.size()])
+	# Pequenos preenchimentos fecham buracos visuais debaixo da copa.
+	for i in range(5):
+		var angle := TAU * float(i) / 5.0
+		_add_leaf(growth, leaf_mesh, Vector3(cos(angle) * 0.34, 1.99 + rng.randf_range(-0.14, 0.15), sin(angle) * 0.34), Vector3(0.82, 0.72, 0.82), foliage_materials[(i + variation) % 3])
 	# Topo estreito para dar uma silhueta de arvore em vez de um bloco arredondado.
 	_add_leaf(growth, leaf_mesh, Vector3(0.0, 3.02 + float(variation) * 0.10, 0.0), Vector3(1.08, 1.02, 1.08), foliage_materials[(variation + 2) % foliage_materials.size()])
 
