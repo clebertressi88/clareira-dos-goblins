@@ -2546,6 +2546,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_R: eat()
 			KEY_F: primary()
 			KEY_V: toggle_view()
+			KEY_PAGEUP:
+				build_level = mini(build_level+1,BUILD_MAX_LEVEL)
+				notice("Construção: %s" % (["térreo","segundo pavimento","terceiro pavimento","teto do terceiro pavimento"][build_level]))
+			KEY_PAGEDOWN:
+				build_level = maxi(build_level-1,0)
+				notice("Construção: %s" % (["térreo","segundo pavimento","terceiro pavimento","teto do terceiro pavimento"][build_level]))
+			KEY_T:
+				build_rotation = (build_rotation+1)%4
+				notice("Girar parede: %d°" % (build_rotation*90))
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:
 			selected = event.keycode-KEY_1
 	if not moving:
@@ -2635,7 +2644,9 @@ func _physics_process(dt: float) -> void:
 		next_interaction_hint = elapsed+.12
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
-		if not hit.is_empty():
+		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
+			interaction_hint = "Clique: construir · PgUp/PgDn: pavimento %d · T: girar parede" % (build_level+1)
+		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
