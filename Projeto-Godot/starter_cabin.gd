@@ -5,6 +5,7 @@ extends RefCounted
 static func piece(game, body: StaticBody3D, pos: Vector3, size: Vector3, texture: String, color: Color, roll: float = 0.0) -> void:
 	var visual: MeshInstance3D = game.box(body,pos,size,texture,color)
 	visual.rotation.z = roll
+	preload("res://cabin_materials.gd").apply(game,visual,"roof" if texture=="roof" else ("clay" if texture=="plank" else "wood"),color)
 	var shape := BoxShape3D.new()
 	shape.size = size
 	var collision := CollisionShape3D.new()
@@ -16,6 +17,7 @@ static func piece(game, body: StaticBody3D, pos: Vector3, size: Vector3, texture
 static func trim_box(game, body: Node3D, pos: Vector3, size: Vector3, color: Color, angle: float = 0.0, texture: String = "wood") -> void:
 	var visual: MeshInstance3D = game.box(body,pos,size,texture,color)
 	visual.rotation.z = angle
+	preload("res://cabin_materials.gd").apply(game,visual,"roof" if texture=="roof" else ("clay" if texture=="plank" else "wood"),color)
 
 static func beam(game, body: Node3D, a: Vector3, b: Vector3, radius: float, color: Color) -> void:
 	var length := a.distance_to(b)
@@ -23,16 +25,17 @@ static func beam(game, body: Node3D, a: Vector3, b: Vector3, radius: float, colo
 		return
 	var visual: MeshInstance3D = game.cylinder(body,(a+b)*.5,radius,length,"wood",color)
 	visual.quaternion = Quaternion(Vector3.UP,(b-a).normalized())
+	preload("res://cabin_materials.gd").apply(game,visual,"wood",color)
 
 static func build(game, body: StaticBody3D) -> void:
-	var plaster := Color("#80714d")
-	var clay := Color("#91805b")
-	var timber := Color("#433322")
-	var wood := Color("#735331")
+	var plaster := Color("#766d4e")
+	var clay := Color("#857052")
+	var timber := Color("#392a1e")
+	var wood := Color("#6f5132")
 	var moss := Color("#475e31")
-	var roof := Color("#4f4931")
+	var roof := Color("#4b4b31")
 	# Fundacao elevada e piso transitavel com juntas irregulares.
-	piece(game,body,Vector3(0,.12,0),Vector3(5.4,.24,5.4),"plank",wood)
+	piece(game,body,Vector3(0,.12,0),Vector3(5.4,.24,5.4),"wood",wood)
 	for i in range(11):
 		var x := -2.45+float(i)*.48
 		trim_box(game,body,Vector3(x,.248,0),Vector3(.025,.012,5.25),timber)
@@ -98,20 +101,19 @@ static func build(game, body: StaticBody3D) -> void:
 	for i in range(7):
 		var x := -1.50+float(i)*.50
 		trim_box(game,body,Vector3(x,2.72+float(i%3)*.025,3.39),Vector3(.57,.075,1.24),Color("#504630") if i%2==0 else Color("#6c5936"),0.0,"roof")
-	# Molduras, divisores e vidro transparentes, somente visuais.
+	# Janelas totalmente abertas: sem vidro, planos opacos ou colisoes invisiveis.
+	# Apenas moldura grosseira e uma pequena travessa de madeira fora do centro.
 	for z in [-2.75]:
 		for x in [-.85,.85]:
 			trim_box(game,body,Vector3(x,1.51,z),Vector3(.075,1.23,.075),timber)
 		trim_box(game,body,Vector3(0,1.51,z),Vector3(1.75,.08,.075),timber)
-		var pane: MeshInstance3D = game.box(body,Vector3(0,1.51,z),Vector3(1.59,1.10,.018),"glass",Color("#8eae93"))
-		pane.transparency = .60
+		trim_box(game,body,Vector3(-.22,1.52,z),Vector3(.055,1.20,.06),wood,.09)
 	for side in [-1,1]:
 		var x := float(side)*2.75
 		for z in [-.85,.85]:
 			trim_box(game,body,Vector3(x,1.51,z),Vector3(.075,1.23,.075),timber)
 		trim_box(game,body,Vector3(x,1.51,0),Vector3(.075,.08,1.75),timber)
-		var pane: MeshInstance3D = game.box(body,Vector3(x,1.51,0),Vector3(.018,1.10,1.59),"glass",Color("#8eae93"))
-		pane.transparency = .60
+		trim_box(game,body,Vector3(x,1.51,-.25),Vector3(.06,.90,.055),wood,.08)
 	# Pequenos reparos assimetricos, ferragens e bandeirola tribal.
 	for k in range(8):
 		var x := -2.18+float(k%4)*1.35
