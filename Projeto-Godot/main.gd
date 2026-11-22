@@ -7,11 +7,12 @@ const TERRAIN := preload("res://landscape_terrain.gd")
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
+var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2"}
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6]}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira"}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
 const VINE := 11
@@ -25,6 +26,8 @@ const WALL_ITEM := 16
 const DOORWAY_ITEM := 17
 const WINDOW_ITEM := 18
 const BENCH2_ITEM := 19
+const SHOVEL_ITEM := 20
+const SAPLING_ITEM := 21
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
@@ -42,7 +45,7 @@ var craft_cells: Array[Vector2i] = []
 var craft_material := -1
 const SOLID := 1
 const TARGET := 2
-var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
 var placed: Array = []
@@ -54,7 +57,7 @@ var materials: Dictionary = {}
 var surface_textures: Dictionary = {}
 var wolf_face_materials: Dictionary = {}
 var roaming_wolf: CharacterBody3D
-var wolf_spawn_timer := randf_range(95.0,175.0)
+var wolf_spawn_timer := 12.0
 var rock_mesh: ArrayMesh
 var sphere_mesh := SphereMesh.new()
 var cube_mesh := BoxMesh.new()
@@ -71,11 +74,12 @@ var spear_tip: MeshInstance3D
 var axe: Node3D
 var wood_axe_head: MeshInstance3D
 var stone_axe_head: Node3D
+var shovel_head: Node3D
 var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/9.png"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/9.png"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -405,6 +409,12 @@ func make_player() -> void:
 	stone_axe_head = Node3D.new()
 	axe.add_child(stone_axe_head)
 	make_stone_axe_head(stone_axe_head)
+	shovel_head = Node3D.new()
+	shovel_head.name = "CabecaPa"
+	axe.add_child(shovel_head)
+	var shovel_blade := box(shovel_head,Vector3(.07,.32,0),Vector3(.28,.37,.085),"wood_shovel_blade",Color("#a07a4d"))
+	shovel_blade.rotation.z = -.18
+	shovel_head.hide()
 	stone_axe_sprite = Sprite3D.new()
 	stone_axe_sprite.name = "MachadoPedraAprovado"
 	stone_axe_sprite.texture = preload("res://icones/machado_pedra_equipado.png")
@@ -497,6 +507,8 @@ func create_chunk(key: Vector2i) -> void:
 			continue
 		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "vine_bush"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
+		if kind=="tree" and cleared_stumps.has(id):
+			continue
 		var at := Vector3(x,ground(x,z),z)
 		# Compatibilidade: antigas arvores cortadas ficavam em "removed".
 		# Transforma-as em tocos regenerativos sem reaparecer adultas de uma vez.
@@ -829,6 +841,19 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			coil.ring_segments = 8
 			mesh_part(o,coil,Vector3.UP*.07,Vector3.ONE,material("rope",Color("#cfb17e")))
 			collider(o,Vector3(.45,.17,.45),Vector3.UP*.08)
+		"shovel":
+			var tool := Node3D.new()
+			o.add_child(tool)
+			tool.position = Vector3(0,.12,0)
+			tool.rotation.z = PI*.5
+			cylinder(tool,Vector3(0,.04,0),.037,.70,"wood",Color("#895e35"))
+			box(tool,Vector3(0,.40,0),Vector3(.27,.33,.07),"wood_shovel_blade",Color("#b69a69"))
+			collider(o,Vector3(.45,.25,.75),Vector3.UP*.125)
+		"sapling":
+			cylinder(o,Vector3(0,.20,0),.025,.33,"sprout_stem",Color("#875832"))
+			ball(o,Vector3(-.11,.36,0),Vector3(.26,.13,.19),"sprout_leaf",Color("#79b54d"))
+			ball(o,Vector3(.12,.42,0),Vector3(.23,.14,.19),"sprout_leaf2",Color("#9ec85b"))
+			collider(o,Vector3(.40,.45,.40),Vector3.UP*.22)
 		"stone_axe":
 			var tool := Node3D.new()
 			o.add_child(tool)
@@ -1903,7 +1928,7 @@ func craft_status(recipe: String) -> String:
 		return "Receita pronta · clique no item para fabricar"
 	match craft_mode:
 		"station":
-			return "Lanças, machados, mochila, paredes e bancada 2 com tampo de pedra."
+			return "Lanças, machados, pá (1 tábua + 2 gravetos), mochila e construções."
 		_:
 			var kinds: Array = []
 			for cell in craft_cells:
@@ -2060,7 +2085,7 @@ func craft_basic() -> void:
 	if kind.is_empty():
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8}
 	}[kind]
 	for index: int in costs:
 		stock[index] -= costs[index]
@@ -2391,11 +2416,12 @@ func _physics_process(dt: float) -> void:
 	spear.visible = not third_person and held in [0,8]
 	if spear.visible:
 		spear_tip.material_override = materials["rock"] if held==0 else material("wood",Color("#855b36"))
-	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE]
+	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
 	wood_axe_head.visible = held==WOOD_AXE
 	stone_axe_head.visible = false
+	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
-	axe.get_node("CaboMachadoMadeira").visible = held==WOOD_AXE
+	axe.get_node("CaboMachadoMadeira").visible = held in [WOOD_AXE,SHOVEL_ITEM]
 	axe.rotation.x = -.44-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.67
 	spear.position.z = -.77-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.31
 	if elapsed>feedback_until and moving:
@@ -2412,6 +2438,7 @@ func _physics_process(dt: float) -> void:
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
+				"stump": interaction_hint = "Pá + clique esquerdo · desenterrar toco"
 	hint.text = feedback if not feedback.is_empty() else interaction_hint
 	if player.position.y < -12:
 		respawn()
@@ -2830,6 +2857,7 @@ func load_game() -> void:
 			bar_items[i] = item
 	sync_hotbar()
 	removed = data.get("removed",{})
+	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
 	placed = data.get("placed",[])
 	health = int(data.get("health",100))
@@ -2846,7 +2874,7 @@ func save_game() -> void:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots}))
 		file.close()
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE+".tmp"),ProjectSettings.globalize_path(SAVE))
