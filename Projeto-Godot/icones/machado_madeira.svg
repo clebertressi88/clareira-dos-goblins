@@ -1,20 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
 <defs>
- <linearGradient id="shaft" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#603917"/><stop offset=".45" stop-color="#a76c38"/><stop offset="1" stop-color="#704423"/></linearGradient>
- <linearGradient id="blade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d49b58"/><stop offset=".56" stop-color="#a86b32"/><stop offset="1" stop-color="#71411e"/></linearGradient>
+<linearGradient id="wood" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#dfa05a"/><stop offset=".48" stop-color="#b7773b"/><stop offset="1" stop-color="#81502c"/></linearGradient>
+<linearGradient id="shaft" x1="0" x2="1"><stop stop-color="#693a21"/><stop offset=".48" stop-color="#ad6836"/><stop offset="1" stop-color="#754121"/></linearGradient>
 </defs>
-<!-- Machado de madeira: mesma forma de machado de pedra, lamina esculpida em madeira, fundo transparente. -->
-<g transform="rotate(-43 256 256)" stroke-linejoin="round" stroke-linecap="round">
- <rect x="225" y="139" width="62" height="327" rx="25" fill="#482d18" stroke="#362316" stroke-width="7"/>
- <rect x="235" y="147" width="43" height="304" rx="17" fill="url(#shaft)"/>
- <path d="M240 198 L271 194 M240 311 L271 305 M241 363 L271 355" stroke="#d8a46f" stroke-width="5" opacity=".48"/>
- <path d="M219 120 Q263 107 297 128 L301 176 Q327 183 390 149 Q382 243 322 280 Q295 288 224 252 Z" fill="#693d1e" stroke="#452913" stroke-width="12"/>
- <path d="M229 126 Q261 117 291 134 L295 186 Q324 189 382 160 Q374 238 319 271 Q294 276 233 244 Z" fill="url(#blade)"/>
- <path d="M381 162 Q366 232 319 267" fill="none" stroke="#edbb77" stroke-width="11"/>
- <path d="M297 139 Q326 178 311 248 M321 189 Q344 213 337 242 M245 150 L282 180 M249 189 L281 208" fill="none" stroke="#6b4526" stroke-width="5" opacity=".5"/>
- <path d="M213 155 L300 210 M213 175 L300 227 M222 212 L295 164" stroke="#59422d" stroke-width="21" opacity=".6"/>
- <path d="M214 151 L301 205 M216 174 L298 226 M222 210 L294 161" stroke="#c3a074" stroke-width="14"/>
- <path d="M221 148 L301 200 M219 171 L297 222" stroke="#e0c097" stroke-width="4" opacity=".75"/>
- <path d="M227 376 L282 372 M227 394 L282 390" stroke="#a7865d" stroke-width="12"/>
+<!-- Machado de madeira aprovado: laminado largo para a esquerda e cruz de corda. -->
+<g transform="rotate(-28 262 265)" stroke-linejoin="round" stroke-linecap="round">
+<path d="M245 142 C244 127 252 119 266 119 C278 121 287 131 284 147 L293 459 Q290 482 267 485 Q239 484 239 460 Z" fill="url(#shaft)" stroke="#54341f" stroke-width="7"/>
+<path d="M248 151 Q260 140 276 146 L276 452" fill="none" stroke="#c48850" stroke-width="8" opacity=".65"/>
+<path d="M103 149 Q161 167 218 149 Q241 144 255 148 Q291 143 340 126 L369 170 L359 264 L290 271 Q255 260 210 271 Q154 306 115 353 L70 303 Q48 272 73 218 Z" fill="#6a4125" stroke="#54351d" stroke-width="10"/>
+<path d="M107 156 Q161 175 216 155 Q240 153 259 153 Q300 149 339 135 L358 171 L348 258 L288 262 Q251 254 209 262 Q150 297 118 344 L79 300 Q59 270 83 218 Z" fill="url(#wood)"/>
+<path d="M107 158 Q75 220 77 282 L116 338" fill="none" stroke="#f4bc71" stroke-width="10"/>
+<path d="M105 195 Q158 207 207 195 M116 241 Q170 243 219 221 M121 284 Q165 273 201 252" stroke="#8d582e" stroke-width="7" fill="none" opacity=".65"/>
+<path d="M224 152 L293 270 M289 150 L224 265" stroke="#8e7250" stroke-width="20"/>
+<path d="M221 151 L289 265 M288 149 L222 263" stroke="#e8ca9b" stroke-width="13"/>
+<path d="M220 146 Q260 156 297 146 M217 269 Q261 281 302 270" fill="none" stroke="#dfc39c" stroke-width="15"/>
+<path d="M220 143 Q260 152 299 143 M218 265 Q259 275 300 265" fill="none" stroke="#977650" stroke-width="3"/>
 </g>
 </svg>
