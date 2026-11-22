@@ -3294,9 +3294,10 @@ func primary() -> void:
 			notice("Escolha um espaço livre para a pedra.")
 
 func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
-	# Cinco golpes com madeira; quatro com pedra. Nao cortar com as maos.
-	if tool not in [WOOD_AXE,STONE_AXE]:
-		notice("Use um machado para cortar esta árvore.")
+	# Mao livre: 10 golpes, custa 2 de vida por golpe confirmado.
+	# Machado de madeira: 5 golpes; machado de pedra: 4.
+	if tool not in [-1,WOOD_AXE,STONE_AXE]:
+		notice("Use a mão vazia ou um machado para cortar esta árvore.")
 		return false
 	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
 		return false
@@ -3306,11 +3307,20 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		else:
 			notice("Aguarde a sincronização do mundo.")
 		return false
-	var needed := 4 if tool==STONE_AXE else 5
+	var needed := 10 if tool==-1 else (4 if tool==STONE_AXE else 5)
 	var cuts := int(tree.get_meta("cuts",0))+1
+	if tool == -1:
+		var remote_peer := int(tree.get_meta("damage_peer",0))
+		if net_role=="host" and remote_peer>1:
+			net_receive_damage.rpc_id(remote_peer,2)
+		else:
+			health = maxi(0,health-2)
+			if health<=0:
+				respawn()
 	tree.set_meta("cuts",cuts)
 	impact(pos,normal,true)
-	play_tree_chop_sound(pos,tool)
+	if tool!=-1:
+		play_tree_chop_sound(pos,tool)
 	var tree_pos := tree.global_position
 	var attacker_pos: Vector3 = tree.get_meta("fall_from",player.global_position)
 	timber(tree,cuts>=needed)
@@ -3332,7 +3342,7 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		notice("Árvore derrubada. O mesmo tronco com raízes ficou no chão.")
 		save_game()
 		return true
-	notice("Cortando a árvore: %d/%d golpes" % [cuts,needed])
+	notice("Cortando a árvore: %d/%d golpes%s" % [cuts,needed," · -2 de vida" if tool==-1 else ""])
 	return false
 
 
@@ -3948,7 +3958,7 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 # O anfitriao valida os golpes e distribui o estado unico da floresta.
 @rpc("any_peer","call_remote","reliable")
 func net_request_chop_tree(id: String, tool: int) -> void:
-	if net_role!="host" or tool not in [WOOD_AXE,STONE_AXE] or not objects.has(id):
+	if net_role!="host" or tool not in [-1,WOOD_AXE,STONE_AXE] or not objects.has(id):
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
@@ -3964,14 +3974,17 @@ func net_request_chop_tree(id: String, tool: int) -> void:
 		return
 	tree.set_meta("net_last_chop_"+str(peer_id),elapsed)
 	tree.set_meta("fall_from",avatar.global_position)
+	tree.set_meta("damage_peer",peer_id)
 	chop_tree(tree,tool,tree.global_position+Vector3.UP*0.85,Vector3.FORWARD)
+	if is_instance_valid(tree):
+		tree.remove_meta("damage_peer")
 
 
 @rpc("authority","call_remote","reliable")
 func net_tree_chopped(id: String, cuts: int, fell: bool, cut_time: float, from_position: Vector3) -> void:
 	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not net_world_ready:
 		return
-	if cuts<1 or cuts>5 or not from_position.is_finite():
+	if cuts<1 or cuts>10 or not from_position.is_finite():
 		return
 	var tree: Node3D = objects.get(id,null)
 	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
