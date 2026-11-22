@@ -57,6 +57,13 @@ jobs:
           "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_npc_model.gd 2>&1 | tee /tmp/goblin-model-test.log
           grep -q "GOBLIN MODEL OK" /tmp/goblin-model-test.log
 
+      - name: Testar skin V2 no laboratorio isolado
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_skin_v2.gd 2>&1 | tee /tmp/goblin-v2.log
+          grep -q "SKIN V2 OK" /tmp/goblin-v2.log
+
       - name: Exportar EXE Windows
         shell: bash
         run: |

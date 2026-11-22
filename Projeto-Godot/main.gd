@@ -35,6 +35,7 @@ const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
 const NPC_RIG_SCRIPT := preload("res://npc_goblin.gd")
+const GOBLIN_SKIN_TEST_SCENE: PackedScene = preload("res://experimentos/goblin_skin_teste.tscn")
 # O script independente cria malha com pesos, Skeleton3D e animacao articulada.
 const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
 const BACKPACK_SIZE := 12
@@ -1926,6 +1927,8 @@ func show_menu() -> void:
 		label(net_session_message)
 	button("Jogar / continuar", begin)
 	if net_role=="solo":
+		button("Laboratorio: comparar skin atual e skin V2",open_goblin_skin_test)
+	if net_role=="solo":
 		address = LineEdit.new()
 		address.placeholder_text = "IP do computador anfitrião (ex.: 192.168.1.10)"
 		address.text = net_address
@@ -1940,6 +1943,15 @@ func show_menu() -> void:
 	if not feedback.is_empty():
 		label(feedback)
 	button("Salvar e sair", func(): save_game(); get_tree().quit())
+
+func open_goblin_skin_test() -> void:
+	# So entra no laboratorio em modo solo; nao interfere no servidor ou no save.
+	if net_role!="solo":
+		notice("A comparacao de skin esta disponivel somente fora de partidas LAN.")
+		return
+	save_game()
+	get_tree().change_scene_to_packed(GOBLIN_SKIN_TEST_SCENE)
+
 
 func begin() -> void:
 	if net_role=="client" and not net_world_ready:
