@@ -455,8 +455,7 @@ func make_player() -> void:
 	shovel_head = Node3D.new()
 	shovel_head.name = "CabecaPa"
 	axe.add_child(shovel_head)
-	var shovel_blade := box(shovel_head,Vector3(.07,.32,0),Vector3(.28,.37,.085),"wood_shovel_blade",Color("#a07a4d"))
-	shovel_blade.rotation.z = -.18
+	preload("res://wood_shovel_model.gd").build(shovel_head)
 	shovel_head.hide()
 	stone_axe_sprite = Sprite3D.new()
 	stone_axe_sprite.name = "MachadoPedraAprovado"
@@ -978,8 +977,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			o.add_child(tool)
 			tool.position = Vector3(0,.12,0)
 			tool.rotation.z = PI*.5
-			cylinder(tool,Vector3(0,.04,0),.037,.70,"wood",Color("#895e35"))
-			box(tool,Vector3(0,.40,0),Vector3(.27,.33,.07),"wood_shovel_blade",Color("#b69a69"))
+			preload("res://wood_shovel_model.gd").build(tool)
 			collider(o,Vector3(.45,.25,.75),Vector3.UP*.125)
 		"sapling":
 			cylinder(o,Vector3(0,.20,0),.025,.33,"sprout_stem",Color("#875832"))
@@ -3095,7 +3093,7 @@ func _physics_process(dt: float) -> void:
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
 	# O sprite do machado de pedra ja inclui cabo; somente a pa usa o cabo 3D compartilhado.
-	axe.get_node("CaboMachadoMadeira").visible = held==SHOVEL_ITEM
+	axe.get_node("CaboMachadoMadeira").visible = false
 	# Corte frontal: preparacao elevada, descida rapida com o fio, retorno neutro.
 	var chop_t := 1.0-clampf((next_attack-elapsed)/.46,0.0,1.0)
 	var chop_angle := -.44
