@@ -43,9 +43,9 @@ func _run() -> void:
 	var ramps := 0
 	var collisions := 0
 	for child in doorway.get_children():
-		if child.name=="RampaPorta":
+		if child.name.begins_with("RampaPorta"):
 			ramps+=1
-		elif child.name=="ColisaoRampaPorta":
+		elif child.name.begins_with("ColisaoRampaPorta"):
 			collisions+=1
 	if ramps!=2 or collisions!=2:
 		fail("A porta deveria ter duas rampas fisicas: %d visuais, %d colisoes" % [ramps,collisions])
