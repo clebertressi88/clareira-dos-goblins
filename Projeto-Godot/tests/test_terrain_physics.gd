@@ -98,8 +98,9 @@ func _run() -> void:
 	obstacle.collision_mask = 0
 	obstacle.position = Vector3(3.0, guardian_height+1.1, -38.4)
 	var wall := CollisionShape3D.new()
-	wall.shape = BoxShape3D.new()
-	wall.shape.size = Vector3(1.4,2.2,.14)
+	var wall_shape := BoxShape3D.new()
+	wall_shape.size = Vector3(1.4,2.2,.14)
+	wall.shape = wall_shape
 	obstacle.add_child(wall)
 	game.add_child(obstacle)
 	await physics_frame
