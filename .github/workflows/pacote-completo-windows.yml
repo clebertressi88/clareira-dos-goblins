@@ -100,7 +100,7 @@ jobs:
           # Godot regenera arquivos .import existentes e um .uid novo na validacao.
           # Reverte somente metadados de importacao na copia temporaria do CI.
           git -C stage/Codigo-Fonte restore --worktree -- Projeto-Godot
-          git -C stage/Codigo-Fonte clean -f -- Projeto-Godot/landscape_terrain.gd.uid
+          git -C stage/Codigo-Fonte clean -f -- Projeto-Godot/landscape_terrain.gd.uid Projeto-Godot/tests/test_paisagem.gd.uid
           $state = git -C stage/Codigo-Fonte status --porcelain
           if ($state) { throw 'Arquivos locais alterados: o pacote precisa ter projeto Git limpo.' }
       - name: Compactar tudo em ZIP unico
