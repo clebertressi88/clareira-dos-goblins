@@ -135,7 +135,24 @@ jobs:
             gh release create jogo-windows --title 'Clareira dos Goblins - Windows' --notes 'Versao compilada automaticamente da branch main. Baixe o ZIP e extraia antes de jogar.' --latest
             if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar Release.' }
           }
-          gh release upload jogo-windows 'Clareira-dos-Goblins-Windows.zip' --clobber
+          $asset = 'Clareira-dos-Goblins-Windows.zip'
+          $zip = Join-Path $env:GITHUB_WORKSPACE $asset
+          if (-not (Test-Path $zip) -or (Get-Item $zip).Length -le 0) { throw 'ZIP ausente ou vazio antes da publicacao.' }
+          Write-Host "Publicando $asset ($((Get-Item $zip).Length) bytes)..."
+          gh release upload jogo-windows $zip --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Falha no upload da Release.' }
-          gh release edit jogo-windows --notes "Build Windows gerado do commit $env:GITHUB_SHA. Baixe o ZIP e extraia antes de jogar."
-          if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar notas da Release.' }
+          gh release edit jogo-windows --draft=false --notes "Build Windows gerado do commit $env:GITHUB_SHA. Baixe o ZIP e extraia antes de jogar."
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar a Release.' }
+          # Nao reportar sucesso se o atualizador nao conseguir localizar o arquivo.
+          $confirmed = $false
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            $assets = @(gh release view jogo-windows --json assets --jq '.assets[].name')
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao consultar anexos da Release.' }
+            Write-Host "Tentativa $attempt - assets publicados: $($assets -join ', ')"
+            if ($assets -contains $asset) { $confirmed = $true; break }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $confirmed) {
+            throw "Publicacao incompleta: a Release jogo-windows nao contem $asset. O atualizador nao encontrara o ZIP."
+          }
+          Write-Host "Release verificada: $asset disponivel para o atualizador."
