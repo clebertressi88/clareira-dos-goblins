@@ -1815,13 +1815,13 @@ func show_menu() -> void:
 	button("Jogar / continuar", begin)
 	if net_role=="solo":
 		address = LineEdit.new()
-		address.placeholder_text = "IP da rede local, Hamachi ou 127.0.0.1"
+		address.placeholder_text = "IP do computador anfitrião (ex.: 192.168.1.10)"
 		address.text = net_address
 		address.focus_mode = Control.FOCUS_CLICK
 		menu.add_child(address)
 		address.release_focus()
 		label("Todos precisam ter a mesma versão · Porta UDP %d" % NET_PORT)
-		button("Hospedar partida (LAN ou Hamachi)", host_game)
+		button("Hospedar partida na rede local (LAN)", host_game)
 		button("Entrar na partida pelo IP", join_game)
 	else:
 		button("Desconectar da partida", disconnect_and_show_menu)
@@ -3426,7 +3426,7 @@ func host_game() -> void:
 		return
 	net_role = "host"
 	net_connected = true
-	net_session_message = "Sala hospedada: compartilhe seu IPv4 local ou IPv4 do Hamachi (UDP %d)." % NET_PORT
+	net_session_message = "Sala hospedada: compartilhe o IPv4 deste PC com quem está na mesma rede (UDP %d)." % NET_PORT
 	multiplayer.multiplayer_peer = peer
 	notice("Partida hospedada. Porta UDP %d." % NET_PORT)
 	begin()
@@ -3440,8 +3440,8 @@ func join_game() -> void:
 
 
 func join_at_address(ip: String) -> void:
-	if ip.is_empty() or (not IP.is_valid_ip_address(ip) and ip!="localhost"):
-		net_session_message = "Informe um IP válido. Exemplo: 192.168.1.10 ou IPv4 do Hamachi."
+	if ip.is_empty() or (not ip.is_valid_ip_address() and ip!="localhost"):
+		net_session_message = "Informe o IPv4 local do anfitrião. Ex.: 192.168.1.10."
 		notice(net_session_message)
 		show_menu()
 		return
@@ -3479,7 +3479,7 @@ func net_connection_failed() -> void:
 	if net_role!="client":
 		return
 	disconnect_game()
-	net_session_message = "Não foi possível conectar. Confira IP, Hamachi e firewall UDP %d." % NET_PORT
+	net_session_message = "Não foi possível conectar. Confira o IPv4 local e o firewall UDP %d." % NET_PORT
 	notice(net_session_message)
 	show_menu()
 
