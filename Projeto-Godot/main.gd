@@ -85,7 +85,7 @@ var eye_height := 1.49
 var spear: Node3D
 var spear_tip: MeshInstance3D
 var axe: Node3D
-var wood_axe_head: MeshInstance3D
+var wood_axe_head: Node3D
 var stone_axe_head: Node3D
 var shovel_head: Node3D
 var crosshair: Label
