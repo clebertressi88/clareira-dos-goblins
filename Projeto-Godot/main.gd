@@ -2322,11 +2322,11 @@ func build_base_ground(point: Vector3, yaw: float, is_wall: bool) -> float:
 	var maximum := ground(point.x,point.z)
 	var axis := Basis(Vector3.UP,yaw).x
 	for fraction in [-.50,-.25,0.0,.25,.50]:
-		var sample := point+axis*(WALL_SIZE*fraction)
+		var sample: Vector3 = point+axis*(WALL_SIZE*float(fraction))
 		maximum = maxf(maximum,ground(sample.x,sample.z))
 		if not is_wall:
 			for offset in [-.5,.5]:
-				var corner := sample+Vector3(0,0,WALL_SIZE*offset)
+				var corner: Vector3 = sample+Vector3(0,0,WALL_SIZE*float(offset))
 				maximum = maxf(maximum,ground(corner.x,corner.z))
 	return maximum
 
@@ -2370,7 +2370,7 @@ func find_wall_snap(point: Vector3, yaw: float) -> Vector3:
 		var other_axis := Basis(Vector3.UP,float(entry.get("r",0.0))).x.normalized()
 		for old_sign in [-1.0,1.0]:
 			for new_sign in [-1.0,1.0]:
-				var candidate := raised+other_axis*(old_sign*WALL_SIZE*.5)-axis*(new_sign*WALL_SIZE*.5)
+				var candidate: Vector3 = raised+other_axis*(float(old_sign)*WALL_SIZE*.5)-axis*(float(new_sign)*WALL_SIZE*.5)
 				var distance := Vector2(point.x-candidate.x,point.z-candidate.z).length()
 				if distance<best_distance:
 					best_distance = distance
@@ -2390,7 +2390,7 @@ func find_floor_snap(point: Vector3) -> Vector3:
 		var level := int(entry.get("level",0))
 		if kind=="wood_floor" and level==build_level and absf(at.y-point.y)<.30:
 			for offset in [Vector3.RIGHT,Vector3.LEFT,Vector3.FORWARD,Vector3.BACK]:
-				var candidate := at+offset*WALL_SIZE
+				var candidate: Vector3 = at+(offset as Vector3)*WALL_SIZE
 				var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
 				if distance<nearest:
 					best = candidate
@@ -2402,7 +2402,7 @@ func find_floor_snap(point: Vector3) -> Vector3:
 				continue
 			var side := Basis(Vector3.UP,float(entry.get("r",0.0))).z
 			for sign_value in [-1.0,1.0]:
-				var candidate := center+side*(sign_value*WALL_SIZE*.5)
+				var candidate: Vector3 = center+side*(float(sign_value)*WALL_SIZE*.5)
 				var distance := Vector2(candidate.x-point.x,candidate.z-point.z).length()
 				if distance<nearest:
 					best = candidate
