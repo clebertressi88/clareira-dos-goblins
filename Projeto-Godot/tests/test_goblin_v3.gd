@@ -32,8 +32,8 @@ func _run() -> void:
 			fail("Articulacao ausente: "+name)
 			return
 	var parts := model.find_children("*","MeshInstance3D",true,false)
-	if parts.size()<65:
-		fail("O corpo precisa ter todos os detalhes e membros: "+str(parts.size()))
+	if parts.size()<125:
+		fail("O corpo detalhado precisa de pecas e acabamentos: "+str(parts.size()))
 		return
 	for part_node in parts:
 		var part := part_node as MeshInstance3D
@@ -46,6 +46,26 @@ func _run() -> void:
 		if not part.get_parent() is BoneAttachment3D:
 			fail("Parte solta do esqueleto: "+part.name)
 			return
+	if int(model.get_meta("acabamento_v3",0))!=2:
+		fail("O acabamento anatomico detalhado nao foi aplicado")
+		return
+	var names: Dictionary={}
+	var detail_materials := 0
+	for node in parts:
+		var part := node as MeshInstance3D
+		names[part.name]=true
+		if part.material_override is ShaderMaterial:
+			detail_materials+=1
+	for required in ["CranioEsculpido","OrelhaExterna-1","OrelhaExterna1",
+			"IrisAmbarEsq","IrisAmbarDir","NarizPontudo","TorsoAnatomico",
+			"PanturrilhaEsq","PanturrilhaDir","BiqueiraEsq","BiqueiraDir",
+			"PalmaAnatomicaEsq","PalmaAnatomicaDir"]:
+		if not names.has(required):
+			fail("Detalhe anatomico ausente: "+required)
+			return
+	if detail_materials<45:
+		fail("Textura procedural de pele e couro nao foi aplicada: "+str(detail_materials))
+		return
 	var swords: Array=model.get("sword_parts")
 	var shields: Array=model.get("shield_parts")
 	if swords.size()<3 or shields.size()<2:
@@ -100,5 +120,5 @@ func _run() -> void:
 	if not (right.get("sword_parts") as Array)[0].visible or not (right.get("shield_parts") as Array)[0].visible:
 		fail("Controles do laboratorio nao equiparam objetos V3")
 		return
-	print("GOBLIN V3 OK: 16 juntas, %d malhas rigidas, corpo completo, corrida e equipamentos separados." % parts.size())
+	print("GOBLIN V3 OK: 16 juntas, %d malhas articuladas e detalhadas, rosto/orelhas/textura/corrida/equipamentos." % parts.size())
 	quit(0)

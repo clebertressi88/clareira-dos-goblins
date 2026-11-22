@@ -5,6 +5,7 @@ extends Node3D
 ## As pecas acompanham BoneAttachment3D em um Skeleton3D unico:
 ## nao ha pesos de vertices que estiquem os membros.
 ## A cena da partida continua usando o goblin anterior ate aprovacao.
+const VISUAL_DETAILS = preload("res://experimentos/goblin_v3_details.gd")
 
 const NAMES := [
 	"Quadril","Coluna","Pescoco","Cabeca",
@@ -72,6 +73,7 @@ func install() -> bool:
 	if is_instance_valid(skeleton):
 		return true
 	_palette()
+	VISUAL_DETAILS.prepare_palette(self)
 	skeleton = Skeleton3D.new()
 	skeleton.name = "EsqueletoGoblinV3"
 	add_child(skeleton)
@@ -91,6 +93,7 @@ func install() -> bool:
 		skeleton.add_child(anchor)
 		joints[NAMES[i]] = anchor
 	_build_character()
+	VISUAL_DETAILS.enhance(self)
 	set_equipment(false,false)
 	set_meta("skeleton_ready",true)
 	set_meta("modelo_goblin_v3",true)
@@ -117,8 +120,8 @@ func _oval(bone_name: String, label: String, pos: Vector3,
 	var shape := SphereMesh.new()
 	shape.radius=.5
 	shape.height=1.0
-	shape.radial_segments=22
-	shape.rings=12
+	shape.radial_segments=32
+	shape.rings=18
 	return _mesh_on(bone_name,label,shape,pos,rot,dims,material)
 
 func _box(bone_name: String, label: String, pos: Vector3,
@@ -134,8 +137,8 @@ func _rod(bone_name: String, label: String, origin: Vector3, target: Vector3,
 	shape.height=vec.length()
 	shape.bottom_radius=radius
 	shape.top_radius=radius if end_radius<0.0 else end_radius
-	shape.radial_segments=14
-	shape.rings=1
+	shape.radial_segments=20
+	shape.rings=2
 	var direction := vec.normalized()
 	var spin := Basis(Quaternion(Vector3.UP,direction))
 	return _mesh_on(bone_name,label,shape,(origin+target)*.5,

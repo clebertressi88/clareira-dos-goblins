@@ -80,21 +80,21 @@ func _build_controls() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var container := PanelContainer.new()
-	container.position=Vector2(20,18)
-	container.custom_minimum_size=Vector2(350,0)
+	container.position=Vector2(12,22)
+	container.custom_minimum_size=Vector2(294,0)
 	layer.add_child(container)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation",7)
 	container.add_child(column)
 	var title := Label.new()
 	title.text="LABORATORIO DE SKIN DOS GOBLINS"
-	title.add_theme_font_size_override("font_size",17)
+	title.add_theme_font_size_override("font_size",14)
 	column.add_child(title)
 	var subtitle := Label.new()
-	subtitle.text="Esquerda: skin atual  |  Direita: goblin V3 da imagem"
+	subtitle.text="Esquerda: atual\nDireita: V3 detalhado"
 	column.add_child(subtitle)
 	var explanation := Label.new()
-	explanation.text="V3: corpo novo, articulacoes reais e materiais proprios.\nSem deformar membros e sem marca d\u0027agua. Saves preservados."
+	explanation.text="Rosto e corpo remodelados.\nTeste isolado; saves preservados."
 	column.add_child(explanation)
 	_button(column,"Parado",_set_motion.bind("idle"))
 	_button(column,"Caminhar",_set_motion.bind("walk"))
