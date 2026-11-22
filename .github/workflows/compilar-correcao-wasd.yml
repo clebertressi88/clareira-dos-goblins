@@ -1,0 +1,79 @@
+name: Compilar correcao controles WASD Windows
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Projeto-Godot/main.gd'
+      - 'Projeto-Godot/tests/test_paisagem.gd'
+      - 'ferramentas/Correcao-WASD/**'
+      - '.github/workflows/compilar-correcao-wasd.yml'
+jobs:
+  patch-exe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Baixar jogo
+        uses: actions/checkout@v4
+      - name: Baixar Godot 4.7.2 oficial
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path temp,dist | Out-Null
+          curl.exe -fLsS --retry 4 -o temp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Falha download Godot' }
+          Expand-Archive -LiteralPath temp/godot.zip -DestinationPath temp/Godot -Force
+          $exe = Get-ChildItem temp/Godot -Filter 'Godot_v4.7.2-stable_win64.exe' -Recurse -File | Select-Object -First 1
+          if (!$exe) { throw 'Godot nao encontrado' }
+          Copy-Item $exe.FullName -Destination temp/Godot.exe
+      - name: Importar cena e testes de entrada
+        shell: pwsh
+        run: |
+          & ./temp/Godot.exe --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath temp/import.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha de importacao' }
+          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_paisagem.gd 2>&1 | Tee-Object -FilePath temp/controles.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha teste controles' }
+          if (!(Select-String -Path temp/controles.log -SimpleMatch 'CONTROLES TEST OK')) { throw 'Teste WASD/setas nao passou' }
+          if (!(Select-String -Path temp/controles.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Teste regeneracao falhou' }
+      - name: Preparar templates exportacao
+        shell: pwsh
+        run: |
+          curl.exe -fLsS --retry 4 -o temp/templates.tpz https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz
+          if ($LASTEXITCODE -ne 0) { throw 'Falha download templates' }
+          Add-Type -AssemblyName System.IO.Compression
+          $dest = Join-Path $env:APPDATA 'Godot/export_templates/4.7.2.stable'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $z = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path temp/templates.tpz).Path)
+          try {
+            foreach ($name in @('windows_release_x86_64.exe','windows_debug_x86_64.exe','version.txt')) {
+              $entry = $z.Entries | Where-Object { $_.FullName -eq ('templates/' + $name) } | Select-Object -First 1
+              if (!$entry) { throw ('Template nao encontrado: ' + $name) }
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry,(Join-Path $dest $name),$true)
+            }
+          } finally { $z.Dispose() }
+      - name: Exportar jogo Windows
+        shell: pwsh
+        run: |
+          $exe = Join-Path (Resolve-Path dist).Path 'Clareira-dos-Goblins.exe'
+          & ./temp/Godot.exe --headless --path Projeto-Godot --export-release 'Windows Desktop' $exe 2>&1 | Tee-Object -FilePath temp/export.log
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path $exe)) { throw 'Falha exportar EXE' }
+      - name: Testar executavel exportado
+        shell: pwsh
+        run: |
+          $path = (Resolve-Path dist/Clareira-dos-Goblins.exe).Path
+          $log = Join-Path (Resolve-Path temp).Path 'teste-exe.log'
+          & $path --headless --quit-after 90 --log-file $log 2>&1 | Tee-Object -FilePath temp/teste-console.log
+          if ($LASTEXITCODE -ne 0) { throw 'Jogo exportado saiu com erro' }
+          $bad = Select-String -Path $log,temp/teste-console.log -Pattern 'SCRIPT ERROR|ERROR:|Invalid access|FATAL|Node not found' -CaseSensitive:$false
+          if ($bad) { $bad | Select-Object -First 8 | ForEach-Object { Write-Host $_.Line }; throw 'Erros na execucao do EXE' }
+      - name: Incluir instalador de correcao
+        shell: pwsh
+        run: |
+          Copy-Item ferramentas/Correcao-WASD/INSTALAR-CORRECAO.cmd dist/
+          Copy-Item ferramentas/Correcao-WASD/INSTALAR-CORRECAO.ps1 dist/
+          Copy-Item ferramentas/Correcao-WASD/LEIA-ME.txt dist/
+      - name: Disponibilizar patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clareira-Correcao-WASD-Windows
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
