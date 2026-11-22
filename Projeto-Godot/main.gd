@@ -2252,6 +2252,8 @@ func inventory_storage_input(event: InputEvent, item: int) -> void:
 func craft_status(recipe: String) -> String:
 	if not recipe.is_empty():
 		return "Receita pronta · clique no item para fabricar"
+	if craft_mode=="station" and not bench_near():
+		return "Aproxime-se da bancada para fabricar os itens."
 	match craft_mode:
 		"station":
 			return "Lanças, machados, pá, paredes e piso/teto (8 tábuas + 1 tronco)."
@@ -2409,6 +2411,8 @@ func matches_recipe(pattern: Array) -> bool:
 func craft_basic() -> void:
 	var kind := basic_recipe()
 	if kind.is_empty():
+		if craft_mode=="station" and not bench_near():
+			notice("Aproxime-se da bancada para fabricar o item.")
 		return
 	var costs: Dictionary = {
 		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
@@ -3441,7 +3445,7 @@ func bench_near() -> bool:
 	for entry in placed:
 		if entry["kind"] in ["bench","bench2"]:
 			var p: Array = entry["p"]
-			if player.position.distance_to(Vector3(p[0],p[1],p[2]))<3:
+			if player.position.distance_to(Vector3(p[0],p[1],p[2]))<=4.0:
 				return true
 	return false
 
