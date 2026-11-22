@@ -53,3 +53,11 @@ Este repositório deve conter arquivos-fonte e assets de desenvolvimento; os arq
 ## Licença
 
 **Nenhuma licença de redistribuição foi definida.** Até escolher uma licença, não presuma que o código e os recursos podem ser reutilizados por terceiros.
+
+## Organizacao e desempenho
+
+Os algoritmos reutilizaveis foram separados em `Projeto-Godot/sistemas/` (terreno, materiais, visual, inventario, receitas, construcao, interface e salvamento).
+O `main.gd` continua como coordenador para preservar compatibilidade com as cenas e saves atuais.
+Consulte **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)** para encontrar cada subsistema e executar as verificacoes.
+
+Teste estatico local: `python3 tests/verificar_estrutura.py`. Os FPS precisam ser medidos no Godot.
