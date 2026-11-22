@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs><filter id="mineral"><feTurbulence baseFrequency=".052 .079" numOctaves="4" seed="17"/><feColorMatrix type="saturate" values=".08"/><feComponentTransfer><feFuncA type="linear" slope=".48"/></feComponentTransfer></filter></defs>
+<rect width="256" height="256" fill="#98958b"/><rect width="256" height="256" filter="url(#mineral)"/>
+<path d="M-2 182L36 166 59 162 86 138 117 129 165 98 201 88 258 53" stroke="#c2bfb2" stroke-width="1.9" fill="none" opacity=".61" transform="translate(0 1)"/>
+<path d="M-2 182L36 166 59 162 86 138 117 129 165 98 201 88 258 53" stroke="#625e57" stroke-width="1" fill="none" opacity=".66"/>
+</svg>

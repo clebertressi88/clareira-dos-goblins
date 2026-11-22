@@ -1,0 +1,25 @@
+# Normalize textos do Godot no Git; mantenha scripts Windows em CRLF.
+*.gd text eol=lf
+*.tscn text eol=lf
+*.tres text eol=lf
+*.gdshader text eol=lf
+*.godot text eol=lf
+*.cfg text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.glb binary
+*.gltf binary
+*.fbx binary
+*.ogg binary
+*.wav binary
+*.mp3 binary

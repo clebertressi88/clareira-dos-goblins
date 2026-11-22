@@ -1,0 +1,27 @@
+name: Verificar estrutura do projeto
+on:
+  push:
+  pull_request:
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+      - name: Verificar arquivos essenciais
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in Projeto-Godot/project.godot Projeto-Godot/main.tscn Projeto-Godot/main.gd; do
+            test -s "$file" || { echo "Arquivo ausente ou vazio: $file"; exit 1; }
+          done
+          echo "Arquivos basicos presentes."
+      - name: Verificar se ferramentas e executaveis foram ignorados
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)(\.godot|\.ferramentas|logs-geracao|Windows-Atualizado)/|\.(exe|pck|dll|zip)$'; then
+            echo 'Erro: arquivos gerados ou ferramentas foram versionados.'
+            exit 1
+          fi
+          echo 'Nenhum executavel ou cache versionado.'

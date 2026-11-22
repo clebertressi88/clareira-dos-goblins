@@ -1,0 +1,30 @@
+{
+  "project": "Jogo Goblin - Clareira dos Goblins",
+  "format": "PNG RGBA",
+  "size_px": [
+    512,
+    512
+  ],
+  "files": {
+    "0.png": "lanca_pedra",
+    "1.png": "graveto",
+    "2.png": "pedra",
+    "3.png": "carne_crua",
+    "4.png": "couro_coelho",
+    "5.png": "pe_coelho",
+    "6.png": "tronco",
+    "7.png": "tabua",
+    "8.png": "lanca_madeira",
+    "9.png": "machado_madeira",
+    "10.png": "machado_pedra",
+    "11.png": "cipo",
+    "12.png": "corda",
+    "13.png": "bancada_trabalho",
+    "14.png": "fogueira",
+    "15.png": "mochila",
+    "16.png": "grade_craft_1",
+    "17.png": "grade_craft_2",
+    "18.png": "grade_craft_3"
+  },
+  "observacao": "10.png substituido pelo machado de pedra low-poly aprovado; nao altera modelo equipado nem scripts do jogo."
+}
