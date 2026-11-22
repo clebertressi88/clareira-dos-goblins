@@ -2737,29 +2737,7 @@ func primary() -> void:
 						store_object("foot",pos+Vector3(-.41,0,0))
 		return
 	if kind=="stump":
-		if held!=SHOVEL_ITEM:
-			notice("Equipe a pá de madeira para desenterrar o toco e liberar espaço.")
-			return
-		var digs := int(o.get_meta("dig_hits",0))+1
-		o.set_meta("dig_hits",digs)
-		impact(hit["position"],hit["normal"],true)
-		if digs<2:
-			notice("Arrancando raízes com a pá: 1/2")
-			return
-		var stump_id: String = str(o.get_meta("id",""))
-		var age: float = Time.get_unix_time_from_system()-float(tree_regrowth.get(stump_id,0))
-		var got_sapling := age >= TREE_BUD_DELAY and age < TREE_BUD_DELAY+TREE_GROW_SECONDS
-		cleared_stumps[stump_id] = true
-		tree_regrowth.erase(stump_id)
-		remove_object(o)
-		stock[6] += 1
-		item_received(6)
-		if got_sapling:
-			stock[SAPLING_ITEM] += 1
-			item_received(SAPLING_ITEM)
-		sync_hotbar()
-		save_game()
-		notice("Toco removido! +1 tronco" + (" e +1 muda" if got_sapling else "") + ".")
+		dig_stump(o,held,hit["position"],hit["normal"])
 		return
 	if kind=="tree":
 		chop_tree(o,held,hit["position"],hit["normal"])
@@ -2811,6 +2789,35 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		return true
 	notice("Cortando a árvore: %d/%d golpes" % [cuts,needed])
 	return false
+
+
+func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
+	if tool!=SHOVEL_ITEM:
+		notice("Equipe a pá de madeira para desenterrar o toco e liberar espaço.")
+		return false
+	if not is_instance_valid(stump) or str(stump.get_meta("kind",""))!="stump":
+		return false
+	var digs := int(stump.get_meta("dig_hits",0))+1
+	stump.set_meta("dig_hits",digs)
+	impact(pos,normal,true)
+	if digs<2:
+		notice("Arrancando raízes com a pá: 1/2")
+		return false
+	var stump_id: String = str(stump.get_meta("id",""))
+	var age: float = Time.get_unix_time_from_system()-float(tree_regrowth.get(stump_id,0))
+	var got_sapling := age>=TREE_BUD_DELAY and age<TREE_BUD_DELAY+TREE_GROW_SECONDS
+	cleared_stumps[stump_id] = true
+	tree_regrowth.erase(stump_id)
+	remove_object(stump)
+	stock[6] += 1
+	item_received(6)
+	if got_sapling:
+		stock[SAPLING_ITEM] += 1
+		item_received(SAPLING_ITEM)
+	sync_hotbar()
+	save_game()
+	notice("Toco removido! +1 tronco" + (" e +1 muda" if got_sapling else "") + ".")
+	return true
 
 
 func secondary() -> void:
