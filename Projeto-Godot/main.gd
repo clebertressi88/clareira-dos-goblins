@@ -1199,7 +1199,7 @@ func update_tree_visual(tree: Node3D) -> void:
 		update_tree_visual(tree)
 		return
 	tree.set_meta("kind","stump")
-	tree.collision_layer = TARGET
+	tree.collision_layer = SOLID|TARGET
 	stump.visible = progress < .45
 	sprout.visible = age >= TREE_BUD_DELAY and progress < .18
 	sprout.scale = Vector3.ONE * (.45 + minf(progress * 9.0,1.1))
