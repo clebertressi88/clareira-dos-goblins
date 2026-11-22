@@ -21,9 +21,9 @@ func _run() -> void:
 	if player == null:
 		fail("Jogador nao gerado.")
 		return
-	var terrain_h: float = float(game.call("ground",0.0,0.0))
+	var terrain_h: float = float(game.call("ground",1.25,1.25))
 	var world := player.get_world_3d().direct_space_state
-	var ray := PhysicsRayQueryParameters3D.create(Vector3(0,8,0),Vector3(0,-8,0),1)
+	var ray := PhysicsRayQueryParameters3D.create(Vector3(1.25,8,1.25),Vector3(1.25,-8,1.25),1)
 	var hit: Dictionary = world.intersect_ray(ray)
 	if hit.is_empty():
 		fail("Malha de terreno sem colisao fisica sob a clareira.")
@@ -36,7 +36,7 @@ func _run() -> void:
 		return
 	print("SOLO TEST OK: colisao y=%.2f normal=%s" % [hit["position"].y,str(hit["normal"])])
 	# Posicao central limpa de recursos, num patamar horizontal.
-	player.position = Vector3(0.0,terrain_h+0.85,0.0)
+	player.position = Vector3(1.25,terrain_h+0.85,1.25)
 	player.velocity = Vector3.ZERO
 	game.call("begin")
 	Input.action_press("goblin_frente")
