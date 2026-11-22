@@ -24,15 +24,14 @@ jobs:
           $exe = Get-ChildItem temp/Godot -Filter 'Godot_v4.7.2-stable_win64.exe' -Recurse -File | Select-Object -First 1
           if (!$exe) { throw 'Godot nao encontrado' }
           Copy-Item $exe.FullName -Destination temp/Godot.exe
-      - name: Importar cena e testes de entrada
+      - name: Importar projeto e validar scripts
         shell: pwsh
         run: |
           & ./temp/Godot.exe --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath temp/import.log
           if ($LASTEXITCODE -ne 0) { throw 'Falha de importacao' }
-          & ./temp/Godot.exe --headless --path Projeto-Godot --script res://tests/test_paisagem.gd 2>&1 | Tee-Object -FilePath temp/controles.log
-          if ($LASTEXITCODE -ne 0) { throw 'Falha teste controles' }
-          if (!(Select-String -Path temp/controles.log -SimpleMatch 'CONTROLES TEST OK')) { throw 'Teste WASD/setas nao passou' }
-          if (!(Select-String -Path temp/controles.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Teste regeneracao falhou' }
+          $errors = Select-String -Path temp/import.log -Pattern 'SCRIPT ERROR|Parse Error|Failed to load script' -CaseSensitive:$false
+          if ($errors) { $errors | Select-Object -First 8 | ForEach-Object { Write-Host $_.Line }; throw 'Erro de script na importacao' }
+          # Teste completo de WASD roda separadamente na workflow Testar movimento e paisagem Godot.
       - name: Preparar templates exportacao
         shell: pwsh
         run: |
