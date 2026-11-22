@@ -803,6 +803,15 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			cylinder(sprout,Vector3(.12,.67,0),.032,.46,"sprout_stem",Color("#589447"))
 			ball(sprout,Vector3(-.03,.88,0),Vector3(.24,.13,.19),"sprout_leaf",Color("#77a94b"))
 			ball(sprout,Vector3(.23,.93,0),Vector3(.22,.13,.18),"sprout_leaf",Color("#77a94b"))
+			# Muda e jovem usam modelos proprios, com base local zero no corte.
+			var sapling_stage := Node3D.new()
+			sapling_stage.name = "Muda"
+			visual.add_child(sapling_stage)
+			preload("res://tree_growth_stages.gd").make_stage(sapling_stage,materials["tree_bark"],id,false)
+			var young_stage := Node3D.new()
+			young_stage.name = "Jovem"
+			visual.add_child(young_stage)
+			preload("res://tree_growth_stages.gd").make_stage(young_stage,materials["tree_bark"],id,true)
 			collider(o,Vector3(.43,2.7,.43),Vector3.UP*1.35)
 			update_tree_visual(o)
 		"stone","block":
@@ -1547,19 +1556,25 @@ func update_tree_visual(tree: Node3D) -> void:
 	var growth := tree.get_node("Visual/Crescimento") as Node3D
 	var stump := tree.get_node("Visual/Toco") as Node3D
 	var sprout := tree.get_node("Visual/Broto") as Node3D
+	var sapling_stage := tree.get_node("Visual/Muda") as Node3D
+	var young_stage := tree.get_node("Visual/Jovem") as Node3D
 	var collision := tree.get_node_or_null("CollisionShape3D") as CollisionShape3D
 	if collision == null or not (collision.shape is BoxShape3D):
 		push_error("Colisao ausente ou invalida na arvore: " + id)
 		return
 	var shape := collision.shape as BoxShape3D
+	# Esconde sempre todos os modelos antes de escolher a fase.
+	growth.visible = false
+	sprout.visible = false
+	sapling_stage.visible = false
+	young_stage.visible = false
 	if not tree_regrowth.has(id):
 		tree.set_meta("kind","tree")
 		tree.collision_layer = SOLID|TARGET
+		stump.visible = false
 		growth.visible = true
 		growth.position = Vector3.ZERO
 		growth.scale = Vector3.ONE
-		stump.visible = false
-		sprout.visible = false
 		sprout.position = Vector3.ZERO
 		sprout.scale = Vector3.ONE
 		shape.size = Vector3(.43,2.7,.43)
@@ -1573,22 +1588,45 @@ func update_tree_visual(tree: Node3D) -> void:
 		return
 	tree.set_meta("kind","stump")
 	tree.collision_layer = SOLID|TARGET
-	stump.visible = progress < .45
-	sprout.visible = age >= TREE_BUD_DELAY and progress < .18
-	# O broto original inicia em Y=.44; fixamos sua base no topo do toco Y=.52.
-	# Escalar um Node3D no zero fazia o pe do broto subir e parecer flutuar.
-	var sprout_size := .45 + minf(progress * 9.0,1.1)
-	sprout.scale = Vector3.ONE * sprout_size
-	sprout.position = Vector3.UP * (.52 - .44 * sprout_size)
-	growth.visible = progress >= .07
-	# O tronco adulto comeca em Y=.52. Manter a base no corte, mesmo
-	# quando a escala aumenta, elimina o intervalo entre tronco e raiz.
-	var growth_size := maxf(.07,pow(progress,1.05))
-	growth.scale = Vector3.ONE * growth_size
-	growth.position = Vector3.UP * (.52 * (1.0-growth_size))
-	var height := .54 + 2.20 * progress
+	var height := 0.54
+	if progress < 0.12:
+		stump.visible = true
+	elif progress < 0.25:
+		stump.visible = true
+		sprout.visible = true
+		var t := inverse_lerp(0.12,0.25,progress)
+		var factor := lerpf(0.65,1.05,t)
+		sprout.scale = Vector3.ONE*factor
+		# A haste original comeca em Y=.44, a base permanece no corte Y=.52.
+		sprout.position = Vector3.UP*(.52-.44*factor)
+		height = .52+(.90-.44)*factor
+	elif progress < 0.45:
+		stump.visible = false
+		sapling_stage.visible = true
+		var t := inverse_lerp(0.25,0.45,progress)
+		var factor := lerpf(0.70,1.0,t)
+		sapling_stage.scale = Vector3.ONE*factor
+		sapling_stage.position = Vector3.UP*.52
+		height = .52+0.67*factor
+	elif progress < 0.75:
+		stump.visible = false
+		young_stage.visible = true
+		var t := inverse_lerp(0.45,0.75,progress)
+		var factor := lerpf(0.67,1.0,t)
+		young_stage.scale = Vector3.ONE*factor
+		young_stage.position = Vector3.UP*.52
+		height = .52+1.37*factor
+	else:
+		stump.visible = false
+		growth.visible = true
+		var t := inverse_lerp(0.75,1.0,progress)
+		var factor := lerpf(0.72,1.0,t)
+		growth.scale = Vector3.ONE*factor
+		growth.position = Vector3.UP*(.52*(1.0-factor))
+		height = .52+2.20*factor
+	# Sem colisor de folhas: apenas o tronco bloqueia o jogador e os NPCs.
 	shape.size = Vector3(.43,height,.43)
-	collision.position.y = height * .5
+	collision.position.y = height*.5
 
 func update_regrowing_trees() -> void:
 	for id: String in tree_regrowth.keys():
