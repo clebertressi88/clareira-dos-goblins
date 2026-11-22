@@ -1000,8 +1000,8 @@ func build_door_transitions(door: StaticBody3D) -> void:
 		var is_ramp_shape: bool = false
 		if part is CollisionShape3D:
 			var existing_shape := (part as CollisionShape3D).shape as BoxShape3D
-			is_ramp_shape = existing_shape!=null and existing_shape.size.z>1.5
-		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta") or is_ramp_shape:
+			is_ramp_shape = existing_shape!=null and existing_shape.size.z>1.0
+		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta") or part.name.begins_with("LimiarPorta") or is_ramp_shape:
 			if part is CollisionShape3D:
 				part.disabled = true
 			part.queue_free()
@@ -1024,10 +1024,12 @@ func build_door_transitions(door: StaticBody3D) -> void:
 	var sides := [-floor_side] if floor_side!=0.0 else [-1.0,1.0]
 	for side in sides:
 		var outside_distance := 1.65
-		var inside_distance := .32 if floor_side!=0.0 else .08
+		var inside_distance := .30 if floor_side!=0.0 else .08
 		var far_z := float(side)*outside_distance
-		var near_z := -float(side)*inside_distance
-		var span := outside_distance+inside_distance
+		# Com piso, a rampa termina ANTES da borda vertical do piso.
+		# Um patamar horizontal cobre a soleira e entra sobre o painel.
+		var near_z := float(side)*inside_distance if floor_side!=0.0 else -float(side)*inside_distance
+		var span := absf(far_z-near_z)
 		var outside := door.to_global(Vector3(0,0,far_z))
 		var end_y := ground(outside.x,outside.z)+.06
 		if absf(y_top-end_y)<.035:
@@ -1046,6 +1048,20 @@ func build_door_transitions(door: StaticBody3D) -> void:
 		col.position = ramp.position
 		col.rotation = ramp.rotation
 		door.add_child(col)
+		if floor_side!=0.0:
+			# A soleira resolve o impacto contra a quina do piso.
+			var sill_center := (near_z-float(side)*.45)*.5
+			var sill_length := absf(near_z+float(side)*.45)
+			var sill := box(door,Vector3(0,y_top-door.global_position.y-.06,sill_center),
+				Vector3(.72,.12,sill_length+.05),"door_sill",Color("#a88050"))
+			sill.name = "LimiarPorta"
+			var sill_shape := BoxShape3D.new()
+			sill_shape.size = Vector3(.72,.12,sill_length+.05)
+			var sill_collision := CollisionShape3D.new()
+			sill_collision.name = "LimiarPortaColisao"
+			sill_collision.shape = sill_shape
+			sill_collision.position = sill.position
+			door.add_child(sill_collision)
 
 
 func refresh_door_transitions(at: Vector3) -> void:
