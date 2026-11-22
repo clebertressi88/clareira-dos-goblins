@@ -45,8 +45,10 @@ func _run() -> void:
 	for child in doorway.get_children():
 		if child.name.begins_with("RampaPorta"):
 			ramps+=1
-		elif child is CollisionShape3D and child.shape is BoxShape3D and child.shape.size.z>1.5:
-			collisions+=1
+		elif child is CollisionShape3D:
+			var ramp_shape := (child as CollisionShape3D).shape as BoxShape3D
+			if ramp_shape!=null and ramp_shape.size.z>1.5:
+				collisions+=1
 	if ramps!=2 or collisions!=2:
 		for ch in doorway.get_children():
 			print("DOOR DEBUG CHILD:",ch.name," type=",ch.get_class(), " shape=",ch.shape if ch is CollisionShape3D else "")
