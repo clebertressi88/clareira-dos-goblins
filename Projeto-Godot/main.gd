@@ -292,6 +292,14 @@ func setup_world() -> void:
 	rock.uv1_triplanar_sharpness = 3.5
 	rock.uv1_scale = Vector3.ONE*1.45
 	rock.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	# Casca fotografica da referencia do jogador, reaplicada em troncos, tocos e raizes.
+	var bark := material("tree_bark",Color.WHITE)
+	bark.albedo_texture = preload("res://tree_bark_texture.gd").make_texture()
+	bark.uv1_triplanar = true
+	bark.uv1_triplanar_sharpness = 3.5
+	bark.uv1_scale = Vector3(2.0,1.6,2.0)
+	bark.roughness = .96
+	bark.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	rock_mesh = make_rock()
 
 func make_rock() -> ArrayMesh:
@@ -748,16 +756,16 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var base := Node3D.new()
 			base.name = "BaseTronco"
 			visual.add_child(base)
-			cylinder(base,Vector3(0,.26,0),.23,.52,"wood",Color("#855b36"))
+			cylinder(base,Vector3(0,.26,0),.23,.52,"tree_bark",Color.WHITE)
 			for i in range(5):
 				var angle := float(i)*TAU/5.0
-				var root := cylinder(base,Vector3(cos(angle)*.36,.075,sin(angle)*.36),.075,.64,"wood",Color("#6c452d"))
+				var root := cylinder(base,Vector3(cos(angle)*.36,.075,sin(angle)*.36),.075,.64,"tree_bark",Color.WHITE)
 				root.rotation = Vector3(0.0,-angle,PI*.42)
 			var growth := Node3D.new()
 			growth.name = "Crescimento"
 			visual.add_child(growth)
 			# O tronco alto encaixa na mesma base de raio .23, sem salto visual.
-			cylinder(growth,Vector3(0,1.36,0),.23,1.68,"wood",Color("#855b36"))
+			cylinder(growth,Vector3(0,1.36,0),.23,1.68,"tree_bark",Color.WHITE)
 			for i in range(4):
 				var a := i*TAU/4
 				ball(growth,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
@@ -779,7 +787,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			mesh_part(o,rock_mesh,Vector3.UP*CELL/2,Vector3.ONE,materials["rock"])
 			collider(o,Vector3.ONE*CELL,Vector3.UP*CELL/2)
 		"log":
-			var log_mesh := cylinder(o,Vector3(0,.18,0),.17,.61,"wood",Color("#855b36"))
+			var log_mesh := cylinder(o,Vector3(0,.18,0),.17,.61,"tree_bark",Color.WHITE)
 			log_mesh.rotation.z = PI/2
 			collider(o,Vector3(.68,.39,.43),Vector3.UP*.19)
 		"plank":
