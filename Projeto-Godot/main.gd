@@ -166,9 +166,12 @@ func movement_axis() -> Vector2:
 	return Vector2(x,y).normalized()
 
 func _input(event: InputEvent) -> void:
-	if not (event is InputEventKey) or not event.pressed or event.echo:
+	var keyboard := event as InputEventKey
+	if keyboard == null or not keyboard.pressed or keyboard.echo:
 		return
-	var key := event.physical_keycode if event.physical_keycode!=KEY_NONE else event.keycode
+	var key: int = keyboard.physical_keycode
+	if key == KEY_NONE:
+		key = keyboard.keycode
 	if key==KEY_F10 and moving:
 		# Recuperacao manual se um save antigo prender o jogador no relevo.
 		respawn()
