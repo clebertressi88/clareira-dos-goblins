@@ -71,9 +71,16 @@ func _test_character(visual: Node3D, title: String) -> bool:
 		if not piece.visible:
 			fail(title+": item nao reapareceu ao equipar")
 			return false
+	# Comeca sempre da mesma fase: sem isso uma passada pode cair
+	# exatamente no instante neutro, produzindo um falso negativo.
+	controller.set("walk_phase",0.0)
+	controller.set("walk_blend",0.0)
 	controller.call("animate",Vector3(2,0,0),.3,true)
 	var skeleton := skeletons[0] as Skeleton3D
-	if skeleton.get_bone_pose_rotation(7).angle_to(Quaternion.IDENTITY)<.05 or skeleton.get_bone_pose_rotation(3).angle_to(Quaternion.IDENTITY)<.05:
+	var leg_angle := skeleton.get_bone_pose_rotation(7).angle_to(Quaternion.IDENTITY)
+	var arm_angle := skeleton.get_bone_pose_rotation(3).angle_to(Quaternion.IDENTITY)
+	print("GOBLIN RIG ANGLES (%s): perna=%.3f braco=%.3f" % [title,leg_angle,arm_angle])
+	if leg_angle<.05 or arm_angle<.05:
 		fail(title+": ossos dos bracos ou pernas nao animaram")
 		return false
 	return true
