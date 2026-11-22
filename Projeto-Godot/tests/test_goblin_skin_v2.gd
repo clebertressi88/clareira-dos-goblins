@@ -117,5 +117,30 @@ func _run() -> void:
 	if scene==null:
 		fail("Cena visual comparativa nao pode ser aberta")
 		return
-	print("SKIN V2 OK: cena de comparacao, UV intactas, %d vertices alterados, %d transicoes suaves." % [changed,skin_transitions])
+	var lab := scene.instantiate() as Node3D
+	if lab==null:
+		fail("Nao foi possivel instanciar a cena comparativa")
+		return
+	root.add_child(lab)
+	await process_frame
+	var characters: Array=lab.get("characters")
+	if characters.size()!=2:
+		fail("Cena comparativa nao mostra os dois goblins: "+str(characters.size()))
+		return
+	for character in characters:
+		if not is_instance_valid(character) or not bool(character.get_meta("skeleton_ready",false)):
+			fail("Personagem da comparacao sem esqueleto")
+			return
+	lab.call("_set_motion","run")
+	lab.call("_process",.17)
+	lab.call("_turn")
+	lab.call("_sword")
+	lab.call("_shield")
+	for character in characters:
+		var swords: Array=character.get("sword_parts")
+		var shields: Array=character.get("shield_parts")
+		if swords.is_empty() or shields.is_empty() or not swords[0].visible or not shields[0].visible:
+			fail("Controle visual de equipamento falhou")
+			return
+	print("SKIN V2 OK: cena aberta com 2 goblins, controles testados, UV intactas, %d vertices alterados, %d transicoes suaves." % [changed,skin_transitions])
 	quit(0)
