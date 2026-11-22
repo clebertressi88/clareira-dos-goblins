@@ -49,6 +49,13 @@ jobs:
             exit 1
           fi
 
+      - name: Testar modelo 3D do machado de madeira
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_wood_axe_model.gd 2>&1 | tee /tmp/wood-axe-model-test.log
+          grep -q "WOOD AXE MODEL OK" /tmp/wood-axe-model-test.log
+
       - name: Testar visual 3D dos goblins NPC
         shell: bash
         run: |
