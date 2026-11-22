@@ -1931,7 +1931,7 @@ func show_menu() -> void:
 		label(net_session_message)
 	button("Jogar / continuar", begin)
 	if net_role=="solo":
-		button("Laboratorio: comparar skin atual e skin V2",open_goblin_skin_test)
+		button("Laboratorio: comparar goblin atual e novo V3",open_goblin_skin_test)
 	if net_role=="solo":
 		address = LineEdit.new()
 		address.placeholder_text = "IP do computador anfitrião (ex.: 192.168.1.10)"
