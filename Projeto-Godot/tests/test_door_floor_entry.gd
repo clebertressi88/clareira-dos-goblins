@@ -54,7 +54,11 @@ func _run() -> void:
 			print("DOOR DEBUG CHILD:",ch.name," type=",ch.get_class(), " shape=",ch.shape if ch is CollisionShape3D else "")
 		fail("A porta com piso interno deveria ter rampa EXTERNA unica: %d visuais, %d colisoes" % [ramps,collisions])
 		return
-	if doorway.get_node_or_null("LimiarPorta")==null:
+	var has_sill := false
+	for part in doorway.get_children():
+		if part is MeshInstance3D and part.name.begins_with("LimiarPorta"):
+			has_sill = true
+	if not has_sill:
 		fail("A entrada nao possui patamar horizontal na soleira")
 		return
 	print("DOOR RAMP OK: rampa externa + patamar horizontal conectados ao piso.")
