@@ -49,6 +49,14 @@ jobs:
             exit 1
           fi
 
+      - name: Testar visual 3D dos goblins NPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s Projeto-Godot/modelos/goblin_npc.glb
+          "$GODOT" --headless --path Projeto-Godot --script res://tests/test_goblin_npc_model.gd 2>&1 | tee /tmp/goblin-model-test.log
+          grep -q "GOBLIN MODEL OK" /tmp/goblin-model-test.log
+
       - name: Exportar EXE Windows
         shell: bash
         run: |
@@ -56,6 +64,10 @@ jobs:
           mkdir -p dist
           "$GODOT" --headless --path Projeto-Godot --export-release 'Windows Desktop' "$GITHUB_WORKSPACE/dist/Clareira-dos-Goblins.exe" 2>&1 | tee /tmp/export.log
           test -s dist/Clareira-dos-Goblins.exe
+          if ! grep -qE 'res://\.godot/imported/goblin_npc\.glb-.*\.scn' /tmp/export.log; then
+            echo 'ERRO: o modelo 3D dos goblins nao foi incluido no executavel Windows' >&2
+            exit 1
+          fi
           if grep -Ei '^([[:space:]]*SCRIPT ERROR:|[[:space:]]*ERROR:.*Parse Error)' /tmp/export.log; then
             echo 'Erro durante exportacao' >&2
             exit 1

@@ -33,7 +33,9 @@ const BUILD_MAX_LEVEL := 3
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
-const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb" # Aparência dos NPCs; mantém o modelo antigo quando ausente.
+const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
+# Preload obrigatorio: se o GLB nao for importado, o jogo nao compila uma aparencia antiga por engano.
+const NPC_MODEL_SCENE: PackedScene = preload("res://modelos/goblin_npc.glb")
 const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
@@ -1213,19 +1215,13 @@ func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) ->
 # Mantém toda a lógica do NPC (colisão, patrulha, interação e rede) independente da aparência.
 # O GLB fornecido não possui skeleton nem animações. Normaliza escala e chão
 # mesmo quando o recurso foi exportado com unidades muito grandes.
-func goblin_npc(o: Node3D, garment: Color) -> void:
-	if not ResourceLoader.exists(NPC_MODEL_PATH):
-		push_warning("O modelo 3D goblin_npc.glb nao esta incluido nesta compilacao; os NPCs mantem o visual antigo ate a publicacao do arquivo.")
-		goblin(o,garment)
-		return
-	var packed: PackedScene = ResourceLoader.load(NPC_MODEL_PATH) as PackedScene
-	if packed == null:
-		goblin(o,garment)
-		return
-	var instance: Node = packed.instantiate()
+func goblin_npc(o: Node3D, _garment: Color) -> void:
+	# Bruma, Talo e Guardiao devem usar o GLB; nunca mostrar o visual antigo silenciosamente.
+	var instance: Node = NPC_MODEL_SCENE.instantiate()
 	if not instance is Node3D:
-		instance.queue_free()
-		goblin(o,garment)
+		push_error("O modelo goblin_npc.glb nao produziu um Node3D valido.")
+		if instance != null:
+			instance.queue_free()
 		return
 	var pivot := Node3D.new()
 	pivot.name = "ModeloGoblinPivot"
@@ -1250,8 +1246,8 @@ func goblin_npc(o: Node3D, garment: Color) -> void:
 					high = high.max(local_corner)
 		found = true
 	if not found:
+		push_error("O modelo goblin_npc.glb nao possui MeshInstance3D; revise a importacao.")
 		pivot.queue_free()
-		goblin(o,garment)
 		return
 	var ratio := 1.50/maxf(high.y-low.y,0.01)
 	model.scale = Vector3.ONE*ratio
@@ -1411,7 +1407,7 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 	visual.name = "Visual"
 	body.add_child(visual)
 	if kind=="guardian":
-		goblin(visual,Color("#784d88"))
+		goblin_npc(visual,Color("#784d88"))
 		collider(body,Vector3(.8,1.5,.6),Vector3.UP*.75)
 		return body
 	var rabbit := kind=="rabbit"
@@ -1895,8 +1891,7 @@ func show_menu() -> void:
 	clear_menu()
 	label("Clareira dos Goblins")
 	label(BUILD_TAG)
-	if not ResourceLoader.exists(NPC_MODEL_PATH):
-		label("AVISO: modelo 3D dos NPCs ausente. Publique modelos/goblin_npc.glb antes de atualizar.")
+	label("Visual NPC: GLB 3D obrigatório · Bruma, Talo e Guardião · versão 2")
 	var portrait := TextureRect.new()
 	portrait.texture = preload("res://protagonista.jpg")
 	portrait.custom_minimum_size = Vector2(92,125)
@@ -3086,7 +3081,10 @@ func update_mobs(dt: float) -> void:
 		if not mob.is_on_floor():
 			mob.velocity.y -= dt*15
 		mob.move_and_slide()
-		walk_pose(mob.get_node("Visual"),mob.get_real_velocity(),dt,mob.is_on_floor())
+		var mob_visual: Node3D = mob.get_node("Visual")
+		walk_pose(mob_visual,mob.get_real_velocity(),dt,mob.is_on_floor())
+		if kind=="guardian":
+			animate_npc_model(mob_visual,mob.get_real_velocity(),dt,mob.is_on_floor())
 
 func update_rabbit(mob: CharacterBody3D, toward_player: Vector3, distance: float, dt: float) -> void:
 	var fleeing := distance<6.0
