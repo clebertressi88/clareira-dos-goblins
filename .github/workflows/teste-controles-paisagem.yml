@@ -1,0 +1,47 @@
+name: Testar movimento e paisagem Godot
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Projeto-Godot/main.gd'
+      - 'Projeto-Godot/tests/**'
+      - 'Projeto-Godot/landscape_terrain.gd'
+      - '.github/workflows/teste-controles-paisagem.yml'
+jobs:
+  testar:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+      - name: Instalar Godot 4.7.2
+        shell: pwsh
+        run: |
+          curl.exe -fLsS --retry 3 -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Falha download Godot' }
+          Expand-Archive -LiteralPath godot.zip -DestinationPath godot
+          $exe = Get-ChildItem godot -Recurse -File -Filter 'Godot_v4.7.2-stable_win64.exe' | Select-Object -First 1
+          if (!$exe) { throw 'Godot nao localizado' }
+          Copy-Item $exe.FullName godot.exe
+      - name: Importar projeto
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath import.log
+          if ($LASTEXITCODE -ne 0) { throw 'Erro importando' }
+      - name: Testar movimentacao e arvores em execucao
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_paisagem.gd 2>&1 | Tee-Object -FilePath teste.log
+          if ($LASTEXITCODE -ne 0) { throw 'Teste falhou' }
+          if (!(Select-String -Path teste.log -SimpleMatch 'CONTROLES TEST OK')) { throw 'Movimentacao nao confirmada' }
+          if (!(Select-String -Path teste.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Paisagem nao confirmada' }
+          if (Select-String -Path teste.log -Pattern 'SCRIPT ERROR|TEST FAIL' -CaseSensitive:$false) { throw 'Erro detectado no teste' }
+      - name: Enviar logs de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Logs-Controles-Paisagem
+          path: |
+            import.log
+            teste.log
+          if-no-files-found: ignore
