@@ -803,9 +803,8 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var sprout := Node3D.new()
 			sprout.name = "Broto"
 			visual.add_child(sprout)
-			cylinder(sprout,Vector3(.12,.67,0),.032,.46,"sprout_stem",Color("#589447"))
-			ball(sprout,Vector3(-.03,.88,0),Vector3(.24,.13,.19),"sprout_leaf",Color("#77a94b"))
-			ball(sprout,Vector3(.23,.93,0),Vector3(.22,.13,.18),"sprout_leaf",Color("#77a94b"))
+			# Broto de apenas alguns centimetros, sem haste verde alta.
+			preload("res://tree_growth_stages.gd").make_bud(sprout,id)
 			# Muda e jovem usam modelos proprios, com base local zero no corte.
 			var sapling_stage := Node3D.new()
 			sapling_stage.name = "Muda"
@@ -1598,11 +1597,11 @@ func update_tree_visual(tree: Node3D) -> void:
 		stump.visible = true
 		sprout.visible = true
 		var t := inverse_lerp(0.12,0.25,progress)
-		var factor := lerpf(0.65,1.05,t)
+		var factor := lerpf(0.55,1.0,t)
 		sprout.scale = Vector3.ONE*factor
-		# A haste original comeca em Y=.44, a base permanece no corte Y=.52.
-		sprout.position = Vector3.UP*(.52-.44*factor)
-		height = .52+(.90-.44)*factor
+		# O novo broto nasce na origem local; sua base permanece em Y=.52.
+		sprout.position = Vector3.UP*.52
+		height = .52+.22*factor
 	elif progress < 0.45:
 		stump.visible = false
 		sapling_stage.visible = true
