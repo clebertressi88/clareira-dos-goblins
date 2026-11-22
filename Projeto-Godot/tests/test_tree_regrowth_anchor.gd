@@ -50,15 +50,25 @@ func _test() -> void:
 				return
 		if sprout.visible:
 			var bottom_sprout := sprout.position.y
-			if absf(bottom_sprout - .52) > .015 or sprout.scale.y > 1.01:
+			if absf(bottom_sprout - .505) > .015 or sprout.scale.y > 1.01:
 				push_error("Broto flutuando")
 				quit(1)
 				return
-		if sapling_stage.visible and absf(sapling_stage.position.y-.52)>.015:
+		# A base do tronco jovem deve penetrar no toco (topo Y=.44).
+		# Um teste apenas da fase visivel nao detectaria a flutuacao.
+		if sapling_stage.visible and sapling_stage.position.y >= .44:
+			push_error("Muda flutuando acima do topo do toco")
+			quit(1)
+			return
+		if young_stage.visible and young_stage.position.y >= .44:
+			push_error("Jovem flutuando acima do topo do toco")
+			quit(1)
+			return
+		if sapling_stage.visible and absf(sapling_stage.position.y-.36)>.015:
 			push_error("Muda desconectada do toco")
 			quit(1)
 			return
-		if young_stage.visible and absf(young_stage.position.y-.52)>.015:
+		if young_stage.visible and absf(young_stage.position.y-.36)>.015:
 			push_error("Arvore jovem desconectada do toco")
 			quit(1)
 			return
