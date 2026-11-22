@@ -1,5 +1,15 @@
 extends Node3D
 
+# Modulos funcionais: mantem a API do jogo e evita dependencias circulares.
+const MateriaisSistema = preload("res://sistemas/materiais.gd")
+const TerrenoSistema = preload("res://sistemas/terreno.gd")
+const VisualSistema = preload("res://sistemas/visual.gd")
+const InventarioSistema = preload("res://sistemas/inventario.gd")
+const InterfaceSistema = preload("res://sistemas/interface.gd")
+const ReceitasSistema = preload("res://sistemas/receitas.gd")
+const SalvamentoSistema = preload("res://sistemas/salvamento.gd")
+const ConstrucaoSistema = preload("res://sistemas/construcao.gd")
+
 const SAVE := "user://clareira-nativa.json"
 const CELL := 0.85
 const CHUNK := 16
@@ -53,6 +63,7 @@ var wolf_spawn_timer := randf_range(95.0,175.0)
 var rock_mesh: ArrayMesh
 var sphere_mesh := SphereMesh.new()
 var cube_mesh := BoxMesh.new()
+var cylinder_mesh_cache: Dictionary = {}
 var sculpt_sphere := SphereMesh.new()
 var sculpt_head: ArrayMesh
 var protagonist_face: ShaderMaterial
@@ -81,6 +92,7 @@ var hotbar_counts: Array[Label] = []
 var slot_idle: StyleBoxFlat
 var slot_active: StyleBoxFlat
 var next_interaction_hint := 0.0
+var next_hud_refresh := 0.0
 var interaction_hint := "E Inventário  ·  Esc Menu"
 var life_bar: ProgressBar
 var stamina_bar: ProgressBar
@@ -129,57 +141,10 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(disconnected)
 
 func character_texture(family: String) -> ImageTexture:
-	if surface_textures.has(family):
-		return surface_textures[family]
-	const SIZE := 128
-	var image := Image.create_empty(SIZE,SIZE,false,Image.FORMAT_RGB8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 507
-	noise.frequency = .17
-	for y in range(SIZE):
-		for x in range(SIZE):
-			var detail := noise.get_noise_2d(x,y)
-			var broad := noise.get_noise_2d(x*.19+13,y*.19-11)
-			var grain := noise.get_noise_2d(x*2.5,y*2.5)
-			var value := .87+broad*.10+detail*.075+grain*.045
-			if family=="fur":
-				var strand := noise.get_noise_2d(x*5.5,y*.53+x*.13)
-				value = .84+broad*.16+strand*.18+detail*.06
-			elif family=="leather":
-				value = .85+broad*.16+detail*.12+grain*.069
-			image.set_pixel(x,y,Color(value,value,value*.984))
-	image.generate_mipmaps()
-	var texture := ImageTexture.create_from_image(image)
-	surface_textures[family] = texture
-	return texture
+	return MateriaisSistema.character_texture(family, surface_textures)
 
 func material(key: String, color: Color) -> StandardMaterial3D:
-	if not materials.has(key):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = color
-		m.roughness = .87
-		var family := ""
-		if key.begins_with("sculpt_skin") or key.begins_with("goblin_cheek") or key.begins_with("goblin_brow") or key.begins_with("goblin_ear") or key=="goblin_nose":
-			family = "skin"
-			m.roughness = .64
-		elif key.begins_with("goblin_boot") or key.begins_with("goblin_cloth") or key in ["goblin_strap","goblin_belt","goblin_waist"]:
-			family = "leather"
-			m.roughness = .75
-		elif key.begins_with("bruma_hair") or key=="bruma_braid_light" or ((key.begins_with("wolf_") or key.begins_with("rabbit_")) and not (key.ends_with("iris") or key.ends_with("nose") or key.ends_with("inner"))):
-			family = "fur"
-		elif key.ends_with("iris") or key.ends_with("pupil") or key=="goblin_ivory":
-			m.roughness = .27
-		elif key=="goblin_brass":
-			m.metallic = .38
-			m.roughness = .37
-		if not family.is_empty():
-			m.albedo_texture = character_texture(family)
-			m.uv1_triplanar = true
-			m.uv1_triplanar_sharpness = 3.0
-			m.uv1_scale = Vector3.ONE*(2.3 if family=="fur" else 1.4)
-			m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		materials[key] = m
-	return materials[key]
+	return MateriaisSistema.material(key, color, materials, surface_textures)
 
 func setup_world() -> void:
 	sculpt_sphere.radial_segments = 24
@@ -222,39 +187,10 @@ func setup_world() -> void:
 	rock_mesh = make_rock()
 
 func make_rock() -> ArrayMesh:
-	var mesh := SurfaceTool.new()
-	mesh.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for axis in range(3):
-		for sign_value in [-1.0,1.0]:
-			for j in range(5):
-				for i in range(5):
-					var u := float(i)/5
-					var v := float(j)/5
-					var corners := [Vector2(u,v),Vector2(u+.2,v),Vector2(u+.2,v+.2),Vector2(u,v+.2)]
-					var order := [0,2,1,0,3,2] if sign_value > 0 else [0,1,2,0,2,3]
-					for index in order:
-						var uv: Vector2 = corners[index]
-						var p := Vector3.ZERO
-						p[axis] = sign_value
-						p[(axis+1)%3] = uv.x*2-1
-						p[(axis+2)%3] = uv.y*2-1
-						var divisor := maxf(1.,maxf((p.x+.58*p.z+.35*p.y)/1.34,(-p.x-.75*p.z+.4*p.y)/1.39))
-						p /= divisor
-						p.x = p.x*(.92-.06*p.y)+.04*p.y
-						p.z *= .94+.035*p.x
-						mesh.set_uv(uv)
-						mesh.add_vertex(p*CELL/2.)
-	mesh.generate_normals()
-	return mesh.commit()
+	return TerrenoSistema.make_rock(CELL)
 
 func mesh_part(parent: Node3D, geometry: Mesh, pos: Vector3, scale_value: Vector3, mat: Material) -> MeshInstance3D:
-	var part := MeshInstance3D.new()
-	part.mesh = geometry
-	part.material_override = mat
-	part.position = pos
-	part.scale = scale_value
-	parent.add_child(part)
-	return part
+	return VisualSistema.mesh_part(parent, geometry, pos, scale_value, mat)
 
 func ball(parent: Node3D, pos: Vector3, dimensions: Vector3, key: String, color: Color) -> void:
 	mesh_part(parent,sphere_mesh,pos,dimensions,material(key,color))
@@ -263,20 +199,20 @@ func box(parent: Node3D, pos: Vector3, dimensions: Vector3, key: String, color: 
 	return mesh_part(parent,cube_mesh,pos,dimensions,material(key,color))
 
 func cylinder(parent: Node3D, pos: Vector3, radius: float, tall: float, key: String, color: Color) -> MeshInstance3D:
-	var geometry := CylinderMesh.new()
-	geometry.top_radius = radius*.86
-	geometry.bottom_radius = radius
-	geometry.height = tall
-	geometry.radial_segments = 10
+	# Geometria igual e compartilhada; cada instancia mantem seu proprio material.
+	var size_key := Vector2(radius, tall)
+	var geometry: CylinderMesh = cylinder_mesh_cache.get(size_key)
+	if geometry == null:
+		geometry = CylinderMesh.new()
+		geometry.top_radius = radius*.86
+		geometry.bottom_radius = radius
+		geometry.height = tall
+		geometry.radial_segments = 10
+		cylinder_mesh_cache[size_key] = geometry
 	return mesh_part(parent,geometry,pos,Vector3.ONE,material(key,color))
 
 func collider(body: CollisionObject3D, size: Vector3, offset: Vector3) -> void:
-	var shape := BoxShape3D.new()
-	shape.size = size
-	var col := CollisionShape3D.new()
-	col.shape = shape
-	col.position = offset
-	body.add_child(col)
+	VisualSistema.collider(body, size, offset)
 
 func make_player() -> void:
 	player = CharacterBody3D.new()
@@ -357,8 +293,7 @@ func make_stone_axe_head(parent: Node3D) -> void:
 		binding.rotation.z = .19
 
 func ground(x: float,z: float) -> float:
-	var fade := smoothstep(16.,38.,Vector2(x,z).length())
-	return (sin(x*.12)*1.2+cos(z*.14)*.87+sin((x+z)*.22)*.52)*fade
+	return TerrenoSistema.ground(x, z)
 
 func load_chunks() -> void:
 	var center := Vector2i(floori(player.position.x/CHUNK), floori(player.position.z/CHUNK))
@@ -1221,18 +1156,7 @@ func make_ui() -> void:
 	panel.add_child(menu)
 
 func hotbar_style(fill: Color, border: Color, width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = border
-	style.set_border_width_all(width)
-	style.set_corner_radius_all(7)
-	style.content_margin_left = 7
-	style.content_margin_right = 7
-	style.content_margin_top = 4
-	style.content_margin_bottom = 4
-	style.shadow_color = Color("#80000000")
-	style.shadow_size = 3
-	return style
+	return InterfaceSistema.hotbar_style(fill, border, width)
 
 func make_meter(container: HBoxContainer, caption: Label, color: Color) -> ProgressBar:
 	var column := VBoxContainer.new()
@@ -1254,17 +1178,7 @@ func make_meter(container: HBoxContainer, caption: Label, color: Color) -> Progr
 	return bar
 
 func sync_inventory_slots() -> void:
-	# Um slot de inventário guarda uma pilha de um tipo de item.
-	# Tipos sem unidades são liberados; a ordem escolhida pelo jogador permanece.
-	for index in range(inventory_slots.size()):
-		var item: int = inventory_slots[index]
-		if item>=0 and stock[item]<=0 and reserve[item]<=0:
-			inventory_slots[index] = -1
-	for item in range(ITEMS.size()):
-		if (stock[item]>0 or reserve[item]>0) and not inventory_slots.has(item):
-			var free := inventory_slots.find(-1)
-			if free>=0:
-				inventory_slots[free] = item
+	InventarioSistema.sync_inventory_slots(inventory_slots, stock, reserve, ITEMS.size())
 
 func item_received(item: int) -> void:
 	# Coleta/fabricação: primeiro espaço vazio dos 9 atalhos, mesmo com ordem manual.
@@ -1277,16 +1191,7 @@ func item_received(item: int) -> void:
 			bar_items[free] = item
 
 func sync_hotbar() -> void:
-	for i in range(bar_items.size()):
-		var item: int = bar_items[i]
-		if item>=0 and stock[item]<=0:
-			bar_items[i] = -1
-	if not hotbar_manual:
-		for item in range(ITEMS.size()):
-			if stock[item]>0 and not bar_items.has(item):
-				var slot := bar_items.find(-1)
-				if slot>=0:
-					bar_items[slot] = item
+	InventarioSistema.sync_hotbar(bar_items, stock, ITEMS.size(), hotbar_manual)
 
 func update_player_hud() -> void:
 	sync_hotbar()
@@ -1786,23 +1691,10 @@ func prepare_recipe(kind: String) -> void:
 	show_inventory()
 
 func expand_basic_pattern(pattern: Array, row: int, col: int) -> Array:
-	var expanded: Array = []
-	expanded.resize(9)
-	expanded.fill(-1)
-	for i in range(4):
-		expanded[(row + int(i / 2))*3 + col + i%2] = pattern[i]
-	return expanded
+	return ReceitasSistema.expand_basic_pattern(pattern, row, col)
 
 func matches_basic_recipe(pattern: Array) -> bool:
-	if craft_cells.size()==4:
-		return matches_recipe(pattern)
-	if craft_cells.size()!=9:
-		return false
-	for row in range(2):
-		for col in range(2):
-			if matches_recipe(expand_basic_pattern(pattern,row,col)):
-				return true
-	return false
+	return ReceitasSistema.matches_basic_recipe(craft_cells, pattern)
 
 func basic_recipe() -> String:
 	var counts: Array = []
@@ -1835,16 +1727,7 @@ func basic_recipe() -> String:
 	return ""
 
 func matches_recipe(pattern: Array) -> bool:
-	if pattern.size()!=craft_cells.size():
-		return false
-	for i in range(pattern.size()):
-		var expected: int = pattern[i]
-		if expected==-1:
-			if craft_cells[i].y!=0:
-				return false
-		elif craft_cells[i].x!=expected or craft_cells[i].y<1:
-			return false
-	return true
+	return ReceitasSistema.matches_recipe(craft_cells, pattern)
 
 func craft_basic() -> void:
 	var kind := basic_recipe()
@@ -1879,10 +1762,7 @@ func craft_basic() -> void:
 	show_inventory()
 
 func serialize_backpack() -> Array:
-	var data := []
-	for slot in backpack_slots:
-		data.append([slot.x,slot.y])
-	return data
+	return SalvamentoSistema.serialize_backpack(backpack_slots)
 
 func open_backpack() -> void:
 	if not backpack_equipped:
@@ -1999,48 +1879,10 @@ func unequip_backpack() -> void:
 	show_inventory()
 
 func find_wall_snap(point: Vector3, yaw: float) -> Vector3:
-	# Novo segmento encaixa uma ponta à ponta da parede existente mais próxima.
-	# Funciona tanto para paredes retas quanto para cantos em L/U.
-	var new_axis := Basis(Vector3.UP,yaw).x.normalized()
-	var best := point
-	var best_distance := WALL_SIZE*.85
-	for entry in placed:
-		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window"]:
-			continue
-		var p: Array = entry["p"]
-		var old_position := Vector3(float(p[0]),float(p[1]),float(p[2]))
-		var old_yaw := float(entry.get("r",0.0))
-		var old_axis := Basis(Vector3.UP,old_yaw).x.normalized()
-		for old_sign in [-1.0,1.0]:
-			for new_sign in [-1.0,1.0]:
-				var candidate: Vector3 = old_position+old_axis*(old_sign*WALL_SIZE*.5)-new_axis*(new_sign*WALL_SIZE*.5)
-				var distance := Vector2(point.x-candidate.x,point.z-candidate.z).length()
-				if distance<best_distance:
-					best_distance = distance
-					best = candidate
-	return best
+	return ConstrucaoSistema.find_wall_snap(point, yaw, placed, WALL_SIZE)
 
 func wall_intersects_other_wall(point: Vector3, yaw: float) -> bool:
-	# Impede duas paredes no mesmo lugar, mas permite os cantos de 90 graus.
-	var axis := Vector2(cos(yaw),-sin(yaw))
-	for entry in placed:
-		if entry.get("kind","") not in ["wood_wall","wood_doorway","wood_window"]:
-			continue
-		var p: Array = entry["p"]
-		var old := Vector2(float(p[0]),float(p[2]))
-		var this := Vector2(point.x,point.z)
-		var other_yaw := float(entry.get("r",0.0))
-		var old_axis := Vector2(cos(other_yaw),-sin(other_yaw))
-		var delta := this-old
-		var aligned := absf(axis.dot(old_axis))>.95
-		if aligned:
-			if absf(delta.dot(axis))<WALL_SIZE-.12 and absf(delta.cross(axis))<.17:
-				return true
-		else:
-			# Cruzes no meio da parede são bloqueados; cantos no final são permitidos.
-			if absf(delta.dot(old_axis))<WALL_SIZE*.5-.14 and absf(delta.dot(axis))<WALL_SIZE*.5-.14:
-				return true
-	return false
+	return ConstrucaoSistema.wall_intersects_other_wall(point, yaw, placed, WALL_SIZE)
 
 func place_craft(kind: String) -> bool:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
@@ -2175,8 +2017,13 @@ func _physics_process(dt: float) -> void:
 	spear.position.z = -.77-sin(clampf((next_attack-elapsed)/.46,0,1)*PI)*.31
 	if elapsed>feedback_until and moving:
 		feedback = ""
-	hud.text = "Clareira dos Goblins  ·  "+("Vale conquistado" if won else "Explore o vale" if hut else "Construa a bancada e o abrigo")
-	update_player_hud()
+	var hud_message := "Clareira dos Goblins  ·  "+("Vale conquistado" if won else "Explore o vale" if hut else "Construa a bancada e o abrigo")
+	if hud.text != hud_message:
+		hud.text = hud_message
+	# UI: atualiza no maximo 10 vezes/s (em vez de 60), sem limitar a fisica.
+	if elapsed >= next_hud_refresh:
+		next_hud_refresh = elapsed + 0.10
+		update_player_hud()
 	if moving and elapsed>=next_interaction_hint:
 		next_interaction_hint = elapsed+.12
 		var hit := ray()
@@ -2187,7 +2034,9 @@ func _physics_process(dt: float) -> void:
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
-	hint.text = feedback if not feedback.is_empty() else interaction_hint
+	var hint_message := feedback if not feedback.is_empty() else interaction_hint
+	if hint.text != hint_message:
+		hint.text = hint_message
 	if player.position.y < -12:
 		respawn()
 
@@ -2246,9 +2095,10 @@ func update_mobs(dt: float) -> void:
 			continue
 		var direction := player.position-mob.global_position
 		direction.y = 0
-		var distance := direction.length()
-		if distance>28:
+		var distance_squared := direction.length_squared()
+		if distance_squared > 28.0 * 28.0:
 			continue
+		var distance := sqrt(distance_squared)
 		var kind: String = mob.get_meta("kind")
 		var speed := 0.0
 		if kind=="rabbit":
