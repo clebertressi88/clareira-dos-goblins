@@ -996,7 +996,8 @@ func build_door_transitions(door: StaticBody3D) -> void:
 	# Recalcula rampas quando um piso e colocado ou removido.
 	# Saves antigos mantem as mesmas paredes e posicoes.
 	for part in door.get_children():
-		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta"):
+		var is_ramp_shape := part is CollisionShape3D and (part as CollisionShape3D).shape is BoxShape3D and (part as CollisionShape3D).shape.size.z>1.5
+		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta") or is_ramp_shape:
 			if part is CollisionShape3D:
 				part.disabled = true
 			part.queue_free()
