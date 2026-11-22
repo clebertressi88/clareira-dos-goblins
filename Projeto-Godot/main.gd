@@ -123,6 +123,7 @@ func _ready() -> void:
 	backpack_slots.resize(BACKPACK_SIZE)
 	backpack_slots.fill(Vector2i(-1,0))
 	setup_world()
+	configure_movement_inputs()
 	load_game()
 	make_player()
 	make_ui()
@@ -132,6 +133,56 @@ func _ready() -> void:
 	multiplayer.peer_disconnected.connect(remove_remote)
 	multiplayer.server_disconnected.connect(disconnected)
 	multiplayer.connection_failed.connect(disconnected)
+
+func configure_movement_inputs() -> void:
+	# Acoes configuradas no inicio: layouts de teclado diferentes e setas.
+	# Nao depende exclusivamente de is_physical_key_pressed (WASD).
+	var bindings := {
+		"goblin_esquerda": [KEY_A,KEY_LEFT],
+		"goblin_direita": [KEY_D,KEY_RIGHT],
+		"goblin_frente": [KEY_W,KEY_UP],
+		"goblin_tras": [KEY_S,KEY_DOWN]
+	}
+	for action: String in bindings.keys():
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		for key: int in bindings[action]:
+			var physical := InputEventKey.new()
+			physical.physical_keycode = key
+			if not InputMap.action_has_event(action,physical):
+				InputMap.action_add_event(action,physical)
+			var logical := InputEventKey.new()
+			logical.keycode = key
+			if not InputMap.action_has_event(action,logical):
+				InputMap.action_add_event(action,logical)
+
+func movement_axis() -> Vector2:
+	var direction := Input.get_vector("goblin_esquerda","goblin_direita","goblin_frente","goblin_tras")
+	if not direction.is_zero_approx():
+		return direction
+	# Reserva para teclados cuja entrada chega so como tecla logica.
+	var x := float(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))
+	var y := float(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))
+	return Vector2(x,y).normalized()
+
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var key := event.physical_keycode if event.physical_keycode!=KEY_NONE else event.keycode
+	if key==KEY_F10 and moving:
+		# Recuperacao manual se um save antigo prender o jogador no relevo.
+		respawn()
+		save_game()
+		get_viewport().set_input_as_handled()
+		return
+	if moving or inventory or not is_instance_valid(panel) or not panel.visible:
+		return
+	if is_instance_valid(address) and address.has_focus():
+		return
+	# Permite iniciar com WASD/setas sem depender do foco do botao Jogar.
+	if key in [KEY_W,KEY_A,KEY_S,KEY_D,KEY_UP,KEY_DOWN,KEY_LEFT,KEY_RIGHT,KEY_ENTER,KEY_KP_ENTER]:
+		begin()
+		get_viewport().set_input_as_handled()
 
 func character_texture(family: String) -> ImageTexture:
 	if surface_textures.has(family):
@@ -1485,9 +1536,9 @@ func show_menu() -> void:
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	menu.add_child(portrait)
-	label("WASD andar · Shift correr · Espaço pular · X agachar")
+	label("WASD ou setas: andar/iniciar · Shift correr · Espaço pular · X agachar")
 	label("Mouse para mirar · Direito pegar/usar · Esquerdo atacar/construir")
-	label("E inventário · B abrigo · Q largar · V câmera · 1–9 selecionar")
+	label("E inventário · B abrigo · Q largar · V câmera · F10 retornar à clareira")
 	button("Jogar / continuar", begin)
 	address = LineEdit.new()
 	address.placeholder_text = "IP do anfitrião na rede local"
@@ -2248,12 +2299,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(dt: float) -> void:
 	elapsed += dt
 	if moving:
-		var f := float(Input.is_physical_key_pressed(KEY_W))-float(Input.is_physical_key_pressed(KEY_S))
-		var s := float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A))
-		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X))
-		var running := sprint_step(not crouch and f>0 and Input.is_physical_key_pressed(KEY_SHIFT),dt)
+		var input_axis := movement_axis()
+		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X))
+		var running := sprint_step(not crouch and input_axis.y<0 and (Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_SHIFT)),dt)
 		var speed := 2. if crouch else RUN_SPEED if running else WALK_SPEED
-		var requested := player.basis*Vector3(s,0,-f).normalized()*speed
+		var requested := player.basis*Vector3(input_axis.x,0,input_axis.y)*speed
 		player.velocity.x = move_toward(player.velocity.x,requested.x,dt*28)
 		player.velocity.z = move_toward(player.velocity.z,requested.z,dt*28)
 		if not player.is_on_floor():
