@@ -36,6 +36,13 @@ jobs:
           if (!(Select-String -Path teste.log -SimpleMatch 'CONTROLES TEST OK')) { throw 'Movimentacao nao confirmada' }
           if (!(Select-String -Path teste.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Paisagem nao confirmada' }
           if (Select-String -Path teste.log -Pattern 'SCRIPT ERROR|TEST FAIL' -CaseSensitive:$false) { throw 'Erro detectado no teste' }
+      - name: Testar fisica real do terreno, jogador e NPCs
+        shell: pwsh
+        run: |
+          & ./godot.exe --headless --path Projeto-Godot --script res://tests/test_terrain_physics.gd 2>&1 | Tee-Object -FilePath fisica-terreno.log
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na fisica do terreno/jogador/NPCs' }
+          if (!(Select-String -Path fisica-terreno.log -SimpleMatch 'TERRAIN PHYSICS OK')) { throw 'Jogador/NPCs nao se deslocaram corretamente' }
+          if (Select-String -Path fisica-terreno.log -Pattern 'SCRIPT ERROR|TERRAIN PHYSICS FAIL' -CaseSensitive:$false) { throw 'Erro no teste fisico' }
       - name: Enviar logs de teste
         if: always()
         uses: actions/upload-artifact@v4
@@ -44,4 +51,5 @@ jobs:
           path: |
             import.log
             teste.log
+            fisica-terreno.log
           if-no-files-found: ignore
