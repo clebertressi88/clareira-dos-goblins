@@ -1533,6 +1533,24 @@ func impact(pos: Vector3, normal: Vector3, wood: bool) -> void:
 		tween.tween_property(chip,"scale",Vector3.ZERO,duration).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(effect.queue_free)
 
+var cached_tree_chop_sound: AudioStreamWAV
+
+func play_tree_chop_sound(pos: Vector3, tool: int) -> void:
+	# Um golpe seco de madeira por acerto, com variacao leve entre golpes.
+	if cached_tree_chop_sound == null:
+		cached_tree_chop_sound = preload("res://tree_chop_sound.gd").make_stream()
+	var sound := AudioStreamPlayer3D.new()
+	sound.name = "SomMachadoNaMadeira"
+	add_child(sound)
+	sound.global_position = pos
+	sound.stream = cached_tree_chop_sound
+	sound.unit_size = 8.0
+	sound.max_distance = 34.0
+	sound.volume_db = -1.5
+	sound.pitch_scale = randf_range(0.92,1.08) * (1.07 if tool == STONE_AXE else 0.97)
+	sound.finished.connect(sound.queue_free)
+	sound.play()
+
 func play_tree_fall_sound(pos: Vector3) -> void:
 	# Som original de madeira rangendo + impacto + folhas.
 	# Stream WAV procedimental: dispensamos arquivos externos/licencas de audio.
@@ -3269,6 +3287,7 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 	var cuts := int(tree.get_meta("cuts",0))+1
 	tree.set_meta("cuts",cuts)
 	impact(pos,normal,true)
+	play_tree_chop_sound(pos,tool)
 	var tree_pos := tree.global_position
 	timber(tree,cuts>=needed)
 	if cuts>=needed:
