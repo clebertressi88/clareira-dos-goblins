@@ -71,6 +71,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha entrada na porta com piso' }
           if (!(Select-String -Path entrada-piso.log -SimpleMatch 'DOOR FLOOR TEST OK')) { throw 'Entrada com piso e teto nao passou' }
           if (Select-String -Path entrada-piso.log -Pattern 'SCRIPT ERROR|DOOR FLOOR FAIL' -CaseSensitive:$false) { throw 'Erro no teste de entrada' }
+      - name: Testar multiplayer LAN real em dois processos
+        shell: pwsh
+        run: |
+          $godot = (Resolve-Path './godot.exe').Path
+          $server = Start-Process -FilePath $godot -ArgumentList '--headless','--path','Projeto-Godot','--script','res://tests/test_multiplayer_udp.gd','--','--mode=host' -PassThru -RedirectStandardOutput 'rede-host.log' -RedirectStandardError 'rede-host-err.log'
+          try {
+            Start-Sleep -Seconds 4
+            if ($server.HasExited) { Get-Content rede-host.log,rede-host-err.log; throw 'Anfitriao saiu antes da conexao' }
+            & $godot --headless --path Projeto-Godot --script res://tests/test_multiplayer_udp.gd -- --mode=client 2>&1 | Tee-Object -FilePath 'rede-client.log'
+            if ($LASTEXITCODE -ne 0) { throw 'Cliente multiplayer falhou' }
+            if (!(Select-String -Path rede-client.log -SimpleMatch 'NET MULTIPLAYER CLIENT OK')) { throw 'Convidado nao confirmou mundo compartilhado' }
+            if (!$server.WaitForExit(40000)) { throw 'Anfitriao nao confirmou mundo compartilhado' }
+            if ($server.ExitCode -ne 0) { throw 'Anfitriao multiplayer falhou' }
+            if (!(Select-String -Path 'rede-host.log' -SimpleMatch 'NET MULTIPLAYER HOST OK')) { throw 'Anfitriao nao confirmou colocacao compartilhada' }
+            Get-Content rede-host.log -Tail 20
+          } finally {
+            if (!$server.HasExited) { $server.Kill() }
+          }
       - name: Enviar logs de teste
         if: always()
         uses: actions/upload-artifact@v4
@@ -84,4 +102,5 @@ jobs:
             floresta.log
             construcao.log
             entrada-piso.log
+            rede-*.log
           if-no-files-found: ignore
