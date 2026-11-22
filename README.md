@@ -63,3 +63,9 @@ Consulte **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)** para encontrar cada subs
 Teste estatico local: `python3 tests/verificar_estrutura.py`. Os FPS precisam ser medidos no Godot.
 
 Para localizar rapidamente as rotinas do script principal, veja o **[Mapa de funcoes](docs/MAPA_FUNCOES.md)**.
+  
+## Modelo 3D dos goblins
+
+Os goblins NPC (Bruma, Talo e guardioes) usam o modelo `Projeto-Godot/modelos/goblins/goblin.glb` com ajuste de escala automatico por `personagens/goblin_visual.gd`. O jogador conserva seu modelo original. Como o GLB e estatico, o movimento visual e uma oscilacao simples, sem animacao de esqueleto.
+
+[Creditos e licenca do modelo](docs/CREDITOS_MODELOS.md).
