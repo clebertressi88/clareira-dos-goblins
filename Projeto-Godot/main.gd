@@ -1215,6 +1215,7 @@ func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) ->
 # mesmo quando o recurso foi exportado com unidades muito grandes.
 func goblin_npc(o: Node3D, garment: Color) -> void:
 	if not ResourceLoader.exists(NPC_MODEL_PATH):
+		push_warning("O modelo 3D goblin_npc.glb nao esta incluido nesta compilacao; os NPCs mantem o visual antigo ate a publicacao do arquivo.")
 		goblin(o,garment)
 		return
 	var packed: PackedScene = ResourceLoader.load(NPC_MODEL_PATH) as PackedScene
@@ -1894,6 +1895,8 @@ func show_menu() -> void:
 	clear_menu()
 	label("Clareira dos Goblins")
 	label(BUILD_TAG)
+	if not ResourceLoader.exists(NPC_MODEL_PATH):
+		label("AVISO: modelo 3D dos NPCs ausente. Publique modelos/goblin_npc.glb antes de atualizar.")
 	var portrait := TextureRect.new()
 	portrait.texture = preload("res://protagonista.jpg")
 	portrait.custom_minimum_size = Vector2(92,125)
