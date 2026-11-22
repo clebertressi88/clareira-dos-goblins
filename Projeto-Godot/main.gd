@@ -993,8 +993,9 @@ func floor_height_near_door(door: StaticBody3D) -> float:
 
 
 func build_door_transitions(door: StaticBody3D) -> void:
-	# Recalcula rampas quando um piso e colocado ou removido.
-	# Saves antigos mantem as mesmas paredes e posicoes.
+	# Antes havia duas rampas, uma delas invadia o piso interno.
+	# O jogador batia na face inferior ao passar pela porta.
+	# Agora a rampa exterior sobe ate 30 cm DENTRO do piso, suavemente.
 	for part in door.get_children():
 		var is_ramp_shape: bool = false
 		if part is CollisionShape3D:
@@ -1004,20 +1005,41 @@ func build_door_transitions(door: StaticBody3D) -> void:
 			if part is CollisionShape3D:
 				part.disabled = true
 			part.queue_free()
-	var start_y := floor_height_near_door(door)
-	for side in [-1.0,1.0]:
-		var length := 1.65
-		var outside := door.to_global(Vector3(0,0,side*(length+.08)))
-		var end_y := ground(outside.x,outside.z) + .06
-		if absf(start_y-end_y)<.035:
+	var floor_side := 0.0
+	var nearest := WALL_SIZE*1.2
+	for entry in placed:
+		if str(entry.get("kind",""))!="wood_floor" or int(entry.get("level",0))!=0:
 			continue
-		var ramp := box(door,Vector3(0,(start_y+end_y)*.5-door.global_position.y-.055,
-			side*(length*.5+.08)),Vector3(.72,.11,length),
+		var p: Array = entry["p"]
+		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		var dist := Vector2(at.x-door.global_position.x,at.z-door.global_position.z).length()
+		if dist<nearest:
+			var local_point := door.to_local(at)
+			if absf(local_point.z)>.15:
+				nearest = dist
+				floor_side = signf(local_point.z)
+	var y_top := floor_height_near_door(door)
+	# Sem piso: duas rampas baixas para paredes antigas no relevo.
+	# Com piso: so UMA rampa na entrada externa. Nunca sob o piso interno.
+	var sides := [-floor_side] if floor_side!=0.0 else [-1.0,1.0]
+	for side in sides:
+		var outside_distance := 1.65
+		var inside_distance := .32 if floor_side!=0.0 else .08
+		var far_z := float(side)*outside_distance
+		var near_z := -float(side)*inside_distance
+		var span := outside_distance+inside_distance
+		var outside := door.to_global(Vector3(0,0,far_z))
+		var end_y := ground(outside.x,outside.z)+.06
+		if absf(y_top-end_y)<.035:
+			continue
+		var center_z := (far_z+near_z)*.5
+		var ramp := box(door,Vector3(0,(y_top+end_y)*.5-door.global_position.y-.055,
+			center_z),Vector3(.72,.11,span),
 			"door_transition_wood",Color("#986f46"))
 		ramp.name = "RampaPorta"
-		ramp.rotation.x = side*atan2(start_y-end_y,length)
+		ramp.rotation.x = float(side)*atan2(y_top-end_y,span)
 		var shape := BoxShape3D.new()
-		shape.size = Vector3(.72,.12,length)
+		shape.size = Vector3(.72,.12,span)
 		var col := CollisionShape3D.new()
 		col.name = "ColisaoRampaPorta"
 		col.shape = shape
