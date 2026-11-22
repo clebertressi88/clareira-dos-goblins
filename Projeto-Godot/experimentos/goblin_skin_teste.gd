@@ -3,10 +3,10 @@ extends Node3D
 ## ESC ou botao "Voltar" retorna ao menu original.
 
 const OLD_RIG = preload("res://npc_goblin.gd")
-const NEW_RIG = preload("res://experimentos/goblin_skin_v2.gd")
+const NEW_RIG = preload("res://experimentos/goblin_v3_model.gd")
 
 var characters: Array[Node3D] = []
-var mode := "walk"
+var mode := "idle"
 var angle := 0.0
 var sword_on := false
 var shield_on := false
@@ -16,7 +16,7 @@ func _ready() -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
 	_build_environment()
 	_spawn(OLD_RIG,Vector3(-1.3,0,0),"SKIN ATUAL")
-	_spawn(NEW_RIG,Vector3(1.3,0,0),"SKIN NOVA V2")
+	_spawn(NEW_RIG,Vector3(1.3,0,0),"ESTRUTURA NOVA V3")
 	_build_controls()
 
 
@@ -91,10 +91,10 @@ func _build_controls() -> void:
 	title.add_theme_font_size_override("font_size",17)
 	column.add_child(title)
 	var subtitle := Label.new()
-	subtitle.text="Esquerda: skin atual  |  Direita: nova V2"
+	subtitle.text="Esquerda: skin atual  |  Direita: goblin V3 da imagem"
 	column.add_child(subtitle)
 	var explanation := Label.new()
-	explanation.text="Textura e equipamentos originais.\nEste teste nao modifica seu jogo nem seus saves."
+	explanation.text="V3: corpo novo, articulacoes reais e materiais proprios.\nSem deformar membros e sem marca d\u0027agua. Saves preservados."
 	column.add_child(explanation)
 	_button(column,"Parado",_set_motion.bind("idle"))
 	_button(column,"Caminhar",_set_motion.bind("walk"))
@@ -104,7 +104,7 @@ func _build_controls() -> void:
 	_button(column,"Equipar / retirar escudo",_shield)
 	_button(column,"Voltar ao jogo (ESC)",_back)
 	caption=Label.new()
-	caption.text="Estado: Caminhando"
+	caption.text="Estado: Parado"
 	column.add_child(caption)
 
 
