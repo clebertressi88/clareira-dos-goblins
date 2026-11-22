@@ -9,10 +9,10 @@ const TREE_GROW_SECONDS := 720.0
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira"}
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1]}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","wood_floor":"Piso / teto de madeira"}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
 const VINE := 11
@@ -28,10 +28,12 @@ const WINDOW_ITEM := 18
 const BENCH2_ITEM := 19
 const SHOVEL_ITEM := 20
 const SAPLING_ITEM := 21
+const FLOOR_ITEM := 22
+const BUILD_MAX_LEVEL := 3
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
-const BUILD_TAG := "Atualização 21/11 · patrulha 8 m · paredes encaixadas · inventário arrastável"
+const BUILD_TAG := "Paredes ancoradas no terreno · pisos e tetos horizontais · ate 3 pavimentos"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
 var backpack_equipped := false
@@ -49,6 +51,8 @@ var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
 var placed: Array = []
+var build_level := 0 # 0=terreo; 1=segundo; 2=terceiro; 3=teto terceiro
+var build_rotation := 0 # incrementos de 90 graus
 var objects: Dictionary = {}
 var chunks: Dictionary = {}
 var mobs: Array[CharacterBody3D] = []
@@ -79,7 +83,7 @@ var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/9.png"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/9.png"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -850,6 +854,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 		"wood_wall","wood_doorway","wood_window":
 			o.collision_layer |= SOLID
 			build_wood_wall(o,kind)
+		"wood_floor":
+			o.collision_layer |= SOLID
+			build_wood_floor(o)
 		"backpack":
 			box(o,Vector3(0,.23,0),Vector3(.39,.44,.26),"pack_leather",Color("#815337"))
 			box(o,Vector3(0,.37,-.14),Vector3(.39,.12,.035),"pack_flap",Color("#5e3d28"))
@@ -1969,7 +1976,7 @@ func craft_status(recipe: String) -> String:
 		return "Receita pronta · clique no item para fabricar"
 	match craft_mode:
 		"station":
-			return "Lanças, machados, pá (1 tábua + 2 gravetos), mochila e construções."
+			return "Lanças, machados, pá, paredes e piso/teto (8 tábuas + 1 tronco)."
 		_:
 			var kinds: Array = []
 			for cell in craft_cells:
@@ -2126,7 +2133,7 @@ func craft_basic() -> void:
 	if kind.is_empty():
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
 	}[kind]
 	for index: int in costs:
 		stock[index] -= costs[index]
@@ -2684,14 +2691,14 @@ func primary() -> void:
 		return
 	next_attack = elapsed+.46
 	var held: int = bar_items[selected]
-	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM] and stock[held]>0:
+	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM] and stock[held]>0:
 		if place_craft(ITEM_KINDS[held]):
 			stock[held] -= 1
 			if held in [BENCH_ITEM,BENCH2_ITEM]:
 				bench = true
 			sync_hotbar()
 			save_game()
-			notice("Estrutura colocada no chão.")
+			notice("Estrutura colocada no pavimento %d." % (build_level+1))
 		return
 	var hit := ray()
 	if hit.is_empty():
@@ -2726,12 +2733,12 @@ func primary() -> void:
 		save_game()
 		notice("Muda plantada! A árvore crescerá com o tempo.")
 		return
-	if kind in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window"]:
+	if kind in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
 		var hits: int = int(o.get_meta("break_hits",0))+(2 if held==STONE_AXE else 1)
-		var needed := 4 if kind in ["wood_wall","wood_doorway","wood_window","bench2"] else (3 if kind=="bench" else 2)
+		var needed := 4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2)
 		if hits<needed:
 			o.set_meta("break_hits",hits)
 			impact(hit["position"],hit["normal"],true)
@@ -2871,7 +2878,7 @@ func secondary() -> void:
 			station_level = 2 if kind=="bench2" else 1
 			open_craft("station")
 			return
-		if kind in ["fire","wood_wall","wood_doorway","wood_window"]:
+		if kind in ["fire","wood_wall","wood_doorway","wood_window","wood_floor"]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
 		if item>=0:
