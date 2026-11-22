@@ -16,19 +16,20 @@ func _test_character(visual: Node3D, title: String) -> bool:
 		fail(title+": arquivo NPC nao instanciou controlador")
 		return false
 	var skeletons: Array = controller.get("skeletons")
-	if skeletons.size()<2:
-		fail(title+": malhas nao possuem Skeleton3D completo")
+	if skeletons.size()!=1:
+		fail(title+": deve existir apenas um Skeleton3D compartilhado")
 		return false
 	var meshes := controller.find_children("*","MeshInstance3D",true,false)
 	var arms := false
 	var legs := false
+	var both_feet := {}
 	var active_parts := 0
 	for node in meshes:
 		var part := node as MeshInstance3D
 		if part == null or part.mesh == null or part.skin == null:
 			continue
 		var skel := part.get_node_or_null(part.skeleton) as Skeleton3D
-		if skel == null or skel.get_bone_count()!=13:
+		if skel == null or skel.get_bone_count()!=15:
 			fail(title+": ossos nao vinculados a malha")
 			return false
 		var arrays: Array = part.mesh.surface_get_arrays(0)
@@ -38,16 +39,21 @@ func _test_character(visual: Node3D, title: String) -> bool:
 			fail(title+": quantidade invalida de pesos")
 			return false
 		for i in range(0,bones.size(),4):
-			if weights[i]>.1 and bones[i] in [3,4,5,6]:
+			if absf(weights[i]-1.0)>0.0001 or absf(weights[i+1])>0.0001 or absf(weights[i+2])>0.0001 or absf(weights[i+3])>0.0001:
+				fail(title+": vertices ainda possuem pesos misturados e deformam")
+				return false
+			if bones[i] in [3,4,5,6,13,14]:
 				arms = true
-			if weights[i]>.1 and bones[i] in [7,8,9,10,11,12]:
+			if bones[i] in [7,8,9,10,11,12]:
 				legs = true
+			if bones[i] == 11 or bones[i] == 12:
+				both_feet[bones[i]]=true
 		var material := part.get_active_material(0) as BaseMaterial3D
 		if material == null or material.albedo_texture == null:
 			fail(title+": textura original nao preservada")
 			return false
 		active_parts += 1
-	if active_parts<2 or not arms or not legs:
+	if active_parts<2 or not arms or not legs or both_feet.size()!=2:
 		fail(title+": nao ha pele articulada em bracos E pernas")
 		return false
 	var swords: Array = controller.get("sword_parts")
@@ -96,5 +102,5 @@ func _run() -> void:
 	var remote := game.call("net_create_avatar",82) as Node3D
 	if remote == null or not _test_character(remote.get_child(0),"Jogador remoto"):
 		return
-	print("GOBLIN MODEL OK: esqueletos 13 ossos, bracos/pernas animados e texturas preservadas.")
+	print("GOBLIN MODEL OK: skin rigida sem deformacao, 15 articulacoes, espadas/escudos e UV preservados.")
 	quit(0)

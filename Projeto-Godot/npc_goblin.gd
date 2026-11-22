@@ -5,23 +5,25 @@ extends Node3D
 ## O movimento real e feito por Skeleton3D, nao pelo antigo balanco de cabeca.
 const MODEL: PackedScene = preload("res://modelos/goblin_npc.glb")
 const EQUIPMENT = preload("res://npc_goblin_equipment.gd")
+const SKIN_BUILDER = preload("res://npc_goblin_skin.gd")
 
 const BONES := [
-	"Quadril",       # 0
-	"Coluna",        # 1
-	"Cabeca",        # 2
-	"BracoEsq",      # 3
-	"AntebracoEsq",  # 4
-	"BracoDir",      # 5
-	"AntebracoDir",  # 6
-	"CoxaEsq",       # 7
-	"CanelaEsq",     # 8
-	"CoxaDir",       # 9
-	"CanelaDir",     # 10
-	"PeEsq",         # 11
-	"PeDir"          # 12
+	"Quadril", "Coluna", "Cabeca", "BracoEsq", "AntebracoEsq",
+	"BracoDir", "AntebracoDir", "CoxaEsq", "CanelaEsq",
+	"CoxaDir", "CanelaDir", "PeEsq", "PeDir", "MaoEsq", "MaoDir"
 ]
-const PARENTS := [-1,0,1,1,3,1,5,0,7,0,9,8,10]
+const PARENTS := [-1,0,1,1,3,1,5,0,7,0,9,8,10,4,6]
+# Pontos reais do modelo: o GLB apresenta bracos abertos e joelhos separados.
+# Local -Y se torna +Y na transformacao de importacao Sketchfab.
+const JOINTS := [
+	Vector3(0,-22,-5), Vector3(0,-37,-5), Vector3(0,-47,-11),
+	Vector3(-9,-40,-10), Vector3(-16,-29,-17),
+	Vector3(9,-40,0), Vector3(21,-35,3),
+	Vector3(-6,-21,5), Vector3(-8,-13,6),
+	Vector3(7,-21,-15), Vector3(8,-13,-16),
+	Vector3(-9,-6,8), Vector3(10,-6,-22),
+	Vector3(-23,-28,-18), Vector3(34,-28,-2)
+]
 
 var skeletons: Array[Skeleton3D] = []
 var sword_parts: Array[Node3D] = []
@@ -80,16 +82,16 @@ func install() -> bool:
 		-bounds_min.y,
 		-(bounds_min.z+bounds_max.z)*0.5)*scale_factor
 	pivot.rotation.y = 0.0
+	# Um unico Skeleton3D compartilhado pelas duas malhas originais.
+	var skeleton := _create_anatomical_skeleton(parts[0].get_parent())
 	for node in parts:
 		var part := node as MeshInstance3D
 		if part != null and part.mesh != null:
-			var previous_count := skeletons.size()
-			_skin_part(part)
-			if skeletons.size()>previous_count and gear_sections.has(part.get_instance_id()):
+			_skin_part(part,skeleton)
+			if gear_sections.has(part.get_instance_id()):
 				var group: Dictionary = gear_sections[part.get_instance_id()]
-				var skeleton := skeletons[-1]
-				EQUIPMENT.attach(part,skeleton,group["sword"] as ArrayMesh,"Espada","AntebracoDir",sword_parts)
-				EQUIPMENT.attach(part,skeleton,group["shield"] as ArrayMesh,"Escudo","AntebracoEsq",shield_parts)
+				EQUIPMENT.attach(part,skeleton,group["sword"] as ArrayMesh,"Espada","MaoDir",sword_parts)
+				EQUIPMENT.attach(part,skeleton,group["shield"] as ArrayMesh,"Escudo","MaoEsq",shield_parts)
 	if skeletons.is_empty() or sword_parts.is_empty() or shield_parts.is_empty():
 		push_error("GLB sem pesos de ossos ou malhas compativeis.")
 		pivot.queue_free()
@@ -107,116 +109,35 @@ func set_equipment(sword: bool, shield: bool) -> void:
 	for item in shield_parts:
 		if is_instance_valid(item): item.visible = shield
 
-func _skin_part(part: MeshInstance3D) -> void:
-	var original := part.mesh
-	var aabb := original.get_aabb()
-	var h := maxf(aabb.size.y,0.001)
-	var low := aabb.position.y
-	# Centra os ossos no corpo, nao na arma/orelha mais distante.
-	var center_x := aabb.position.x+aabb.size.x*0.4
-	var center_z := aabb.position.z+aabb.size.z*0.55
-	var width := h
-	# Pivots em coordenadas locais da malha. No GLB original a origem
-	# esta na parte inferior e o eixo Y e invertido pelo node do importador.
-	var joints := [
-		Vector3(center_x,low+h*.64,center_z),
-		Vector3(center_x,low+h*.49,center_z),
-		Vector3(center_x,low+h*.29,center_z),
-		Vector3(center_x-width*.15,low+h*.48,center_z),
-		Vector3(center_x-width*.23,low+h*.61,center_z),
-		Vector3(center_x+width*.15,low+h*.48,center_z),
-		Vector3(center_x+width*.23,low+h*.61,center_z),
-		Vector3(center_x-width*.07,low+h*.67,center_z),
-		Vector3(center_x-width*.08,low+h*.82,center_z),
-		Vector3(center_x+width*.07,low+h*.67,center_z),
-		Vector3(center_x+width*.08,low+h*.82,center_z),
-		Vector3(center_x-width*.08,low+h*.96,center_z),
-		Vector3(center_x+width*.08,low+h*.96,center_z)
-	]
+func _create_anatomical_skeleton(parent: Node) -> Skeleton3D:
 	var skeleton := Skeleton3D.new()
-	skeleton.name = "EsqueletoGoblin%d" % skeletons.size()
-	part.get_parent().add_child(skeleton)
+	skeleton.name = "EsqueletoCorpo"
+	parent.add_child(skeleton)
 	for i in range(BONES.size()):
-		var bone_id: int = skeleton.add_bone(BONES[i])
-		var parent_id: int = int(PARENTS[i])
-		if parent_id >= 0:
-			skeleton.set_bone_parent(bone_id,parent_id)
-		var offset: Vector3 = joints[i] if parent_id < 0 else joints[i]-joints[parent_id]
-		skeleton.set_bone_rest(bone_id,Transform3D(Basis.IDENTITY,offset))
+		var bone_idx: int = skeleton.add_bone(BONES[i])
+		var parent_idx: int = int(PARENTS[i])
+		if parent_idx >= 0:
+			skeleton.set_bone_parent(bone_idx,parent_idx)
+		var joint: Vector3 = JOINTS[i]
+		var offset: Vector3 = joint if parent_idx < 0 else joint-JOINTS[parent_idx]
+		skeleton.set_bone_rest(bone_idx,Transform3D(Basis.IDENTITY,offset))
 	skeleton.reset_bone_poses()
-	var skinned := ArrayMesh.new()
-	var vertex_total := 0
-	for surface in range(original.get_surface_count()):
-		var arrays: Array = original.surface_get_arrays(surface)
-		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		if vertices.is_empty():
-			continue
-		var bones := PackedInt32Array()
-		var weights := PackedFloat32Array()
-		bones.resize(vertices.size()*4)
-		weights.resize(vertices.size()*4)
-		for i in range(vertices.size()):
-			var assignment := _vertex_bone_weights(vertices[i],low,h,center_x)
-			var index := i*4
-			bones[index] = int(assignment.x)
-			bones[index+1] = int(assignment.y)
-			bones[index+2] = 0
-			bones[index+3] = 0
-			weights[index] = assignment.z
-			weights[index+1] = 1.0-assignment.z
-			weights[index+2] = 0.0
-			weights[index+3] = 0.0
-		arrays[Mesh.ARRAY_BONES] = bones
-		arrays[Mesh.ARRAY_WEIGHTS] = weights
-		skinned.add_surface_from_arrays(original.surface_get_primitive_type(surface),arrays)
-		var original_material: Material = part.get_active_material(surface)
-		if original_material != null:
-			skinned.surface_set_material(skinned.get_surface_count()-1,original_material)
-		vertex_total += vertices.size()
-	if vertex_total == 0:
-		skeleton.queue_free()
+	skeletons.append(skeleton)
+	return skeleton
+
+
+func _skin_part(part: MeshInstance3D, skeleton: Skeleton3D) -> void:
+	var source: Mesh = part.mesh
+	var skinned: ArrayMesh = SKIN_BUILDER.build(source)
+	if skinned.get_surface_count()==0:
+		push_error("Falha ao vincular malha ao Skeleton3D.")
 		return
 	var skin := skeleton.create_skin_from_rest_transforms()
 	part.material_override = null
 	part.mesh = skinned
 	part.skeleton = part.get_path_to(skeleton)
 	part.skin = skin
-	skeletons.append(skeleton)
 
-func _vertex_bone_weights(v: Vector3, low: float, h: float, center_x: float) -> Vector3:
-	var t := clampf((v.y-low)/h,0.0,1.0)
-	var dx := (v.x-center_x)/h
-	var lateral := absf(dx)
-	var side_left := dx < 0.0
-	var bone := 0
-	var strength := 0.0
-	# Cabeca/pescoco: a rotacao se transmite aos olhos e orelhas.
-	if t < .42 and lateral < .48:
-		bone = 2
-		strength = clampf((.45-t)/.12,0.0,.95)
-	# Bracos e antebracos, dos dois lados do tronco.
-	elif t >= .40 and t < .71 and lateral > .13 and lateral < .44:
-		var lower_arm := t > .57
-		bone = (4 if lower_arm else 3) if side_left else (6 if lower_arm else 5)
-		strength = clampf((lateral-.13)/.11,0.0,.96) * clampf((.73-t)/.09,0.0,1.0)
-	# Pernas da cintura aos pes. Joelho e tornozelo recebem ossos proprios.
-	elif t >= .61 and lateral < .26:
-		if t > .90:
-			bone = 11 if side_left else 12
-		elif t > .78:
-			bone = 8 if side_left else 10
-		else:
-			bone = 7 if side_left else 9
-		strength = clampf((t-.61)/.12,0.0,.98)
-	# Coluna, abdomen e ombros.
-	elif t >= .34 and t < .69:
-		bone = 1
-		strength = clampf((.71-t)/.18,0.0,.85)
-	# Equipamentos e outros vertices ficam vinculados ao quadril.
-	var parent_id: int = int(PARENTS[bone])
-	if parent_id < 0:
-		parent_id = 0
-	return Vector3(float(bone),float(parent_id),strength)
 
 func animate(velocity: Vector3, dt: float, grounded: bool = true) -> void:
 	var speed := Vector2(velocity.x,velocity.z).length()
