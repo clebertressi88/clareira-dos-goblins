@@ -787,9 +787,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			visual.add_child(growth)
 			# O tronco alto encaixa na mesma base de raio .23, sem salto visual.
 			cylinder(growth,Vector3(0,1.36,0),.23,1.68,"tree_bark",Color.WHITE)
-			for i in range(4):
-				var a := i*TAU/4
-				ball(growth,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
+			# Copas detalhadas, galhos e variacao deterministica por ID.
+			# O tronco continua sendo a unica colisao da arvore.
+			preload("res://forest_tree_visual.gd").decorate(growth,materials["tree_bark"],id)
 			var stump := Node3D.new()
 			stump.name = "Toco"
 			visual.add_child(stump)
