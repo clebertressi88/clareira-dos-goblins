@@ -53,6 +53,16 @@ func _run() -> void:
 	if all_meshes.size()<75:
 		fail("Modelo V4 muito simplificado: "+str(all_meshes.size()))
 		return
+	# Garante que os novos materiais procedurais estao aplicados na malha real.
+	for piece in ["V4_CranioEsculpido", "V4_TorsoUnificado", "V4_CintoDeCouro", "V4_BotaInteiraDir"]:
+		var mesh_part := items[piece] as MeshInstance3D
+		if not (mesh_part.material_override is ShaderMaterial):
+			fail("Material procedural ausente: " + piece)
+			return
+		var shader_mat := mesh_part.material_override as ShaderMaterial
+		if shader_mat.shader == null:
+			fail("Shader nao carregado: " + piece)
+			return
 	var head := items["V4_CranioEsculpido"] as MeshInstance3D
 	var ear := items["V4_OrelhaDir"] as MeshInstance3D
 	var nose := items["V4_NarizAnatomico"] as MeshInstance3D
