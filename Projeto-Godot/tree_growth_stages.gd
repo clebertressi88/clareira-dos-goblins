@@ -2,6 +2,7 @@ extends RefCounted
 ## Dois modelos de crescimento independentes, com tronco marrom e folhas recortadas.
 ## A origem de ambos e a base do caule, posicionada no topo do toco (Y=.52).
 const FOLIAGE := preload("res://forest_tree_visual.gd")
+const WOOD := preload("res://forest_wood_geometry.gd")
 
 static func make_bud(root: Node3D, tree_id: String) -> void:
 	# Broto curto: caule fino marrom-esverdeado e folhas individuais recortadas.
@@ -11,7 +12,7 @@ static func make_bud(root: Node3D, tree_id: String) -> void:
 	var stem_mat := StandardMaterial3D.new()
 	stem_mat.albedo_color = Color("#6d7739")
 	stem_mat.roughness = 1.0
-	_add_wood(root,Vector3.ZERO,Vector3(0,0.19,0),0.015,stem_mat)
+	WOOD.tapered(root,Vector3.ZERO,Vector3(0,0.19,0),0.019,0.009,stem_mat,6)
 	for i in range(3):
 		var a := TAU*float(i)/3.0 + rng.randf_range(-0.2,0.2)
 		var radius := 0.065 if i<2 else 0.025
@@ -23,7 +24,7 @@ static func make_stage(root: Node3D, bark: Material, tree_id: String, young: boo
 	rng.seed = absi(hash(tree_id + ("-jovem" if young else "-muda")))
 	var height := 1.37 if young else 0.67
 	var radius := 0.115 if young else 0.060
-	_add_wood(root,Vector3.ZERO,Vector3.UP*height,radius,bark)
+	WOOD.tapered(root,Vector3.ZERO,Vector3.UP*height,radius*1.25,radius*0.75,bark,8)
 	var crown_y := height + (0.09 if young else 0.01)
 	var spread := 0.50 if young else 0.22
 	var count := 11 if young else 5
@@ -33,27 +34,11 @@ static func make_stage(root: Node3D, bark: Material, tree_id: String, young: boo
 		var y := crown_y+rng.randf_range(-0.27 if young else -0.12,0.31 if young else 0.17)
 		var end := Vector3(cos(angle)*horizontal,y,sin(angle)*horizontal)
 		if i < (6 if young else 3):
-			_add_wood(root,Vector3(0.0,height*0.67,0.0),end,0.038 if young else 0.019,bark)
+			WOOD.make_branch(root,Vector3(0.0,height*0.67,0.0),end,0.038 if young else 0.019,bark)
 		var cluster_size := rng.randf_range(0.39,0.58) if young else rng.randf_range(0.22,0.34)
 		_add_foliage(root,end,cluster_size,angle,rng)
 	# Preenchimento do centro; sem as antigas bolas verdes.
 	_add_foliage(root,Vector3(0,crown_y+0.16,0),0.58 if young else 0.31,0.4,rng)
-
-static func _add_wood(parent: Node3D, start: Vector3, tip: Vector3, radius: float, bark: Material) -> void:
-	var delta := tip-start
-	if delta.length_squared() < 0.0001:
-		return
-	var mesh := CylinderMesh.new()
-	mesh.bottom_radius = radius
-	mesh.top_radius = radius*0.72
-	mesh.height = delta.length()
-	mesh.radial_segments = 7
-	var part := MeshInstance3D.new()
-	part.mesh = mesh
-	part.material_override = bark
-	part.position = (start+tip)*0.5
-	part.quaternion = Quaternion(Vector3.UP,delta.normalized())
-	parent.add_child(part)
 
 static func _add_foliage(parent: Node3D, pos: Vector3, extent: float, angle: float, rng: RandomNumberGenerator) -> void:
 	for side in range(2):
