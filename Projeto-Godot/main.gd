@@ -3094,7 +3094,8 @@ func _physics_process(dt: float) -> void:
 	stone_axe_head.visible = false
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
-	axe.get_node("CaboMachadoMadeira").visible = held in [STONE_AXE,SHOVEL_ITEM]
+	# O sprite do machado de pedra ja inclui cabo; somente a pa usa o cabo 3D compartilhado.
+	axe.get_node("CaboMachadoMadeira").visible = held==SHOVEL_ITEM
 	# Corte frontal: preparacao elevada, descida rapida com o fio, retorno neutro.
 	var chop_t := 1.0-clampf((next_attack-elapsed)/.46,0.0,1.0)
 	var chop_angle := -.44
