@@ -65,6 +65,7 @@ static func _palette(model: Node3D) -> Dictionary:
 	mat["skin_light"]=model.call("_material","#a0ae7a",.78,.0)
 	mat["shadow"]=model.call("_material","#647c53",.89,.0)
 	mat["ear"]=model.call("_material","#b98978",.82,.0,true)
+	mat["ear_skin"]=model.call("_material","#879d69",.83,.0,true)
 	mat["nose"]=model.call("_material","#c89d7c",.68,.0)
 	mat["white"]=model.call("_material","#f1e8cf",.44,.0)
 	mat["iris"]=model.call("_material","#b7a453",.40,.0)

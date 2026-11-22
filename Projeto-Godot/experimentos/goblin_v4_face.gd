@@ -37,6 +37,11 @@ static func smooth_mesh(points: Array,cols: int,rows: int) -> ArrayMesh:
 	return st.commit()
 
 static func loft_y(rings: Array,segs := 40,subdivisions := 5) -> ArrayMesh:
+	# Normal externa tambem no nariz, cujos aneis vem do alto para baixo.
+	var outline: Array=rings.duplicate()
+	if (outline[0] as Vector4).x > (outline[-1] as Vector4).x:
+		outline.reverse()
+	rings=outline
 	var nrows := (rings.size()-1)*subdivisions+1
 	var points: Array=[]
 	for row in range(nrows):
@@ -122,7 +127,7 @@ static func build(model: Node3D,mat: Dictionary) -> void:
 	for side in [-1.0,1.0]:
 		var tag := "Esq" if side<0.0 else "Dir"
 		var x: float=side*.180
-		mesh_part(model,"Cabeca","V4_Orelha"+tag,_ear_mesh(side,false),mat["skin"])
+		mesh_part(model,"Cabeca","V4_Orelha"+tag,_ear_mesh(side,false),mat["ear_skin"])
 		mesh_part(model,"Cabeca","V4_ConchaOrelha"+tag,_ear_mesh(side,true),mat["ear"])
 		# Musculos da raiz da orelha unem o contorno ao cranio.
 		oval(model,"Cabeca","V4_BaseOrelha"+tag,
