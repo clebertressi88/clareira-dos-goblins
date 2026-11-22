@@ -3840,13 +3840,15 @@ func apply_net_world(snapshot: Dictionary) -> void:
 					old.collision_layer = 0
 				old.queue_free()
 	placed = (snapshot["placed"] as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
+	removed = (snapshot["removed"] as Dictionary).duplicate(true)
 	if removed.has(STARTER_CABIN_ID) and objects.has(STARTER_CABIN_ID):
 		var obsolete: Node3D = objects[STARTER_CABIN_ID]
 		objects.erase(STARTER_CABIN_ID)
+		if obsolete is CollisionObject3D:
+			obsolete.collision_layer = 0
 		obsolete.queue_free()
 	elif not removed.has(STARTER_CABIN_ID) and not objects.has(STARTER_CABIN_ID):
 		spawn_starter_cabin()
-	removed = (snapshot["removed"] as Dictionary).duplicate(true)
 	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
 	hut = bool(snapshot.get("hut",false))
@@ -3890,7 +3892,7 @@ func net_send_snapshot(snapshot: Dictionary) -> void:
 
 @rpc("any_peer","call_remote","reliable")
 func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
-	if net_role!="host" or kind not in NET_SHARED_KINDS:
+	if net_role!="host" or kind=="hut" or kind not in NET_SHARED_KINDS:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
