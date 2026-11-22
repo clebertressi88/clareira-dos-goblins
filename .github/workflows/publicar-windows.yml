@@ -1,4 +1,5 @@
 name: Compilar jogo Windows e publicar ZIP
+# Reexecucao solicitada em 2026-11-22: publicar versao Windows com runners clareira-goblins.
 
 on:
   push:
