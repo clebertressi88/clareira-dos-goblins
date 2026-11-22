@@ -23,7 +23,7 @@ const BENCH2_ITEM := 19
 const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
-const BUILD_TAG := "Atualização 22/11 · LAN corrigida · patrulha 8 m · construção"
+const BUILD_TAG := "Atualização 22/11 · mundo LAN compartilhado · construções sincronizadas"
 const BACKPACK_SIZE := 12
 const BACKPACK_STACK_LIMIT := 64
 var backpack_equipped := false
@@ -111,6 +111,9 @@ var next_net := 0.0
 var feedback := ""
 var feedback_until := 0.0
 var remotes: Dictionary = {}
+var local_world_backup: Dictionary = {}
+var waiting_for_world := false
+var world_ready := true
 
 func _ready() -> void:
 	inventory_slots.resize(ITEMS.size())
@@ -2552,21 +2555,142 @@ func build_hut() -> void:
 	creature("guardian","guardiao",Vector3(3,0,-39),self)
 	notice("O guardião apareceu no Vale da Névoa.")
 
+# Somente o anfitriao modifica o mundo definitivo; clientes enviam pedidos.
+# Dados de inventario continuam individuais e nao sao transmitidos na rede.
 func store_object(kind: String, pos: Vector3, yaw: float = 0.0) -> void:
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		if world_ready:
+			request_place_object.rpc_id(1,kind,pos,yaw)
+		return
 	var id := "item-"+str(Time.get_ticks_usec())+"-"+str(randi())
+	apply_shared_placement(kind,id,pos,yaw)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		shared_object_placed.rpc(kind,id,pos,yaw)
+
+func apply_shared_placement(kind: String,id: String,pos: Vector3,yaw: float) -> void:
+	if objects.has(id):
+		return
 	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw})
 	spawn_object(kind,id,pos,self,yaw)
 
+@rpc("any_peer","call_remote","reliable")
+func request_place_object(kind: String,pos: Vector3,yaw: float) -> void:
+	if not multiplayer.is_server():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if id < 2 or not pos.is_finite() or not is_finite(yaw):
+		return
+	if kind not in ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","block","hut","log","plank","stick","stone","vine","meat","hide","foot","backpack","rope","stone_axe","spear","wood_spear","wood_axe"]:
+		return
+	if pos.length() > 5000.0:
+		return
+	if remotes.has(id) and remotes[id].position.distance_to(pos) > 8.0:
+		return
+	store_object(kind,pos,yaw)
+
+@rpc("authority","call_remote","reliable")
+func shared_object_placed(kind: String,id: String,pos: Vector3,yaw: float) -> void:
+	if not world_ready or not pos.is_finite() or not is_finite(yaw):
+		return
+	apply_shared_placement(kind,id,pos,yaw)
+
 func remove_object(o: Node3D) -> void:
-	if o is CollisionObject3D:
-		o.collision_layer = 0
-	var id: String = o.get_meta("id")
+	var id: String = str(o.get_meta("id",""))
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		if world_ready and not id.is_empty():
+			request_remove_object.rpc_id(1,id)
+		return
+	apply_shared_removal(id)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		shared_object_removed.rpc(id)
+
+func apply_shared_removal(id: String) -> void:
 	if id.begins_with("item-"):
-		placed = placed.filter(func(entry): return entry["id"]!=id)
-	elif id!="lobo-errante":
+		placed = placed.filter(func(entry): return str(entry.get("id",""))!=id)
+	elif id!="lobo-errante" and not id.is_empty():
 		removed[id] = true
-	objects.erase(id)
-	o.queue_free()
+	if objects.has(id):
+		var obj: Node3D = objects[id]
+		if is_instance_valid(obj):
+			if obj is CollisionObject3D:
+				obj.collision_layer = 0
+			obj.queue_free()
+		objects.erase(id)
+
+@rpc("any_peer","call_remote","reliable")
+func request_remove_object(id: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id < 2 or not objects.has(id):
+		return
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj) or obj.get_meta("kind","") in ["Bruma","Talo"]:
+		return
+	if remotes.has(peer_id) and remotes[peer_id].position.distance_to(obj.global_position) > 6.0:
+		return
+	remove_object(obj)
+
+@rpc("authority","call_remote","reliable")
+func shared_object_removed(id: String) -> void:
+	if world_ready:
+		apply_shared_removal(id)
+
+func capture_local_world() -> void:
+	local_world_backup = {"removed":removed.duplicate(true),"placed":placed.duplicate(true),
+		"hut":hut,"bench":bench,"won":won}
+
+# Reconstrucao completa do cenario: elimina estruturas locais antes de
+# aplicar o mundo do anfitriao. Os NPCs amigaveis permanecem.
+func rebuild_shared_world(new_removed: Dictionary,new_placed: Array,new_hut: bool,new_bench: bool,new_won: bool) -> void:
+	for key in chunks.keys():
+		var chunk: Node3D = chunks[key]
+		if is_instance_valid(chunk):
+			chunk.queue_free()
+	chunks.clear()
+	for key in objects.keys():
+		var obj: Node3D = objects[key]
+		if not is_instance_valid(obj):
+			continue
+		if obj is StaticBody3D or str(key).begins_with("item-"):
+			obj.queue_free()
+			objects.erase(key)
+	removed = new_removed.duplicate(true)
+	placed = new_placed.duplicate(true)
+	hut = new_hut
+	bench = new_bench
+	won = new_won
+	for entry in placed:
+		if not entry is Dictionary:
+			continue
+		var p: Array = entry.get("p",[])
+		if p.size() != 3:
+			continue
+		var pos := Vector3(float(p[0]),float(p[1]),float(p[2]))
+		if pos.is_finite():
+			spawn_object(str(entry.get("kind","")),str(entry.get("id","")),pos,self,float(entry.get("r",0.0)))
+	if not removed.has("fire"):
+		spawn_object("fire","fire",Vector3(0,0,-6))
+	load_chunks()
+
+@rpc("any_peer","call_remote","reliable")
+func request_world_state() -> void:
+	if not multiplayer.is_server():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if id >= 2:
+		receive_world_state.rpc_id(id,removed,placed,hut,bench,won)
+
+@rpc("authority","call_remote","reliable")
+func receive_world_state(host_removed: Dictionary,host_placed: Array,host_hut: bool,host_bench: bool,host_won: bool) -> void:
+	if multiplayer.is_server():
+		return
+	rebuild_shared_world(host_removed,host_placed,host_hut,host_bench,host_won)
+	waiting_for_world = false
+	world_ready = true
+	notice("Mundo do servidor carregado. Construcoes compartilhadas.")
+	begin()
+
 
 func notice(message: String) -> void:
 	feedback = message
@@ -2620,8 +2744,19 @@ func save_game() -> void:
 	var file := FileAccess.open(SAVE+".tmp",FileAccess.WRITE)
 	if file:
 		var p := player.position
-		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":removed,
-			"placed":placed,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+		var world_removed: Dictionary = removed
+		var world_placed: Array = placed
+		var saved_hut := hut
+		var saved_bench := bench
+		var saved_won := won
+		if multiplayer.has_multiplayer_peer() and not multiplayer.is_server() and not local_world_backup.is_empty():
+			world_removed = local_world_backup["removed"]
+			world_placed = local_world_backup["placed"]
+			saved_hut = bool(local_world_backup["hut"])
+			saved_bench = bool(local_world_backup["bench"])
+			saved_won = bool(local_world_backup["won"])
+		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":world_removed,
+			"placed":world_placed,"health":health,"hut":saved_hut,"bench":saved_bench,"won":saved_won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots}))
 		file.close()
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE+".tmp"),ProjectSettings.globalize_path(SAVE))
@@ -2651,6 +2786,9 @@ func join_game() -> void:
 		show_menu()
 		return
 	disconnect_game()
+	capture_local_world()
+	world_ready = false
+	waiting_for_world = true
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(ip,24650)
 	if err != OK:
@@ -2663,8 +2801,8 @@ func join_game() -> void:
 	show_menu()
 
 func connected_to_server() -> void:
-	notice("Conectado ao servidor LAN.")
-	begin()
+	notice("Conectado. Carregando o mapa e as construcoes do servidor…")
+	request_world_state.rpc_id(1)
 
 func connection_failed() -> void:
 	disconnect_game()
@@ -2725,11 +2863,18 @@ func remove_remote_avatar(id: int) -> void:
 		remotes.erase(id)
 
 func disconnect_game() -> void:
+	var was_client := multiplayer.has_multiplayer_peer() and not multiplayer.is_server()
 	if multiplayer.multiplayer_peer:
 		multiplayer.multiplayer_peer.close()
 		multiplayer.multiplayer_peer = null
 	for id in remotes.keys():
 		remove_remote(id)
+	if was_client and not local_world_backup.is_empty():
+		rebuild_shared_world(local_world_backup["removed"],local_world_backup["placed"],
+			bool(local_world_backup["hut"]),bool(local_world_backup["bench"]),bool(local_world_backup["won"]))
+	local_world_backup.clear()
+	world_ready = true
+	waiting_for_world = false
 
 func disconnected() -> void:
 	disconnect_game()
