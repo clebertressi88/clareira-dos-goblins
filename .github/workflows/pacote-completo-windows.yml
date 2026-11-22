@@ -64,7 +64,6 @@ jobs:
           if (!(Select-String -Path download/teste-paisagem.log -SimpleMatch 'PAISAGEM TEST OK')) { throw 'Teste nao confirmou sucesso.' }
       - name: Baixar templates Windows e exportar o jogo
         id: exportar
-        continue-on-error: true
         shell: pwsh
         run: |
           $url = 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz'
@@ -89,6 +88,21 @@ jobs:
           $out = Join-Path (Get-Location) 'stage/Jogo-Windows/Clareira-dos-Goblins.exe'
           & $godot --headless --path $proj --export-release 'Windows Desktop' $out 2>&1 | Tee-Object -FilePath download/exportacao.log
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'Exportacao Windows nao concluida.' }
+      - name: Testar EXE exportado do jogo
+        shell: pwsh
+        run: |
+          $game = (Resolve-Path stage/Jogo-Windows/Clareira-dos-Goblins.exe).Path
+          $log = Join-Path (Get-Location) 'download/jogo-exportado-teste.log'
+          $logConsole = Join-Path (Get-Location) 'download/jogo-exportado-console.log'
+          & $game --headless --quit-after 90 --log-file $log 2>&1 | Tee-Object -FilePath $logConsole
+          if ($LASTEXITCODE -ne 0) { throw "O EXE exportado encerrou com codigo $LASTEXITCODE" }
+          if (!(Test-Path -LiteralPath $log)) { throw 'Jogo nao criou log de teste.' }
+          $failures = Select-String -Path $log,$logConsole -Pattern 'SCRIPT ERROR|ERROR:|Invalid access|FATAL|Node not found' -CaseSensitive:$false
+          if ($failures) {
+            $failures | Select-Object -First 15 | ForEach-Object { Write-Host $_.Line }
+            throw 'O EXE exportado apresentou erro durante inicializacao.'
+          }
+          Write-Host 'EXE DO JOGO OK: inicializou e executou 90 quadros sem erros.'
       - name: Incluir atalhos e instrucoes
         shell: pwsh
         run: |
