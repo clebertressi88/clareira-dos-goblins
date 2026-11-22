@@ -1,0 +1,86 @@
+name: Compilar jogo Windows e publicar ZIP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Projeto-Godot/**'
+      - '.github/workflows/publicar-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-clareira-windows
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Baixar codigo do jogo
+        uses: actions/checkout@v4
+
+      - name: Instalar Godot 4.7.2 e templates oficiais
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download/4.7.2-stable"
+          curl -fL --retry 3 "$BASE/Godot_v4.7.2-stable_linux.x86_64.zip" -o /tmp/godot.zip
+          curl -fL --retry 3 "$BASE/Godot_v4.7.2-stable_export_templates.tpz" -o /tmp/templates.tpz
+          mkdir -p /tmp/godot-bin "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          unzip -oq /tmp/godot.zip -d /tmp/godot-bin
+          GODOT="$(find /tmp/godot-bin -maxdepth 1 -type f -name 'Godot*' | head -n 1)"
+          test -n "$GODOT"
+          chmod +x "$GODOT"
+          echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+          unzip -oq -j /tmp/templates.tpz 'templates/windows_release_x86_64.exe' 'templates/windows_debug_x86_64.exe' -d "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/windows_release_x86_64.exe"
+
+      - name: Importar recursos e validar scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path Projeto-Godot --import 2>&1 | tee /tmp/import.log
+          if grep -Ei '^([[:space:]]*SCRIPT ERROR:|[[:space:]]*ERROR:.*Parse Error)' /tmp/import.log; then
+            echo 'Erro de script na importacao' >&2
+            exit 1
+          fi
+
+      - name: Exportar EXE Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          "$GODOT" --headless --path Projeto-Godot --export-release 'Windows Desktop' "$GITHUB_WORKSPACE/dist/Clareira-dos-Goblins.exe" 2>&1 | tee /tmp/export.log
+          test -s dist/Clareira-dos-Goblins.exe
+          if grep -Ei '^([[:space:]]*SCRIPT ERROR:|[[:space:]]*ERROR:.*Parse Error)' /tmp/export.log; then
+            echo 'Erro durante exportacao' >&2
+            exit 1
+          fi
+          printf '%s\n' "$GITHUB_SHA" > dist/versao-github.txt
+          (cd dist && sha256sum Clareira-dos-Goblins.exe > SHA256SUMS.txt)
+          (cd dist && zip -q -9 ../Clareira-dos-Goblins-Windows.zip Clareira-dos-Goblins.exe versao-github.txt SHA256SUMS.txt)
+
+      - name: Guardar pacote como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clareira-dos-Goblins-Windows
+          path: Clareira-dos-Goblins-Windows.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publicar versao pronta na Release do GitHub
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view jogo-windows >/dev/null 2>&1; then
+            gh release create jogo-windows --title 'Clareira dos Goblins - Windows' --notes 'Versao compilada automaticamente da branch main. Baixe e extraia o ZIP para jogar.' --latest
+          fi
+          gh release upload jogo-windows Clareira-dos-Goblins-Windows.zip --clobber
+          gh release edit jogo-windows --notes "Build Windows gerado do commit \`$GITHUB_SHA\`. Baixe o ZIP e extraia antes de jogar."
