@@ -73,5 +73,39 @@ func _run() -> void:
 	if a < .55 or b < .55:
 		fail("Goblins travados na fisica/patrulha: %.2f m / %.2f m" % [a,b])
 		return
+	# Reproduz o problema das imagens: guardiao na encosta em x=3, z=-39.
+	# O codigo antigo nascia em y=0, quando o solo aqui fica quase 70 cm acima.
+	var guardian := game.call("creature","guardian","teste-guardiao",Vector3(3,0,-39),game) as CharacterBody3D
+	if guardian==null:
+		fail("Nao foi possivel criar guardiao.")
+		return
+	var guardian_height: float = float(game.call("ground",3.0,-39.0))
+	if absf(guardian.global_position.y-(guardian_height+.06))>.06:
+		fail("Guardiao nasceu enterrado: y=%.2f, solo=%.2f" % [guardian.global_position.y,guardian_height])
+		return
+	print("GUARDIAN SPAWN OK: base=%.2f, solo=%.2f" % [guardian.global_position.y,guardian_height])
+	# Traz os chunks para perto do guardiao e exige ataque com contato visivel.
+	player.position = Vector3(3.0,float(game.call("ground",3.0,-37.8))+.04,-37.8)
+	player.velocity = Vector3.ZERO
+	game.call("load_chunks")
+	await physics_frame
+	await physics_frame
+	if not bool(game.call("mob_has_clear_hit",guardian)):
+		fail("A linha de ataque livre nao detectou o jogador.")
+		return
+	var obstacle := StaticBody3D.new()
+	obstacle.collision_layer = 1
+	obstacle.collision_mask = 0
+	obstacle.position = Vector3(3.0, guardian_height+1.1, -38.4)
+	var wall := CollisionShape3D.new()
+	wall.shape = BoxShape3D.new()
+	wall.shape.size = Vector3(1.4,2.2,.14)
+	obstacle.add_child(wall)
+	game.add_child(obstacle)
+	await physics_frame
+	if bool(game.call("mob_has_clear_hit",guardian)):
+		fail("Guardiao pode atacar atraves de parede.")
+		return
+	print("GUARDIAN COMBAT OK: obstrucao interrompe ataque.")
 	print("TERRAIN PHYSICS OK: jogador e ambos os goblins caminharam sobre o relevo.")
 	quit(0)
