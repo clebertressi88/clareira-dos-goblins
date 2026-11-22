@@ -30,7 +30,11 @@ function Procurar-Godot([string]$PastaBase) {
         (Join-Path $PastaBase 'tools'),
         (Join-Path $PastaBase 'bin'),
         (Join-Path $env:LOCALAPPDATA 'Programs'),
-        (Join-Path $env:USERPROFILE 'Downloads')
+        (Join-Path $env:USERPROFILE 'Downloads'),
+        (Join-Path $env:USERPROFILE 'Desktop'),
+        (Join-Path $env:PUBLIC 'Desktop'),
+        (Join-Path $env:LOCALAPPDATA 'Programs'),
+        (Join-Path $env:USERPROFILE 'Documents')
     )
     if ($env:ProgramFiles) { $pastas += (Join-Path $env:ProgramFiles 'Godot') }
     $pastas = $pastas | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) } | Select-Object -Unique
@@ -108,7 +112,24 @@ try {
         $executavel = Procurar-Godot $base
     }
     if (-not $executavel) {
-        Falhar 'Godot nao localizado automaticamente. Execute novamente passando -GodotExe "C:\caminho\Godot_v4.x_win64_console.exe".'
+        Write-Host 'Godot nao localizado nas pastas usuais. Selecione o executavel do Godot na janela que sera aberta.' -ForegroundColor Yellow
+        try {
+            Add-Type -AssemblyName System.Windows.Forms
+            $dialogo = New-Object System.Windows.Forms.OpenFileDialog
+            $dialogo.Title = 'Localizar Godot 4 - selecione Godot*.exe'
+            $dialogo.Filter = 'Godot (Godot*.exe)|Godot*.exe|Executaveis (*.exe)|*.exe'
+            $dialogo.CheckFileExists = $true
+            $dialogo.Multiselect = $false
+            if ($dialogo.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                $executavel = $dialogo.FileName
+            }
+            $dialogo.Dispose()
+        } catch {
+            Write-Host "Nao foi possivel abrir o seletor de arquivos: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    if (-not $executavel) {
+        Falhar 'Godot 4 nao encontrado. Instale/extraia Godot 4 no computador e execute novamente. O atualizador de arquivos funcionou; somente a geracao do EXE depende do Godot.'
     }
     Write-Host "Godot: $executavel"
 
