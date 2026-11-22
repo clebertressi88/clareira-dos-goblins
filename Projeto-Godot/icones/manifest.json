@@ -24,7 +24,8 @@
     "15.png": "mochila",
     "16.png": "grade_craft_1",
     "17.png": "grade_craft_2",
-    "18.png": "grade_craft_3"
+    "18.png": "grade_craft_3",
+    "machado_madeira.svg": "machado_madeira_novo_inventario_e_hotbar"
   },
-  "observacao": "10.png substituido pelo machado de pedra low-poly aprovado; nao altera modelo equipado nem scripts do jogo."
+  "observacao": "Machado de madeira: icon SVG usado no inventario e hotbar; modelo 3D de madeira usado equipado e no chao. Machado de pedra preservado."
 }
