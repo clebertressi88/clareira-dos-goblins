@@ -49,7 +49,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 3 # Incompatível com clientes que simulavam mobs localmente
+const NET_PROTOCOL := 4 # Estado das arvores sincronizado; atualizar todos os clientes
 const NET_SHARED_KINDS := ["bench","bench2","fire","wood_wall","wood_doorway","wood_window","wood_floor","block","meat","hide","foot","log","plank","stick","stone","vine","sapling","backpack","rope"]
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -1633,7 +1633,10 @@ func timber(tree: Node3D, fell: bool) -> void:
 	var visual := tree.get_node("Visual") as Node3D
 	if visual.has_meta("reaction"):
 		visual.get_meta("reaction").kill()
-	var direction := tree.global_position-player.global_position
+	var attacker_pos: Vector3 = tree.get_meta("fall_from",player.global_position)
+	if tree.has_meta("fall_from"):
+		tree.remove_meta("fall_from")
+	var direction := tree.global_position-attacker_pos
 	var axis := Vector3(direction.z,0,-direction.x).normalized()
 	if axis.is_zero_approx():
 		axis = Vector3.RIGHT
@@ -3290,13 +3293,22 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		return false
 	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
 		return false
+	if net_role=="client" and not net_apply_in_progress:
+		if net_world_ready:
+			net_request_chop_tree.rpc_id(1,str(tree.get_meta("id","")),tool)
+		else:
+			notice("Aguarde a sincronização do mundo.")
+		return false
 	var needed := 4 if tool==STONE_AXE else 5
 	var cuts := int(tree.get_meta("cuts",0))+1
 	tree.set_meta("cuts",cuts)
 	impact(pos,normal,true)
 	play_tree_chop_sound(pos,tool)
 	var tree_pos := tree.global_position
+	var attacker_pos: Vector3 = tree.get_meta("fall_from",player.global_position)
 	timber(tree,cuts>=needed)
+	if net_role=="host" and not net_apply_in_progress:
+		net_tree_chopped.rpc(str(tree.get_meta("id","")),cuts,cuts>=needed,float(tree_regrowth.get(str(tree.get_meta("id","")),0.0)),attacker_pos)
 	if cuts>=needed:
 		for i in range(3):
 			store_object("log",tree_pos+Vector3((i-1)*.65,0,.39))
@@ -3323,10 +3335,18 @@ func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		return false
 	if not is_instance_valid(stump) or str(stump.get_meta("kind",""))!="stump":
 		return false
+	if net_role=="client" and not net_apply_in_progress:
+		if net_world_ready:
+			net_request_dig_stump.rpc_id(1,str(stump.get_meta("id","")),tool)
+		else:
+			notice("Aguarde a sincronização do mundo.")
+		return false
 	var digs := int(stump.get_meta("dig_hits",0))+1
 	stump.set_meta("dig_hits",digs)
 	impact(pos,normal,true)
 	if digs<2:
+		if net_role=="host":
+			net_stump_dug.rpc(str(stump.get_meta("id","")),digs,false)
 		notice("Arrancando raízes com a pá: 1/2")
 		return false
 	var stump_id: String = str(stump.get_meta("id",""))
@@ -3334,6 +3354,8 @@ func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 	var got_sapling := age>=TREE_BUD_DELAY and age<TREE_BUD_DELAY+TREE_GROW_SECONDS
 	cleared_stumps[stump_id] = true
 	tree_regrowth.erase(stump_id)
+	if net_role=="host":
+		net_stump_dug.rpc(stump_id,digs,true)
 	remove_object(stump)
 	stock[6] += 1
 	item_received(6)
@@ -3915,6 +3937,85 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 			if kind=="rabbit":
 				store_object("hide",p+Vector3(.41,0,0))
 	net_sync_entities.rpc(net_capture_entities())
+
+# O anfitriao valida os golpes e distribui o estado unico da floresta.
+@rpc("any_peer","call_remote","reliable")
+func net_request_chop_tree(id: String, tool: int) -> void:
+	if net_role!="host" or tool not in [WOOD_AXE,STONE_AXE] or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	var tree: Node3D = objects[id]
+	if not is_instance_valid(avatar) or not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
+		return
+	if avatar.global_position.distance_to(tree.global_position)>5.0:
+		return
+	var last := float(tree.get_meta("net_last_chop_"+str(peer_id),-100.0))
+	if elapsed-last<0.30:
+		return
+	tree.set_meta("net_last_chop_"+str(peer_id),elapsed)
+	tree.set_meta("fall_from",avatar.global_position)
+	chop_tree(tree,tool,tree.global_position+Vector3.UP*0.85,Vector3.FORWARD)
+
+
+@rpc("authority","call_remote","reliable")
+func net_tree_chopped(id: String, cuts: int, fell: bool, cut_time: float, from_position: Vector3) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not net_world_ready:
+		return
+	if cuts<1 or cuts>5 or not from_position.is_finite():
+		return
+	var tree: Node3D = objects.get(id,null)
+	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
+		return
+	if fell:
+		tree.set_meta("fall_from",from_position)
+		timber(tree,true)
+		tree_regrowth[id] = cut_time
+		update_tree_visual(tree)
+	else:
+		tree.set_meta("cuts",cuts)
+		tree.set_meta("fall_from",from_position)
+		timber(tree,false)
+		play_tree_chop_sound(tree.global_position+Vector3.UP*0.85,STONE_AXE)
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_dig_stump(id: String, tool: int) -> void:
+	if net_role!="host" or tool!=SHOVEL_ITEM or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	var stump: Node3D = objects[id]
+	if not is_instance_valid(avatar) or not is_instance_valid(stump) or str(stump.get_meta("kind",""))!="stump":
+		return
+	if avatar.global_position.distance_to(stump.global_position)>5.0:
+		return
+	var last := float(stump.get_meta("net_last_dig_"+str(peer_id),-100.0))
+	if elapsed-last<0.30:
+		return
+	stump.set_meta("net_last_dig_"+str(peer_id),elapsed)
+	dig_stump(stump,tool,stump.global_position+Vector3.UP*0.30,Vector3.UP)
+
+
+@rpc("authority","call_remote","reliable")
+func net_stump_dug(id: String, digs: int, removed_stump: bool) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not net_world_ready:
+		return
+	var stump: Node3D = objects.get(id,null)
+	if removed_stump:
+		cleared_stumps[id] = true
+		tree_regrowth.erase(id)
+		if is_instance_valid(stump):
+			objects.erase(id)
+			stump.collision_layer = 0
+			stump.queue_free()
+	elif is_instance_valid(stump):
+		stump.set_meta("dig_hits",digs)
+
 
 func net_create_avatar(peer_id: int) -> Node3D:
 	var avatar := Node3D.new()
