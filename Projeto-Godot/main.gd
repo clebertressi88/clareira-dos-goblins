@@ -737,22 +737,29 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var visual := Node3D.new()
 			visual.name = "Visual"
 			o.add_child(visual)
+			# Base e raizes SAO AS MESMAS antes e depois de cortar.
+			# Nao e criado um outro tronco mais grosso quando vira toco.
+			var base := Node3D.new()
+			base.name = "BaseTronco"
+			visual.add_child(base)
+			cylinder(base,Vector3(0,.26,0),.23,.52,"wood",Color("#855b36"))
+			for i in range(5):
+				var angle := float(i)*TAU/5.0
+				var root := cylinder(base,Vector3(cos(angle)*.36,.075,sin(angle)*.36),.075,.64,"wood",Color("#6c452d"))
+				root.rotation = Vector3(0.0,-angle,PI*.42)
 			var growth := Node3D.new()
 			growth.name = "Crescimento"
 			visual.add_child(growth)
-			cylinder(growth,Vector3(0,1.1,0),.18,2.2,"wood",Color("#855b36"))
+			# O tronco alto encaixa na mesma base de raio .23, sem salto visual.
+			cylinder(growth,Vector3(0,1.36,0),.23,1.68,"wood",Color("#855b36"))
 			for i in range(4):
 				var a := i*TAU/4
 				ball(growth,Vector3(cos(a)*.42,2.24+i*.18,sin(a)*.42),Vector3(1.5,1.35,1.38),"leaf"+str(i),Color("#456a38").lightened(i*.055))
 			var stump := Node3D.new()
 			stump.name = "Toco"
 			visual.add_child(stump)
-			cylinder(stump,Vector3(0,.24,0),.25,.48,"wood",Color("#855b36"))
-			cylinder(stump,Vector3(0,.487,0),.255,.032,"cut_wood",Color("#c6a273"))
-			for i in range(5):
-				var angle := float(i)*TAU/5.0
-				var root := cylinder(stump,Vector3(cos(angle)*.40,.075,sin(angle)*.40),.075,.78,"wood",Color("#6c452d"))
-				root.rotation = Vector3(0.0,-angle,PI*.45)
+			# So o corte transversal aparece; as raizes e base nunca mudam.
+			cylinder(stump,Vector3(0,.527,0),.234,.028,"cut_wood",Color("#c6a273"))
 			var sprout := Node3D.new()
 			sprout.name = "Broto"
 			visual.add_child(sprout)
@@ -1272,6 +1279,21 @@ func impact(pos: Vector3, normal: Vector3, wood: bool) -> void:
 		tween.tween_property(chip,"scale",Vector3.ZERO,duration).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(effect.queue_free)
 
+func play_tree_fall_sound(pos: Vector3) -> void:
+	# Som original de madeira rangendo + impacto + folhas.
+	# Stream WAV procedimental: dispensamos arquivos externos/licencas de audio.
+	var player_sound := AudioStreamPlayer3D.new()
+	player_sound.name = "SomQuedaArvore"
+	add_child(player_sound)
+	player_sound.global_position = pos + Vector3.UP
+	player_sound.stream = preload("res://tree_fall_sound.gd").make_stream()
+	player_sound.unit_size = 7.0
+	player_sound.max_distance = 45.0
+	player_sound.volume_db = -3.0
+	player_sound.finished.connect(player_sound.queue_free)
+	player_sound.play()
+
+
 func stagger(body: Node3D, world_direction: Vector3) -> void:
 	var visual := body.get_node("Visual") as Node3D
 	if visual.has_meta("reaction"):
@@ -1349,6 +1371,7 @@ func timber(tree: Node3D, fell: bool) -> void:
 		var falling := original.duplicate() as Node3D
 		add_child(falling)
 		falling.global_transform = original.global_transform
+		play_tree_fall_sound(tree.global_position)
 		var id: String = str(tree.get_meta("id",""))
 		tree_regrowth[id] = Time.get_unix_time_from_system()
 		tree.set_meta("cuts",0)
@@ -2739,24 +2762,26 @@ func primary() -> void:
 		notice("Toco removido! +1 tronco" + (" e +1 muda" if got_sapling else "") + ".")
 		return
 	if kind=="tree":
-		var cuts_per_hit := 1
-		match bar_items[selected]:
-			WOOD_AXE: cuts_per_hit = 2
-			STONE_AXE: cuts_per_hit = 4
-		var cuts: int = o.get_meta("cuts",0)+cuts_per_hit
+		# Machado de madeira: cinco golpes. Machado de pedra: quatro.
+		# O machado de pedra nao derruba mais a arvore com um unico golpe.
+		if held not in [WOOD_AXE,STONE_AXE]:
+			notice("Use um machado para cortar esta árvore.")
+			return
+		var needed := 4 if held==STONE_AXE else 5
+		var cuts := int(o.get_meta("cuts",0))+1
 		o.set_meta("cuts",cuts)
 		impact(hit["position"],hit["normal"],true)
 		var pos := o.global_position
-		timber(o,cuts>=4)
-		if cuts>=4:
+		timber(o,cuts>=needed)
+		if cuts>=needed:
 			for i in range(3):
 				store_object("log",pos+Vector3((i-1)*.65,0,.39))
 			if randf()<.35:
 				store_object("sapling",pos+Vector3(.82,0,.55))
-			notice("Árvore cortada. Use a pá para remover o toco ou espere brotar.")
+			notice("Árvore derrubada. O mesmo tronco com raízes ficou no chão.")
 			save_game()
 		else:
-			notice("Cortando a árvore: %d/4" % cuts)
+			notice("Cortando a árvore: %d/%d golpes" % [cuts,needed])
 		return
 	if bar_items[selected]==2 and stock[2]>0 and (kind=="" or kind=="block" or kind=="stone"):
 		var point: Vector3 = hit["position"]
