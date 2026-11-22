@@ -130,6 +130,7 @@ var remotes: Dictionary = {}
 var net_role := "solo" # solo / host / client
 var net_address := ""
 var net_connected := false
+var net_world_ready := false
 var net_world_backup: Dictionary = {}
 var net_apply_in_progress := false
 var net_session_message := ""
@@ -3310,17 +3311,29 @@ func build_hut() -> void:
 	notice("O guardião apareceu no Vale da Névoa.")
 
 func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) -> void:
+	if kind in NET_SHARED_KINDS and net_role=="client" and not net_apply_in_progress:
+		if net_world_ready:
+			net_request_place.rpc_id(1,kind,pos,yaw,level)
+		else:
+			notice("Aguarde o mundo multiplayer sincronizar.")
+		return
 	var id := "item-"+str(Time.get_ticks_usec())+"-"+str(randi())
 	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
 	spawn_object(kind,id,pos,self,yaw)
 	if kind=="wood_floor" and level==0:
 		refresh_door_transitions(pos)
+	if kind in NET_SHARED_KINDS and net_role=="host" and not net_apply_in_progress:
+		net_shared_place.rpc(kind,id,pos,yaw,level)
 
 func remove_object(o: Node3D) -> void:
+	var removed_kind := str(o.get_meta("kind",""))
+	var id: String = str(o.get_meta("id",""))
+	if net_role=="client" and removed_kind in NET_SHARED_KINDS and not net_apply_in_progress:
+		if net_world_ready:
+			net_request_remove.rpc_id(1,id)
+		return
 	if o is CollisionObject3D:
 		o.collision_layer = 0
-	var id: String = o.get_meta("id")
-	var removed_kind := str(o.get_meta("kind",""))
 	var removed_pos := o.global_position
 	if id.begins_with("item-"):
 		placed = placed.filter(func(entry): return entry["id"]!=id)
@@ -3330,6 +3343,8 @@ func remove_object(o: Node3D) -> void:
 	o.queue_free()
 	if removed_kind=="wood_floor":
 		refresh_door_transitions(removed_pos)
+	if net_role=="host" and removed_kind in NET_SHARED_KINDS and not net_apply_in_progress:
+		net_shared_remove.rpc(id)
 
 func notice(message: String) -> void:
 	feedback = message
@@ -3379,6 +3394,10 @@ func load_game() -> void:
 	set_meta("spawn",data.get("pos",[0,1,0]))
 
 func save_game() -> void:
+	# Nunca sobrescrever o progresso offline de um convidado com o mundo
+	# que pertence ao anfitriao. O host continua salvando normalmente.
+	if net_role=="client":
+		return
 	if not is_instance_valid(player):
 		return
 	sync_hotbar()
@@ -3440,6 +3459,7 @@ func join_at_address(ip: String) -> void:
 		return
 	net_role = "client"
 	net_connected = false
+	net_world_ready = false
 	net_session_message = "Conectando ao anfitrião %s..." % ip
 	multiplayer.multiplayer_peer = peer
 	show_menu()
@@ -3467,7 +3487,6 @@ func net_connection_failed() -> void:
 func net_peer_connected(peer_id: int) -> void:
 	if net_role!="host" or peer_id==1:
 		return
-	net_send_snapshot.rpc_id(peer_id,capture_net_world())
 	net_session_message = "Jogador %d entrou na sala." % peer_id
 	notice(net_session_message)
 
@@ -3551,13 +3570,80 @@ func apply_net_world(snapshot: Dictionary) -> void:
 
 @rpc("authority","call_remote","reliable")
 func net_send_snapshot(snapshot: Dictionary) -> void:
-	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or net_world_ready:
 		return
 	apply_net_world(snapshot)
+	net_world_ready = true
 	net_connected = true
+	var host_position: Array = snapshot.get("pos",[0,1,0])
+	var enter_x := float(host_position[0])+2.0
+	var enter_z := float(host_position[2])+2.0
+	player.position = Vector3(enter_x,ground(enter_x,enter_z)+.85,enter_z)
+	player.velocity = Vector3.ZERO
 	net_session_message = "Mundo sincronizado. Partida em rede ativa."
 	notice(net_session_message)
 	begin()
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
+	if net_role!="host" or kind not in NET_SHARED_KINDS:
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	if not pos.is_finite() or not is_finite(yaw) or level<0 or level>BUILD_MAX_LEVEL:
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	if not is_instance_valid(avatar) or avatar.global_position.distance_to(pos)>12.0:
+		return
+	store_object(kind,pos,yaw,level)
+	save_game()
+
+
+@rpc("authority","call_remote","reliable")
+func net_shared_place(kind: String,id: String,pos: Vector3,yaw: float,level: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	if kind not in NET_SHARED_KINDS or id.length()>100 or not pos.is_finite():
+		return
+	if objects.has(id):
+		return
+	net_apply_in_progress = true
+	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
+	spawn_object(kind,id,pos,self,yaw)
+	if kind=="wood_floor" and level==0:
+		refresh_door_transitions(pos)
+	net_apply_in_progress = false
+
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_remove(id: String) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS:
+		return
+	if not is_instance_valid(avatar) or avatar.global_position.distance_to(obj.global_position)>6.5:
+		return
+	remove_object(obj)
+	save_game()
+
+
+@rpc("authority","call_remote","reliable")
+func net_shared_remove(id: String) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not objects.has(id):
+		return
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj):
+		return
+	net_apply_in_progress = true
+	remove_object(obj)
+	net_apply_in_progress = false
 
 
 func net_create_avatar(peer_id: int) -> Node3D:
@@ -3641,6 +3727,7 @@ func disconnect_game() -> void:
 	var restore := net_role=="client" and not net_world_backup.is_empty()
 	net_role = "solo"
 	net_connected = false
+	net_world_ready = false
 	if restore:
 		apply_net_world(net_world_backup)
 		var previous: Array = net_world_backup.get("pos",[0,1,0])
