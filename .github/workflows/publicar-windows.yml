@@ -81,6 +81,7 @@ jobs:
           if (-not (Test-Path 'Projeto-Godot/modelos/goblin_npc.glb')) { throw 'GLB dos goblins ausente.' }
           $tests = @(
             @{path='res://tests/test_wood_axe_model.gd'; message='WOOD AXE MODEL OK'},
+            @{path='res://tests/test_wood_shovel_model.gd'; message='WOOD SHOVEL MODEL OK'},
             @{path='res://tests/test_goblin_npc_model.gd'; message='GOBLIN MODEL OK'},
             @{path='res://tests/test_goblin_skin_v2.gd'; message='SKIN V2 OK'},
             @{path='res://tests/test_goblin_v3.gd'; message='GOBLIN V3 OK'},
