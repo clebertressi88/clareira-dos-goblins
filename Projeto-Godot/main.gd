@@ -1819,6 +1819,10 @@ func update_mature_tree_vines() -> void:
 		if not tree_vines.has(id):
 			tree_vines[id] = {"count":0,"next":now+VINE_INTERVAL_SECONDS}
 		var state: Dictionary = tree_vines[id]
+		# Saves antigos guardavam espera de 20 min: limitar espera restante a 5 min.
+		if float(state.get("next",now+VINE_INTERVAL_SECONDS)) > now+VINE_INTERVAL_SECONDS:
+			state["next"] = now+VINE_INTERVAL_SECONDS
+			tree_vines[id] = state
 		var maximum := 1 + (absi(hash(id))%2)
 		if int(state.get("count",0))<maximum and now>=float(state.get("next",now+VINE_INTERVAL_SECONDS)):
 			state["count"] = int(state.get("count",0))+1
