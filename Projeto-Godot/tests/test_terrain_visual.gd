@@ -1,7 +1,7 @@
 extends SceneTree
 const TERRAIN := preload("res://landscape_terrain.gd")
 ## Valida que o visual e a fisica compartilham a mesma altura no relevo
-## e que o jogador nao fica visualmente embaixo do solo ou do rio.
+## e que o jogador pode mergulhar no rio sem atravessar o terreno.
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -76,16 +76,30 @@ func _run() -> void:
 		return
 	print("SPAWN SAFETY TEST OK: jogador recuperado acima do relevo.")
 
-	# Rio: a camera nao deve ficar submersa caso o jogador alcance o leito.
+	# Centro do rio: leito aprofundado, mergulho permitido e ar gasto.
 	var river_x: float = TERRAIN.river_x(0.0)
-	player.position = Vector3(river_x,TERRAIN.WATER_LEVEL-3.0,0.0)
+	var depth: float = TERRAIN.WATER_LEVEL - TERRAIN.height_at(river_x,0.0)
+	if depth < 3.0:
+		fail("Rio continua raso: profundidade %.2f" % depth)
+		return
+	player.position = Vector3(river_x,TERRAIN.WATER_LEVEL-2.9,0.0)
 	player.velocity = Vector3.ZERO
 	for i in range(3):
 		await physics_frame
 	var camera := game.get("camera") as Camera3D
-	if camera.global_position.y < TERRAIN.WATER_LEVEL+.1:
-		fail("Camera continua submersa no rio: " + str(camera.global_position.y))
+	if camera.global_position.y >= TERRAIN.WATER_LEVEL:
+		fail("Camera nao mergulhou com o jogador.")
 		return
-	print("WATER CAMERA TEST OK: camera acima do rio.")
-	print("TERRAIN RENDERING OK: malha visual, colisao e camera verificados.")
+	var low_breath := float(game.get("breath"))
+	if low_breath >= 100.0:
+		fail("Respiracao nao diminuiu debaixo d'agua.")
+		return
+	player.position = Vector3(0.0,float(game.call("ground",0.0,0.0))+.7,0.0)
+	player.velocity = Vector3.ZERO
+	game.call("update_breath",2.0)
+	if float(game.get("breath")) <= low_breath:
+		fail("Folego nao recuperou apos sair do rio.")
+		return
+	print("RIVER BREATH TEST OK: profundidade %.2f m, mergulho e recuperacao." % depth)
+	print("TERRAIN RENDERING OK: malha visual, colisao e mergulho verificados.")
 	quit(0)
