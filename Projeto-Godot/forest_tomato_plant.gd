@@ -24,7 +24,7 @@ static func _leaf_material() -> StandardMaterial3D:
 		for x in range(64):
 			var u := float(x)/63.0
 			var v := float(y)/63.0
-			var rib := abs(u-0.5)
+			var rib: float = absf(u-0.5)
 			var veins := 0.13 if rib<0.038 or abs(v-(0.22+rib*0.92))<0.025 or abs(v-(0.78-rib*0.92))<0.025 else 0.0
 			var noise := sin(u*53.0+v*17.0)*sin(v*79.0-u*19.0)*0.075
 			var shade := 0.88+veins+noise
@@ -126,7 +126,7 @@ static func build(parent: Node3D, seed: String, harvested_item: bool = false) ->
 			# Folha de tomate composta: lamina central e dois foliolos laterais.
 			_leaf(parent,tip,(tip-origin).normalized(),rng.randf_range(0.15,0.23))
 			for k in [-1.0,1.0]:
-				var leaf_pos := tip+Vector3(-direction.z,0,direction.x)*k*0.056
+				var leaf_pos: Vector3 = tip+Vector3(-direction.z,0,direction.x)*float(k)*0.056
 				_leaf(parent,leaf_pos,Vector3(direction.x+k*0.44,0.20,direction.z-k*0.44),0.115)
 		if i<4:
 			var fruit_base := far+Vector3(0,-0.055,0)
