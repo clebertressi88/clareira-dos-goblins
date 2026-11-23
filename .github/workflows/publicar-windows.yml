@@ -1,5 +1,6 @@
 name: Compilar jogo Windows e publicar ZIP
-# Reexecucao solicitada em 2026-11-22: publicar versao Windows com runners clareira-goblins.
+# Compila no runner Windows e envia diretamente para a Release.
+# Evita cota de actions/upload-artifact, que bloqueava publicacao.
 
 on:
   push:
@@ -16,6 +17,9 @@ jobs:
   windows:
     # Qualquer runner Windows proprio que tenha acesso a este repositorio.
     runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    concurrency:
+      group: publicar-clareira-windows
+      cancel-in-progress: false
     timeout-minutes: 60
     defaults:
       run:
@@ -145,34 +149,7 @@ jobs:
           Compress-Archive -Path $exe,(Join-Path $dist 'versao-github.txt'),(Join-Path $dist 'SHA256SUMS.txt') -DestinationPath $zip -CompressionLevel Optimal
           if (-not (Test-Path $zip)) { throw 'ZIP da release nao gerado.' }
 
-      - name: Salvar ZIP como artefato da compilacao
-        uses: actions/upload-artifact@v4
-        with:
-          name: clareira-windows-${{ github.run_id }}
-          path: Clareira-dos-Goblins-Windows.zip
-          if-no-files-found: error
-          retention-days: 7
-
-  publicar:
-    name: Publicar ZIP da versao atual
-    needs: windows
-    if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, Windows, X64, clareira-goblins]
-    concurrency:
-      group: publicar-clareira-windows
-      cancel-in-progress: false
-    timeout-minutes: 15
-    defaults:
-      run:
-        shell: powershell
-    steps:
-      - name: Baixar ZIP desta compilacao
-        uses: actions/download-artifact@v4
-        with:
-          name: clareira-windows-${{ github.run_id }}
-          path: .
-
-      - name: Publicar versao pronta na Release do GitHub
+      - name: Publicar ZIP diretamente na Release (sem artefatos do Actions)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
