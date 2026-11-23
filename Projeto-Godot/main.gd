@@ -2097,7 +2097,7 @@ func show_inventory() -> void:
 	panel.show()
 	clear_menu()
 	var title := Label.new()
-	title.text = "Fabricação"
+	title.text = "Inventário e fabricação"
 	var station_label := Label.new()
 	station_label.text = "Bancada de trabalho · Nível %d" % station_level if craft_mode=="station" else "Inventário e fabricação básica"
 	station_label.modulate = Color("#cfb791")
@@ -2105,11 +2105,77 @@ func show_inventory() -> void:
 	title.add_theme_font_size_override("font_size",23)
 	title.modulate = Color("#ffe29c")
 	menu.add_child(title)
+	# Tres paineis: personagem/equipamento, itens, e fabricacao.
+	# Largura ampliada para nao sobrepor grade e resultado do craft.
+	panel.offset_left = -690
+	panel.offset_right = 690
+	panel.offset_top = -395
+	panel.offset_bottom = 395
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation",16)
+	columns.add_theme_constant_override("separation",18)
 	menu.add_child(columns)
 	columns.alignment = BoxContainer.ALIGNMENT_CENTER
+	var equipment_side := VBoxContainer.new()
+	equipment_side.custom_minimum_size = Vector2(330,450)
+	columns.add_child(equipment_side)
+	var equipment_title := Label.new()
+	equipment_title.text = "Equipamento do personagem"
+	equipment_title.add_theme_font_size_override("font_size",20)
+	equipment_title.modulate = Color("#ffe29c")
+	equipment_side.add_child(equipment_title)
+	var equipment_row := HBoxContainer.new()
+	equipment_row.add_theme_constant_override("separation",6)
+	equipment_side.add_child(equipment_row)
+	var left_slots := VBoxContainer.new()
+	equipment_row.add_child(left_slots)
+	var preview := SubViewportContainer.new()
+	preview.custom_minimum_size = Vector2(192,360)
+	preview.stretch = true
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	equipment_row.add_child(preview)
+	var portrait_view := SubViewport.new()
+	portrait_view.size = Vector2i(256,450)
+	portrait_view.transparent_bg = true
+	portrait_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	preview.add_child(portrait_view)
+	var portrait_stage := Node3D.new()
+	portrait_view.add_child(portrait_stage)
+	var portrait_goblin := Node3D.new()
+	portrait_stage.add_child(portrait_goblin)
+	goblin_npc(portrait_goblin,Color("#895938"))
+	var portrait_rig := portrait_goblin.get_node_or_null("GoblinRig")
+	if portrait_rig != null:
+		portrait_rig.call("set_equipment",sword_equipped,shield_equipped)
+	var portrait_camera := Camera3D.new()
+	portrait_camera.position = Vector3(0,1.12,3.5)
+	portrait_stage.add_child(portrait_camera)
+	portrait_camera.look_at(Vector3(0,0.97,0),Vector3.UP)
+	portrait_camera.current = true
+	var portrait_light := DirectionalLight3D.new()
+	portrait_light.rotation_degrees = Vector3(-35,30,0)
+	portrait_light.light_energy = 1.8
+	portrait_stage.add_child(portrait_light)
+	var right_slots := VBoxContainer.new()
+	equipment_row.add_child(right_slots)
+	for kind in ["Capacete","Blusa","Calça","Bota","Costas"]:
+		var equipment_slot := Button.new()
+		equipment_slot.custom_minimum_size = Vector2(82,65)
+		equipment_slot.text = kind
+		equipment_slot.tooltip_text = "Espaço reservado para " + kind.to_lower()
+		if kind=="Costas":
+			equipment_slot.text = "Mochila" if backpack_equipped else "Costas"
+			equipment_slot.tooltip_text = "Abrir mochila equipada ou vestir uma mochila do inventário"
+			equipment_slot.disabled = not backpack_equipped and stock[BACKPACK_ITEM]<=0
+			equipment_slot.pressed.connect(open_backpack)
+		else:
+			equipment_slot.disabled = true # Tipos de armadura ainda nao existem no sistema de itens.
+		style_craft_button(equipment_slot)
+		if kind=="Costas":
+			left_slots.add_child(equipment_slot)
+		else:
+			right_slots.add_child(equipment_slot)
 	var inventory_side := VBoxContainer.new()
+	inventory_side.custom_minimum_size = Vector2(380,450)
 	columns.add_child(inventory_side)
 	var inventory_grid := GridContainer.new()
 	inventory_grid.columns = 4
@@ -2120,7 +2186,7 @@ func show_inventory() -> void:
 	inventory_side.add_child(caption)
 	inventory_side.add_child(inventory_grid)
 	var gear_title := Label.new()
-	gear_title.text = "Equipamento (visual)"
+	gear_title.text = "Armas e escudo"
 	inventory_side.add_child(gear_title)
 	var gear_row := HBoxContainer.new()
 	inventory_side.add_child(gear_row)
@@ -2135,7 +2201,7 @@ func show_inventory() -> void:
 	for slot_index in range(inventory_slots.size()):
 		var kind: int = inventory_slots[slot_index]
 		var item := Button.new()
-		item.custom_minimum_size = Vector2(92,55)
+		item.custom_minimum_size = Vector2(88,55)
 		item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		item.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		item.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
@@ -2156,16 +2222,26 @@ func show_inventory() -> void:
 		item.set_drag_forwarding(inventory_drag.bind(item,slot_index),can_drop_inventory.bind(slot_index),drop_inventory.bind(slot_index))
 		style_craft_button(item)
 		inventory_grid.add_child(item)
+	var crafting_panel := VBoxContainer.new()
+	crafting_panel.custom_minimum_size = Vector2(395,450)
+	columns.add_child(crafting_panel)
+	var craft_caption := Label.new()
+	craft_caption.text = "Fabricação"
+	craft_caption.add_theme_font_size_override("font_size",20)
+	craft_caption.modulate = Color("#ffe29c")
+	crafting_panel.add_child(craft_caption)
 	var craft_side := HBoxContainer.new()
+	craft_side.custom_minimum_size = Vector2(380,155)
+	craft_side.add_theme_constant_override("separation",18)
 	craft_side.alignment = BoxContainer.ALIGNMENT_CENTER
-	columns.add_child(craft_side)
+	crafting_panel.add_child(craft_side)
 	var grid := GridContainer.new()
 	grid.columns = 2 if craft_mode=="basic" else 3
 	craft_side.add_child(grid)
 	for i in range(craft_cells.size()):
 		var slot := Button.new()
 		var cell := craft_cells[i]
-		slot.custom_minimum_size = Vector2(68,49)
+		slot.custom_minimum_size = Vector2(68,68)
 		slot.tooltip_text = "Clique com o botão direito para retirar uma unidade"
 		slot.text = "" if cell.y==0 else "×%d" % cell.y
 		if cell.y>0:
@@ -2189,7 +2265,7 @@ func show_inventory() -> void:
 	var output_item := ITEM_KINDS.find(recipe)
 	if output_item>=0:
 		result.icon = ITEM_ICONS[output_item]
-	result.custom_minimum_size = Vector2(126,68)
+	result.custom_minimum_size = Vector2(110,83)
 	result.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	result.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
