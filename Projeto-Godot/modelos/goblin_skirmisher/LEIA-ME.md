@@ -1,28 +1,35 @@
-# Goblin Skirmisher — dependência externa para teste
+# Goblin Skirmisher — modelo original para o laboratório
 
-Pacote original do autor G4G Assets (gratuito):
-https://g4g-assets.itch.io/goblin-skirmisher-100-animations
+O usuario forneceu o arquivo `GoblinSkirmisher-Godot-1.0.0.zip` do autor G4G Assets.
 
-Baixe **GoblinSkirmisher-Godot-1.0.0.zip** pelo fluxo oficial do itch.io
-("Download Now" -> "No thanks, just take me to the downloads").
+## Cena a instalar
 
-O ZIP **não está incluído neste repositório**. Extraia os arquivos do pacote
-Godot e preserve a estrutura de modelos e texturas nesta pasta:
+`res://modelos/goblin_skirmisher/Character/GoblinSkirmisher.scn`
 
-`Projeto-Godot/modelos/goblin_skirmisher/`
+Este é um arquivo binário nativo do Godot 4.7.2 (~35 MB), não um GLB.
+Os nomes e IDs das animações são encontrados em `animation-index.json`.
+Instale preservando `Character/GoblinSkirmisher.scn`, `animation-index.json`
+e os avisos de licença do pacote original.
 
-A cena de testes `res://experimentos/goblin_skirmisher_teste.tscn`
-procura arquivos `.glb` / `.gltf` de forma recursiva e seleciona
-preferencialmente o que contém Skeleton3D + AnimationPlayer.
-Se o pacote trouxer animações em bibliotecas separadas ou referências
-`res://` absolutas, será necessário adaptá-las após inspecionar o ZIP.
+## Como visualizar
 
-Os modelos de terceiros e suas animações seguem a **licença do autor**:
-uso em jogos prontos permitido, mas não redistribuir o pacote como asset isolado.
-Consultar LICENSE do ZIP original para condições completas.
+No jogo: Menu Inicial > Laboratório de Skin > Testar Goblin Skirmisher.
 
-**Status:** somente infraestrutura de avaliação criada. É necessário baixar
-o ZIP original, integrá-lo e testar as animações antes de substituir
-jogador ou NPCs em produção.
+À esquerda: goblin anterior. À direita: modelo G4G real.
+Use os botões Parado, Andar, Correr, Atacar, Receber dano, Morrer,
+Próxima/anterior animação, Adaga, Girar e Zoom.
 
-Não modifica mundo, save, inventário ou sincronização multiplayer.
+Os scripts estão na branch `teste-goblin-skirmisher`.
+O arquivo `.scn` precisa ser inserido nessa branch por uma cópia local
+autenticada antes de compilar a Release Windows. O pacote gerado para o
+usuário inclui um instalador PowerShell que faz esse envio e valida no Godot.
+
+## Licença
+
+A licença G4G 1.0 permite integração nos jogos comerciais ou pessoais,
+mas proíbe redistribuir o asset como pacote avulso. Mantenha o
+repositório de desenvolvimento privado e não publique o arquivo bruto
+como download separado. Para terceiros, o jogo compilado é o produto
+distribuível. Consulte `LICENSE.txt` e `THIRD_PARTY.md`.
+
+Este laboratório não substitui jogador/NPCs nem modifica saves.
