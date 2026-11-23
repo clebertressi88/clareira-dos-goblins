@@ -4,6 +4,7 @@ extends Node3D
 
 const CURRENT_RIG = preload("res://npc_goblin.gd")
 const ASSET_DIR := "res://modelos/goblin_skirmisher"
+const MOTION_LABELS := {"idle": "Parado", "walk": "Andar", "run": "Correr", "attack": "Atacar", "hit": "Receber dano", "death": "Morrer"}
 const MOTION_WORDS := {
 	"idle": ["idle", "stand", "breath"],
 	"walk": ["walk", "scurry", "move"],
@@ -187,7 +188,7 @@ func _build_menu() -> void:
 	desc.text = "Esquerda: goblin atual\nDireita: modelo baixado (se instalado)"
 	column.add_child(desc)
 	for motion in ["idle", "walk", "run", "attack", "hit", "death"]:
-		var title := {"idle": "Parado", "walk": "Andar", "run": "Correr", "attack": "Atacar", "hit": "Receber dano", "death": "Morrer"}[motion]
+		var title: String = MOTION_LABELS[motion]
 		_add_button(column, title, _play_motion.bind(motion))
 	_add_button(column, "Proxima animacao", _advance_animation.bind(1))
 	_add_button(column, "Animacao anterior", _advance_animation.bind(-1))
