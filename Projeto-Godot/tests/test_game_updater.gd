@@ -45,6 +45,12 @@ func _run() -> void:
 	if not updater.INSTALL_SCRIPT.contains("Expand-Archive") or not updater.INSTALL_SCRIPT.contains("Get-FileHash") or not updater.INSTALL_SCRIPT.contains("Start-Process"):
 		_fail("instalador externo nao valida e reinicia o jogo")
 		return
+	if not updater.PRIVATE_REPO_MESSAGE.contains("repositório GitHub privado"):
+		_fail("erro 404 nao explica que o repositorio e privado")
+		return
+	if updater.REPOSITORY!="clebertressi88/clareira-dos-goblins" or updater.RELEASE_TAG!="jogo-windows":
+		_fail("fallback autenticado aponta para outro repositorio")
+		return
 	if updater.launch_installer():
 		_fail("instalador iniciou antes do download ser validado")
 		return

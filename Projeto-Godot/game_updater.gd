@@ -7,6 +7,9 @@ signal install_ready
 const RELEASE_API := "https://api.github.com/repos/clebertressi88/clareira-dos-goblins/releases/tags/jogo-windows"
 const RELEASE_ZIP := "https://github.com/clebertressi88/clareira-dos-goblins/releases/download/jogo-windows/Clareira-dos-Goblins-Windows.zip"
 const ZIP_NAME := "Clareira-dos-Goblins-Windows.zip"
+const REPOSITORY := "clebertressi88/clareira-dos-goblins"
+const RELEASE_TAG := "jogo-windows"
+const PRIVATE_REPO_MESSAGE := "Este jogo está em um repositório GitHub privado. Para consultar, instale o GitHub CLI e execute gh auth login com uma conta autorizada. Para todos os jogadores atualizarem sem login, publique os ZIPs em um repositório público de downloads."
 const UPDATE_FOLDER := "user://clareira-atualizador"
 const INSTALL_SCRIPT := """
 param(
@@ -102,6 +105,9 @@ var local_commit := ""
 var api_request: HTTPRequest
 var zip_request: HTTPRequest
 var last_percent := -1
+var download_method := "http"
+var gh_cli_path := ""
+var gh_download_pid := 0
 
 func _ready() -> void:
 	api_request = HTTPRequest.new()
@@ -125,11 +131,13 @@ func _set_phase(phase_name: String,message: String,percent: int = 0) -> void:
 	status_changed.emit(get_state())
 
 func check_updates() -> void:
-	if str(state.get("phase","")) in ["checking","downloading","installing"]:
+	if str(state.get("phase","")) in ["checking","downloading","verified","installing"]:
 		return
 	if not OS.has_feature("windows"):
 		_set_phase("error","A instalação automática está disponível somente no Windows.")
 		return
+	download_method = "http"
+	gh_download_pid = 0
 	_set_phase("checking","Consultando a versão Windows no GitHub...")
 	var result := api_request.request(RELEASE_API,
 		PackedStringArray(["User-Agent: Clareira-dos-Goblins","Accept: application/vnd.github+json"]))
@@ -183,17 +191,104 @@ func _on_api_finished(result: int,http_code: int,_headers: PackedStringArray,bod
 	if str(state.get("phase",""))!="checking":
 		return
 	if result!=HTTPRequest.RESULT_SUCCESS or http_code!=200:
-		_set_phase("error","Falha ao consultar o GitHub (HTTP %d). Confira sua conexão." % http_code)
+		if http_code in [401,403,404]:
+			# Uma Release privada responde 404 para chamadas anonimas.
+			# O GitHub CLI usa somente as credenciais guardadas no proprio PC.
+			if _try_authenticated_release():
+				return
+			_set_phase("error",PRIVATE_REPO_MESSAGE)
+			return
+		_set_phase("error","Não foi possível consultar a Release (HTTP %d). Confira a conexão e tente novamente." % http_code)
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not parsed is Dictionary or not _parse_release(parsed):
 		_set_phase("error","A Release do jogo não contém um ZIP válido e assinado.")
 		return
+	_complete_release_check()
+
+
+func _complete_release_check() -> void:
 	local_commit = _local_version()
 	if not local_commit.is_empty() and local_commit==release_commit:
 		_set_phase("current","Seu jogo já está na versão mais recente.")
 	else:
-		_set_phase("ready","Nova versão disponível para baixar (%0.1f MB)." % (float(asset_size)/(1024.0*1024.0)))
+		var suffix := " (acesso GitHub autenticado)" if download_method=="gh" else ""
+		_set_phase("ready","Nova versão disponível: %0.1f MB%s." % [float(asset_size)/(1024.0*1024.0),suffix])
+
+func _find_gh_cli() -> String:
+	# Prefere o executavel assinado instalado no local padrao do Windows.
+	var locations := PackedStringArray()
+	for env_name in ["ProgramFiles","ProgramW6432"]:
+		var directory := OS.get_environment(env_name)
+		if not directory.is_empty():
+			locations.append(directory.path_join("GitHub CLI/gh.exe"))
+	for candidate in locations:
+		if FileAccess.file_exists(candidate):
+			return candidate
+	# O instalador oficial pode estar no PATH de outro diretorio.
+	var output: Array = []
+	var code := OS.execute("gh.exe",PackedStringArray(["--version"]),output,false,false)
+	if code==0:
+		return "gh.exe"
+	return ""
+
+func _try_authenticated_release() -> bool:
+	if not OS.has_feature("windows"):
+		return false
+	gh_cli_path = _find_gh_cli()
+	if gh_cli_path.is_empty():
+		return false
+	var output: Array = []
+	var code := OS.execute(gh_cli_path,
+		PackedStringArray(["api","-H","Accept: application/vnd.github+json",
+			"repos/"+REPOSITORY+"/releases/tags/"+RELEASE_TAG]),output,false,false)
+	if code!=0 or output.is_empty():
+		return false
+	var parsed: Variant = JSON.parse_string(str(output[0]))
+	if not parsed is Dictionary or not _parse_release(parsed):
+		return false
+	download_method = "gh"
+	_complete_release_check()
+	return true
+
+func _private_download_path() -> String:
+	return ProjectSettings.globalize_path(UPDATE_FOLDER.path_join(ZIP_NAME))
+
+func _start_gh_download() -> void:
+	if gh_cli_path.is_empty():
+		gh_cli_path = _find_gh_cli()
+	if gh_cli_path.is_empty():
+		_set_phase("error",PRIVATE_REPO_MESSAGE)
+		return
+	var path := _private_download_path()
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	last_percent = -1
+	_set_phase("downloading","Baixando arquivo privado pela conta GitHub autenticada...",0)
+	gh_download_pid = OS.create_process(gh_cli_path,PackedStringArray([
+		"release","download",RELEASE_TAG,"--repo",REPOSITORY,
+		"--pattern",ZIP_NAME,"--dir",path.get_base_dir(),"--clobber"]))
+	if gh_download_pid<=0:
+		gh_download_pid = 0
+		_set_phase("error","O GitHub CLI não iniciou o download. Verifique a autenticação com gh auth status.")
+
+func _verify_downloaded_zip() -> void:
+	var path := _private_download_path()
+	var file := FileAccess.open(path,FileAccess.READ)
+	if file==null:
+		_set_phase("error","O ZIP não foi recebido. Verifique o acesso à Release usando gh auth status.")
+		return
+	var actual_size := file.get_length()
+	file.close()
+	if actual_size!=asset_size:
+		_set_phase("error","Download incompleto: o tamanho não corresponde ao arquivo da Release.")
+		return
+	var digest := FileAccess.get_sha256(path).to_lower()
+	if digest!=asset_sha256:
+		_set_phase("error","Falha na verificação SHA-256. Instalação cancelada por segurança.")
+		return
+	_set_phase("verified","Download validado. Salvando o progresso para instalar...",100)
+	install_ready.emit()
 
 func download_and_install() -> void:
 	if str(state.get("phase",""))!="ready":
@@ -214,6 +309,9 @@ func download_and_install() -> void:
 	var zip_path := ProjectSettings.globalize_path(UPDATE_FOLDER.path_join(ZIP_NAME))
 	if FileAccess.file_exists(zip_path):
 		DirAccess.remove_absolute(zip_path)
+	if download_method=="gh":
+		_start_gh_download()
+		return
 	zip_request.download_file = zip_path
 	last_percent = -1
 	_set_phase("downloading","Baixando atualização do GitHub... 0%",0)
@@ -224,7 +322,20 @@ func download_and_install() -> void:
 func _process(_delta: float) -> void:
 	if str(state.get("phase",""))!="downloading" or asset_size<=0:
 		return
-	var downloaded := zip_request.get_downloaded_bytes()
+	var downloaded := 0
+	if download_method=="gh":
+		if gh_download_pid<=0:
+			return
+		if not OS.is_process_running(gh_download_pid):
+			gh_download_pid = 0
+			_verify_downloaded_zip()
+			return
+		var partial := FileAccess.open(_private_download_path(),FileAccess.READ)
+		if partial!=null:
+			downloaded = partial.get_length()
+			partial.close()
+	else:
+		downloaded = zip_request.get_downloaded_bytes()
 	var percent: int = clampi(int(100.0*float(downloaded)/float(asset_size)),0,99)
 	if percent==last_percent:
 		return
@@ -235,24 +346,12 @@ func _on_zip_finished(result: int,http_code: int,_headers: PackedStringArray,_bo
 	if str(state.get("phase",""))!="downloading":
 		return
 	if result!=HTTPRequest.RESULT_SUCCESS or http_code!=200:
-		_set_phase("error","Download interrompido (HTTP %d). Tente novamente." % http_code)
+		if http_code in [401,403,404] and _try_authenticated_release():
+			_start_gh_download()
+			return
+		_set_phase("error","Download indisponível (HTTP %d). Repositório privado: use uma conta GitHub autorizada." % http_code)
 		return
-	var zip_path := ProjectSettings.globalize_path(UPDATE_FOLDER.path_join(ZIP_NAME))
-	var file := FileAccess.open(zip_path,FileAccess.READ)
-	if file==null:
-		_set_phase("error","Não foi possível abrir o ZIP baixado.")
-		return
-	var actual_size := file.get_length()
-	file.close()
-	if actual_size!=asset_size:
-		_set_phase("error","Tamanho do ZIP diferente do publicado. Tente novamente.")
-		return
-	var actual_sha := FileAccess.get_sha256(zip_path).to_lower()
-	if actual_sha!=asset_sha256:
-		_set_phase("error","Assinatura SHA-256 inválida. A instalação foi cancelada.")
-		return
-	_set_phase("verified","Download validado. Salvando o jogo para instalar...",100)
-	install_ready.emit()
+	_verify_downloaded_zip()
 
 func _local_version() -> String:
 	var version_path := OS.get_executable_path().get_base_dir().path_join("versao-github.txt")
