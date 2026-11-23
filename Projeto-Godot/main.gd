@@ -2512,9 +2512,20 @@ func show_inventory() -> void:
 		names.append_array(STATION_PATTERNS.keys())
 	for kind: String in names:
 		var recipe_button := Button.new()
-		recipe_button.text = "Preparar "+CRAFT_OUTPUT[kind]
+		# As receitas mostram a imagem do item, sem texto ocupando o botao.
+		# Icones maiores que os do inventario (27 px), sem ampliar o container.
+		recipe_button.custom_minimum_size = Vector2(140,48)
+		recipe_button.text = ""
+		recipe_button.tooltip_text = "Preparar " + CRAFT_OUTPUT[kind]
+		var recipe_index := ITEM_KINDS.find(kind)
+		if recipe_index>=0:
+			recipe_button.icon = ITEM_ICONS[recipe_index]
+		recipe_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		recipe_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+		recipe_button.expand_icon = true
 		recipe_button.pressed.connect(prepare_recipe.bind(kind))
 		style_craft_button(recipe_button)
+		recipe_button.add_theme_constant_override("icon_max_width",44)
 		recipes.add_child(recipe_button)
 	var clear_button := Button.new()
 	clear_button.text = "Limpar grade"
