@@ -996,10 +996,13 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			preload("res://wood_shovel_model.gd").build(tool)
 			collider(o,Vector3(.45,.25,.75),Vector3.UP*.125)
 		"sapling":
-			cylinder(o,Vector3(0,.20,0),.025,.33,"sprout_stem",Color("#875832"))
-			ball(o,Vector3(-.11,.36,0),Vector3(.26,.13,.19),"sprout_leaf",Color("#79b54d"))
-			ball(o,Vector3(.12,.42,0),Vector3(.23,.14,.19),"sprout_leaf2",Color("#9ec85b"))
-			collider(o,Vector3(.40,.45,.40),Vector3.UP*.22)
+			# Muda coletavel parece matinho/galhinho caido, nao arvore plantada.
+			# Mantem o mesmo ID e tipo para preservar inventarios e saves.
+			var sapling_visual := Node3D.new()
+			sapling_visual.name = "MudaRasteira"
+			o.add_child(sapling_visual)
+			preload("res://forest_ground_sapling.gd").build(sapling_visual,id)
+			collider(o,Vector3(.82,.22,.82),Vector3.UP*.11)
 		"wood_axe","stone_axe":
 			var tool := Node3D.new()
 			o.add_child(tool)
