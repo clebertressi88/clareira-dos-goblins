@@ -1,7 +1,8 @@
 extends RefCounted
-# Pele de coelho estendida sobre o solo: silhueta irregular e tufos de pelo.
-# Malha gerada por vertices coloridos; sem materiais externos ou colisao adicional.
+## Pele pequena de coelho estendida e adaptada ao relevo, nao volumosa ou flutuante.
+## Recebe a funcao ground(x,z) para apoiar cada vertice diretamente no terreno.
 
+const PELT_SCALE := 0.48
 const OUTLINE := [
 	Vector2(-0.13,-0.53),Vector2(-0.27,-0.48),Vector2(-0.36,-0.35),
 	Vector2(-0.53,-0.31),Vector2(-0.57,-0.18),Vector2(-0.43,-0.10),
@@ -13,53 +14,66 @@ const OUTLINE := [
 	Vector2(0.27,-0.48),Vector2(0.13,-0.53)
 ]
 
-func build(parent: Node3D) -> void:
+func _point(parent: Node3D, p: Vector2, height_at: Callable, surface_offset: float) -> Vector3:
+	var local := Vector3(p.x * PELT_SCALE,0.0,p.y * PELT_SCALE)
+	if height_at.is_valid():
+		var world: Vector3 = parent.to_global(local)
+		var ground_y: float = float(height_at.call(world.x,world.z))
+		local.y = parent.to_local(Vector3(world.x,ground_y+surface_offset,world.z)).y
+	else:
+		local.y = surface_offset
+	return local
+
+func _tri(surface: SurfaceTool, parent: Node3D, height_at: Callable,
+		a: Vector2, b: Vector2, c: Vector2, ca: Color, cb: Color, cc: Color,
+		surface_offset: float = 0.016) -> void:
+	surface.set_color(ca)
+	surface.add_vertex(_point(parent,a,height_at,surface_offset))
+	surface.set_color(cb)
+	surface.add_vertex(_point(parent,b,height_at,surface_offset))
+	surface.set_color(cc)
+	surface.add_vertex(_point(parent,c,height_at,surface_offset))
+
+func build(parent: Node3D, height_at: Callable = Callable()) -> void:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# Tres camadas visuais formam couro, bordas claras e pelagem central.
-	var center := Vector2(0.0,0.01)
+	var center := Vector2.ZERO
+	# Contorno de quatro patas e corpo estreito, com borda de pelagem clara.
 	for i in range(OUTLINE.size()):
 		var a: Vector2 = OUTLINE[i]
 		var b: Vector2 = OUTLINE[(i+1)%OUTLINE.size()]
-		var inner_a := center + (a-center)*0.66
-		var inner_b := center + (b-center)*0.66
-		var brightness := 0.91 + 0.065*sin(float(i)*2.73)
-		tri(surface,center,inner_a,inner_b,0.052,
-			Color("#93613d")*brightness,Color("#aa7650")*brightness,Color("#a5744e")*brightness)
-		tri(surface,inner_a,a,b,0.049,
-			Color("#ac805d"),Color("#dfc6a7"),Color("#d0aa84"))
-		tri(surface,inner_a,b,inner_b,0.049,
-			Color("#ac805d"),Color("#d0aa84"),Color("#aa7850"))
-		# Tufos triangulares saem da borda e quebram o contorno artificial.
-		var midpoint := (a+b)*0.5
-		var outward := (midpoint-center).normalized()
-		var fringe_tip := midpoint + outward*(0.05 + 0.028*absf(sin(float(i)*4.61)))
-		tri(surface,a,fringe_tip,b,0.045,
-			Color("#b98d65"),Color("#dac0a0"),Color("#aa7954"))
-	# Fios finos em direcoes alternadas: textura em relevo superficial.
-	for i in range(82):
-		var angle := float(i)*2.39996
-		var radius := sqrt(float(i+1)/83.0)*0.34
-		var p := Vector2(cos(angle)*radius,sin(angle)*radius*1.15)
-		var length := 0.055 + 0.025*absf(sin(float(i)*1.91))
-		var tip := p + Vector2(0.011*sin(float(i)*2.1),-length)
-		var fur_color := Color("#dfc09b") if i%5==0 else Color("#b6855f") if i%3==0 else Color("#c99b73")
-		tri(surface,p+Vector2(-0.008,0),tip,p+Vector2(0.008,0),0.057,
-			fur_color,fur_color.lightened(0.10),fur_color)
+		var inner_a: Vector2 = a * 0.70
+		var inner_b: Vector2 = b * 0.70
+		var tone: float = 0.94 + 0.06*sin(float(i)*2.73)
+		_tri(surface,parent,height_at,center,inner_a,inner_b,
+			Color("#825638")*tone,Color("#9c6a44")*tone,Color("#a77750")*tone,0.017)
+		_tri(surface,parent,height_at,inner_a,a,b,
+			Color("#b48760"),Color("#dfc4a0"),Color("#ccaa81"),0.019)
+		_tri(surface,parent,height_at,inner_a,b,inner_b,
+			Color("#b48760"),Color("#d7b893"),Color("#ac7952"),0.018)
+		var middle: Vector2 = (a+b)*0.5
+		var direction: Vector2 = middle.normalized()
+		var tip: Vector2 = middle+direction*(0.028+0.017*absf(sin(float(i)*3.73)))
+		_tri(surface,parent,height_at,a,tip,b,
+			Color("#b48a65"),Color("#dcc3a3"),Color("#a77650"),0.020)
+	# Fibras curtas, quentes e discretas, deitadas acompanhando o solo.
+	for i in range(52):
+		var angle: float = float(i)*2.39996
+		var radius: float = sqrt(float(i+1)/53.0)*0.30
+		var base := Vector2(cos(angle)*radius,sin(angle)*radius*1.12)
+		var length: float = 0.029 + 0.017*absf(sin(float(i)*1.81))
+		var tip := base+Vector2(0.010*sin(float(i)*2.1),-length)
+		var fiber: Color = Color("#d3ae81") if i%5==0 else Color("#bb8c61") if i%3==0 else Color("#ae7950")
+		_tri(surface,parent,height_at,base+Vector2(-0.006,0),tip,base+Vector2(0.006,0),
+			fiber,fiber.lightened(0.09),fiber,0.023)
 	surface.generate_normals()
 	var mesh := surface.commit()
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.roughness = 0.96
+	material.roughness = 0.98
 	var visual := MeshInstance3D.new()
-	visual.name = "PeleCoelhoEstendida"
+	visual.name = "PeleCoelhoNoSolo"
 	visual.mesh = mesh
 	visual.material_override = material
 	parent.add_child(visual)
-
-func tri(surface: SurfaceTool, a: Vector2, b: Vector2, c: Vector2, y: float, ca: Color, cb: Color, cc: Color) -> void:
-	for v in [Vector3(a.x,y,a.y),Vector3(b.x,y,b.y),Vector3(c.x,y,c.y)]:
-		var color := ca if v.x==a.x and v.z==a.y else cb if v.x==b.x and v.z==b.y else cc
-		surface.set_color(color)
-		surface.add_vertex(v)
