@@ -225,15 +225,8 @@ func _input(event: InputEvent) -> void:
 		save_game()
 		get_viewport().set_input_as_handled()
 		return
-	if moving or inventory or not is_instance_valid(medieval_menu) or not medieval_menu.visible:
-		return
-	if is_instance_valid(medieval_menu.ip_input) and medieval_menu.ip_input.has_focus():
-		# Nao interrompe digitacao de IP ja iniciada no campo de rede.
-		return
-	# Permite iniciar com WASD/setas sem depender do foco do botao Jogar.
-	if key in [KEY_W,KEY_A,KEY_S,KEY_D,KEY_UP,KEY_DOWN,KEY_LEFT,KEY_RIGHT,KEY_ENTER,KEY_KP_ENTER]:
-		begin()
-		get_viewport().set_input_as_handled()
+	# A tela inicial usa botoes com foco de teclado; teclas de movimento
+	# nao devem abrir o jogo enquanto o jogador navega pelos menus.
 
 func character_texture(family: String) -> ImageTexture:
 	if surface_textures.has(family):
