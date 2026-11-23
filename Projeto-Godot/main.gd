@@ -457,13 +457,10 @@ func make_player() -> void:
 	player_model.rotation.y = PI
 	goblin_npc(player_model,Color("#895938"))
 	apply_player_equipment()
-	backpack_visual = Node3D.new()
+	# Modelo 3D medieval detalhado, substitui os blocos antigos da mochila.
+	backpack_visual = preload("res://backpack_model.gd").new()
 	backpack_visual.name = "MochilaVestida"
 	player_model.add_child(backpack_visual)
-	box(backpack_visual,Vector3(0,.92,-.27),Vector3(.48,.57,.23),"pack_leather",Color("#815337"))
-	box(backpack_visual,Vector3(0,1.14,-.40),Vector3(.49,.19,.045),"pack_flap",Color("#5e3d28"))
-	for side in [-1,1]:
-		box(backpack_visual,Vector3(side*.20,1.00,-.15),Vector3(.046,.48,.045),"pack_strap",Color("#ad7e52"))
 	backpack_visual.visible = backpack_equipped
 	player_model.hide()
 	spear = Node3D.new()
