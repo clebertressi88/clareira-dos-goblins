@@ -8,7 +8,90 @@ const RELEASE_API := "https://api.github.com/repos/clebertressi88/clareira-dos-g
 const RELEASE_ZIP := "https://github.com/clebertressi88/clareira-dos-goblins/releases/download/jogo-windows/Clareira-dos-Goblins-Windows.zip"
 const ZIP_NAME := "Clareira-dos-Goblins-Windows.zip"
 const UPDATE_FOLDER := "user://clareira-atualizador"
-const INSTALL_SCRIPT := "param(\n    [Parameter(Mandatory=$true)][string]$ZipPath,\n    [Parameter(Mandatory=$true)][string]$GameExe,\n    [Parameter(Mandatory=$true)][int]$GamePid,\n    [Parameter(Mandatory=$true)][string]$ExpectedSha256,\n    [Parameter(Mandatory=$true)][string]$LogPath\n)\n$ErrorActionPreference = 'Stop'\nfunction Write-Status([string]$Text) {\n    $line = ('{0} {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Text)\n    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8\n}\n$extract = $null\n$backup = $GameExe + '.backup'\ntry {\n    Write-Status 'Iniciando instalacao do Clareira dos Goblins.'\n    if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) { throw 'ZIP de atualizacao nao encontrado.' }\n    if (-not (Test-Path -LiteralPath $GameExe -PathType Leaf)) { throw 'Executavel atual nao encontrado.' }\n    if ((Split-Path -Leaf $GameExe) -ne 'Clareira-dos-Goblins.exe') { throw 'Nome de executavel inesperado.' }\n    $actualZipHash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()\n    if ($actualZipHash -ne $ExpectedSha256.ToLowerInvariant()) { throw 'SHA-256 do ZIP nao confere com a Release.' }\n    $extract = Join-Path $env:TEMP ('Clareira-Update-' + [guid]::NewGuid().ToString('N'))\n    New-Item -ItemType Directory -Path $extract -Force | Out-Null\n    Expand-Archive -LiteralPath $ZipPath -DestinationPath $extract -Force\n    $newExe = Join-Path $extract 'Clareira-dos-Goblins.exe'\n    $newHashFile = Join-Path $extract 'SHA256SUMS.txt'\n    $newVersionFile = Join-Path $extract 'versao-github.txt'\n    if (-not (Test-Path -LiteralPath $newExe -PathType Leaf) -or\n        -not (Test-Path -LiteralPath $newHashFile -PathType Leaf) -or\n        -not (Test-Path -LiteralPath $newVersionFile -PathType Leaf)) {\n        throw 'O ZIP nao contem os tres arquivos esperados.'\n    }\n    $sumLine = Get-Content -LiteralPath $newHashFile | Where-Object { $_.Trim().EndsWith('Clareira-dos-Goblins.exe') } | Select-Object -First 1\n    if (-not $sumLine -or $sumLine.Length -lt 64) { throw 'Arquivo SHA256SUMS.txt invalido.' }\n    $expectedExeHash = $sumLine.Substring(0,64).ToLowerInvariant()\n    if ($expectedExeHash.Length -ne 64) { throw 'Hash do executavel invalido.' }\n    $actualExeHash = (Get-FileHash -LiteralPath $newExe -Algorithm SHA256).Hash.ToLowerInvariant()\n    if ($actualExeHash -ne $expectedExeHash) { throw 'Executavel extraido nao passou na verificacao SHA-256.' }\n    $newVersion = (Get-Content -LiteralPath $newVersionFile -Raw).Trim()\n    if ($newVersion -notmatch '^[0-9a-fA-F]{40}
+const INSTALL_SCRIPT := """
+param(
+    [Parameter(Mandatory=$true)][string]$ZipPath,
+    [Parameter(Mandatory=$true)][string]$GameExe,
+    [Parameter(Mandatory=$true)][int]$GamePid,
+    [Parameter(Mandatory=$true)][string]$ExpectedSha256,
+    [Parameter(Mandatory=$true)][string]$LogPath
+)
+$ErrorActionPreference = 'Stop'
+function Write-Status([string]$Text) {
+    $line = ('{0} {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Text)
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
+}
+$extract = $null
+$backup = $GameExe + '.backup'
+try {
+    Write-Status 'Iniciando instalacao do Clareira dos Goblins.'
+    if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) { throw 'ZIP de atualizacao nao encontrado.' }
+    if (-not (Test-Path -LiteralPath $GameExe -PathType Leaf)) { throw 'Executavel atual nao encontrado.' }
+    if ((Split-Path -Leaf $GameExe) -ne 'Clareira-dos-Goblins.exe') { throw 'Nome de executavel inesperado.' }
+    $actualZipHash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualZipHash -ne $ExpectedSha256.ToLowerInvariant()) { throw 'SHA-256 do ZIP nao confere com a Release.' }
+    $extract = Join-Path $env:TEMP ('Clareira-Update-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $extract -Force | Out-Null
+    Expand-Archive -LiteralPath $ZipPath -DestinationPath $extract -Force
+    $newExe = Join-Path $extract 'Clareira-dos-Goblins.exe'
+    $newHashFile = Join-Path $extract 'SHA256SUMS.txt'
+    $newVersionFile = Join-Path $extract 'versao-github.txt'
+    if (-not (Test-Path -LiteralPath $newExe -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $newHashFile -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $newVersionFile -PathType Leaf)) {
+        throw 'O ZIP nao contem os tres arquivos esperados.'
+    }
+    $sumLine = Get-Content -LiteralPath $newHashFile | Where-Object { $_.Trim().EndsWith('Clareira-dos-Goblins.exe') } | Select-Object -First 1
+    if (-not $sumLine -or $sumLine.Length -lt 64) { throw 'Arquivo SHA256SUMS.txt invalido.' }
+    $expectedExeHash = $sumLine.Substring(0,64).ToLowerInvariant()
+    if ($expectedExeHash.Length -ne 64) { throw 'Hash do executavel invalido.' }
+    $actualExeHash = (Get-FileHash -LiteralPath $newExe -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualExeHash -ne $expectedExeHash) { throw 'Executavel extraido nao passou na verificacao SHA-256.' }
+    $newVersion = (Get-Content -LiteralPath $newVersionFile -Raw).Trim()
+    if ($newVersion -notmatch '^[0-9a-fA-F]{40}$') { throw 'Identificador da versao invalido.' }
+    Write-Status 'ZIP e arquivos internos validados. Aguardando o jogo fechar.'
+    for ($attempt=0; $attempt -lt 120; $attempt++) {
+        if (-not (Get-Process -Id $GamePid -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (Get-Process -Id $GamePid -ErrorAction SilentlyContinue) { throw 'O jogo nao fechou; instalacao cancelada.' }
+    $folder = Split-Path -Parent $GameExe
+    Copy-Item -LiteralPath $GameExe -Destination $backup -Force
+    Write-Status 'Backup da versao anterior salvo.'
+    try {
+        $installed = $false
+        for ($attempt=0; $attempt -lt 12; $attempt++) {
+            try {
+                Copy-Item -LiteralPath $newExe -Destination $GameExe -Force
+                $installed = $true
+                break
+            } catch {
+                Start-Sleep -Milliseconds 500
+            }
+        }
+        if (-not $installed) { throw 'Nao foi possivel substituir o jogo. Verifique as permissoes da pasta.' }
+        if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedExeHash) {
+            throw 'Falha na verificacao do novo executavel instalado.'
+        }
+        Copy-Item -LiteralPath $newVersionFile -Destination (Join-Path $folder 'versao-github.txt') -Force
+        Copy-Item -LiteralPath $newHashFile -Destination (Join-Path $folder 'SHA256SUMS.txt') -Force
+    } catch {
+        Write-Status ('Falha ao instalar; restaurando backup: ' + $_.Exception.Message)
+        Copy-Item -LiteralPath $backup -Destination $GameExe -Force
+        throw
+    }
+    Write-Status ('Instalacao concluida: ' + $newVersion)
+    Start-Process -FilePath $GameExe -WorkingDirectory $folder
+    Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Status ('ERRO: ' + $_.Exception.Message)
+    exit 1
+} finally {
+    if ($extract -and (Test-Path -LiteralPath $extract)) {
+        Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+"""
 const MAX_ZIP_SIZE := 300 * 1024 * 1024
 
 var state: Dictionary = {"phase":"idle","message":"Confira se há uma nova versão do jogo.","percent":0}
