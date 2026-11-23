@@ -5422,6 +5422,8 @@ func net_tree_chopped(id: String, cuts: int, fell: bool, cut_time: float, from_p
 	if fell:
 		tree.set_meta("fall_from",from_position)
 		timber(tree,true)
+		# timber usa o relogio local; reestabelecer o horario do servidor.
+		tree_regrowth[id] = cut_time
 		update_tree_visual(tree)
 	else:
 		tree.set_meta("cuts",cuts)
