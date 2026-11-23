@@ -14,13 +14,13 @@ var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado p
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_floor":"Piso / teto de madeira"}
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira"}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
-const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70,24:110}
+const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70,24:110,25:80,26:200}
 var tool_durability: Dictionary = {} # Item -> durabilidade individual de cada unidade
 const VINE := 11
 const ROPE := 12
@@ -38,6 +38,8 @@ const SAPLING_ITEM := 21
 const FLOOR_ITEM := 22
 const WOLF_TOOTH := 23
 const SPIKED_CLUB := 24
+const WOOD_PICKAXE := 25
+const STONE_PICKAXE := 26
 const BUILD_MAX_LEVEL := 3
 const STARTER_CABIN_ID := "starter-cabin"
 const STARTER_CABIN_CENTER := Vector2(0.0,-15.0)
@@ -100,11 +102,13 @@ var wood_axe_head: Node3D
 var stone_axe_head: Node3D
 var shovel_head: Node3D
 var spiked_club_head: Node3D
+var wood_pickaxe_head: Node3D
+var stone_pickaxe_head: Node3D
 var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -472,6 +476,16 @@ func make_player() -> void:
 	axe.add_child(spiked_club_head)
 	preload("res://spiked_club_model.gd").build(spiked_club_head)
 	spiked_club_head.hide()
+	wood_pickaxe_head = Node3D.new()
+	wood_pickaxe_head.name = "PicaretaMadeira"
+	axe.add_child(wood_pickaxe_head)
+	preload("res://pickaxe_model.gd").build(wood_pickaxe_head,false)
+	wood_pickaxe_head.hide()
+	stone_pickaxe_head = Node3D.new()
+	stone_pickaxe_head.name = "PicaretaPedra"
+	axe.add_child(stone_pickaxe_head)
+	preload("res://pickaxe_model.gd").build(stone_pickaxe_head,true)
+	stone_pickaxe_head.hide()
 	stone_axe_sprite = Sprite3D.new()
 	stone_axe_sprite.name = "MachadoPedraAprovado"
 	stone_axe_sprite.texture = preload("res://icones/machado_pedra_equipado.png")
@@ -1022,6 +1036,13 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 				cylinder(tool,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
 				make_stone_axe_head(tool)
 			collider(o,Vector3(.4,.22,.76),Vector3.UP*.11)
+		"wood_pickaxe","stone_pickaxe":
+			var pickaxe_visual := Node3D.new()
+			o.add_child(pickaxe_visual)
+			pickaxe_visual.position = Vector3(0,0.14,0)
+			pickaxe_visual.rotation.z = PI*0.5
+			preload("res://pickaxe_model.gd").build(pickaxe_visual,kind=="stone_pickaxe")
+			collider(o,Vector3(0.8,0.3,0.6),Vector3.UP*0.15)
 		"wolf_tooth":
 			var fang_mesh := CylinderMesh.new()
 			fang_mesh.top_radius = 0.0
@@ -2822,7 +2843,7 @@ func craft_status(recipe: String) -> String:
 		return "Aproxime-se da bancada para fabricar os itens."
 	match craft_mode:
 		"station":
-			return "Lanças, machados, pá, porrete de espinhos, paredes e piso/teto."
+			return "Lanças, machados, picaretas, pá, porrete de espinhos, paredes e piso/teto."
 		_:
 			var kinds: Array = []
 			for cell in craft_cells:
@@ -2981,7 +3002,7 @@ func craft_basic() -> void:
 			notice("Aproxime-se da bancada para fabricar o item.")
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
 	}[kind]
 	for index: int in costs:
 		stock[index] -= costs[index]
@@ -3516,13 +3537,15 @@ func _physics_process(dt: float) -> void:
 	spear.visible = not third_person and held in [0,8]
 	if spear.visible:
 		spear_tip.material_override = materials["rock"] if held==0 else material("wood",Color("#855b36"))
-	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM,SPIKED_CLUB]
+	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM,SPIKED_CLUB,WOOD_PICKAXE,STONE_PICKAXE]
 	wood_axe_head.visible = held==WOOD_AXE
 	# Machado de pedra aprovado: usar a arte dedicada, e nao a malha
 	# volumosa de rocha que escondia o formato correto na primeira pessoa.
 	stone_axe_head.visible = false
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
 	spiked_club_head.visible = axe.visible and held==SPIKED_CLUB
+	wood_pickaxe_head.visible = axe.visible and held==WOOD_PICKAXE
+	stone_pickaxe_head.visible = axe.visible and held==STONE_PICKAXE
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
 	# O sprite do machado de pedra ja inclui cabo; somente a pa usa o cabo 3D compartilhado.
 	axe.get_node("CaboMachadoMadeira").visible = false
@@ -3815,6 +3838,9 @@ func primary() -> void:
 		save_game()
 		notice("Muda plantada! A árvore crescerá com o tempo.")
 		return
+	if kind in ["stone","block"]:
+		mine_stone(o,held,hit["position"],hit["normal"])
+		return
 	if kind in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
@@ -3997,6 +4023,70 @@ func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 	return true
 
 
+func mine_stone(rock: Node3D, tool: int, pos: Vector3, normal: Vector3) -> void:
+	if tool not in [WOOD_PICKAXE,STONE_PICKAXE] or stock[tool]<=0:
+		notice("Equipe uma picareta de madeira ou pedra para minerar.")
+		return
+	if net_role=="client":
+		if net_world_ready:
+			use_tool(tool)
+			net_request_mine_stone.rpc_id(1,str(rock.get_meta("id","")),tool)
+		else:
+			notice("Aguarde a sincronização do mundo.")
+		return
+	use_tool(tool)
+	apply_mining_hit(rock,tool,1)
+
+func apply_mining_hit(rock: Node3D, tool: int, miner_peer: int) -> void:
+	if not is_instance_valid(rock) or str(rock.get_meta("kind","")) not in ["stone","block"]:
+		return
+	var count: int = int(rock.get_meta("mine_hits",0))+1
+	var required: int = 2 if tool==STONE_PICKAXE else 4
+	rock.set_meta("mine_hits",count)
+	impact(rock.global_position+Vector3.UP*0.4,Vector3.UP,true)
+	if count<required:
+		if miner_peer==1:
+			notice("Minerando pedra: %d/%d golpes" % [count,required])
+		else:
+			net_mining_feedback.rpc_id(miner_peer,false,count,required)
+		return
+	remove_object(rock)
+	if miner_peer==1:
+		stock[2] += 1
+		item_received(2)
+		sync_hotbar()
+		notice("Pedra minerada! +1 pedra.")
+	else:
+		net_mining_feedback.rpc_id(miner_peer,true,count,required)
+	save_game()
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_mine_stone(id: String, tool: int) -> void:
+	if net_role!="host" or tool not in [WOOD_PICKAXE,STONE_PICKAXE] or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
+		return
+	var avatar: Node3D = remotes.get(peer_id,null)
+	var rock: Node3D = objects[id]
+	if not is_instance_valid(avatar) or not is_instance_valid(rock):
+		return
+	if str(rock.get_meta("kind","")) not in ["stone","block"] or avatar.global_position.distance_to(rock.global_position)>5.0:
+		return
+	apply_mining_hit(rock,tool,peer_id)
+
+@rpc("authority","call_remote","reliable")
+func net_mining_feedback(completed: bool, hits: int, required: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	if completed:
+		stock[2] += 1
+		item_received(2)
+		sync_hotbar()
+		notice("Pedra minerada! +1 pedra.")
+	else:
+		notice("Minerando pedra: %d/%d golpes" % [hits,required])
+
 func secondary() -> void:
 	var hit := ray()
 	if not hit.is_empty():
@@ -4019,6 +4109,9 @@ func secondary() -> void:
 			return
 		if kind in ["fire","wood_wall","wood_doorway","wood_window","wood_floor"]:
 			notice("Use um machado para desmontar esta estrutura.")
+			return
+		if kind in ["stone","block"]:
+			notice("Não é possível pegar pedras com a mão. Use uma picareta.")
 			return
 		if item>=0:
 			sync_hotbar()
@@ -4471,7 +4564,7 @@ func net_request_remove(id: String) -> void:
 		return
 	var avatar: Node3D = remotes.get(peer_id,null)
 	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS:
+	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS or str(obj.get_meta("kind","")) in ["stone","block"]:
 		return
 	if not is_instance_valid(avatar) or avatar.global_position.distance_to(obj.global_position)>6.5:
 		return
