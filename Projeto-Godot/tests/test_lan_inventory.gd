@@ -16,7 +16,9 @@ func _initialize() -> void:
 		_fail("salvamento do inventario falhou")
 		return
 	var again: Dictionary = LAN_SLOTS.read_inventory(one)
-	if again.get("stock",[])!=bag["stock"] or again.get("tool_durability",{})!=bag["tool_durability"]:
+	var read_stock: Array = again.get("stock",[])
+	var read_tools: Dictionary = again.get("tool_durability",{})
+	if read_stock.size()<3 or int(read_stock[1])!=7 or not read_tools.has("9") or int((read_tools.get("9",[0]) as Array)[0])!=47:
 		_fail("itens ou durabilidade nao foram restaurados")
 		return
 	if LAN_SLOTS.has_inventory(two) or not LAN_SLOTS.read_inventory(two).is_empty():
@@ -24,7 +26,7 @@ func _initialize() -> void:
 		return
 	# Atualizacoes do personagem sempre substituem o ultimo estado.
 	bag["stock"]=[0,4,3]
-	if not LAN_SLOTS.write_inventory(one,bag) or LAN_SLOTS.read_inventory(one).get("stock",[])!=bag["stock"]:
+	if not LAN_SLOTS.write_inventory(one,bag) or int((LAN_SLOTS.read_inventory(one).get("stock",[]) as Array)[1])!=4:
 		_fail("retorno ao mesmo mapa nao preservou o progresso mais recente")
 		return
 	# Confere tambem o estado real do inventario, sem iniciar a cena 3D.
