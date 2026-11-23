@@ -3,6 +3,7 @@ extends Node3D
 const SAVE := "user://clareira-nativa.json"
 const LAN_PREFS_PATH := "user://clareira-multiplayer.cfg" # Arquivo antigo continua sendo o Mundo original
 const WORLD_SLOTS := preload("res://world_slots.gd")
+const LAN_INVENTORY := preload("res://lan_inventory_slots.gd")
 const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
@@ -73,7 +74,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 6 # Equipamento de espada e escudo sincronizado entre jogadores
+const NET_PROTOCOL := 7 # Identificador persistente do mundo para inventarios LAN isolados
 const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -169,6 +170,9 @@ var net_session_message := ""
 var net_entities_clock := 0.0
 var net_last_hurt_by_peer: Dictionary = {}
 var world_storage = WORLD_SLOTS.new()
+var world_uid := ""
+var net_remote_world_uid := ""
+var net_offline_inventory_backup: Dictionary = {}
 
 func _ready() -> void:
 	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
@@ -186,6 +190,8 @@ func _ready() -> void:
 	load_last_lan_ip()
 	world_storage.initialize()
 	load_game()
+	if world_uid.is_empty():
+		world_uid = Crypto.new().generate_random_bytes(16).hex_encode()
 	make_player()
 	make_ui()
 	village()
@@ -4550,6 +4556,83 @@ func notice(message: String) -> void:
 	feedback = message
 	feedback_until = elapsed+4
 
+
+func capture_inventory_state() -> Dictionary:
+	# Dados do jogador, nunca dados da construcao/terreno do anfitriao.
+	sync_hotbar()
+	sync_tool_durability()
+	return {
+		"stock": stock.duplicate(true),
+		"reserve": reserve.duplicate(true),
+		"bar_items": bar_items.duplicate(true),
+		"inventory_slots": inventory_slots.duplicate(true),
+		"tool_durability": tool_durability.duplicate(true),
+		"backpack_slots": serialize_backpack(),
+		"backpack_equipped": backpack_equipped,
+		"hotbar_manual": hotbar_manual,
+		"sword_equipped": sword_equipped,
+		"shield_equipped": shield_equipped,
+		"health": health,
+		"stamina": stamina,
+		"selected": selected
+	}
+
+func apply_inventory_state(data: Dictionary) -> void:
+	# Sempre zerar primeiro: mundo novo nao herda itens offline nem de outra sala.
+	stock.fill(0)
+	reserve.fill(0)
+	bar_items.fill(-1)
+	inventory_slots.fill(-1)
+	backpack_slots.fill(Vector2i(-1,0))
+	var saved_stock: Array = data.get("stock",[])
+	var saved_reserve: Array = data.get("reserve",[])
+	for i in range(mini(ITEMS.size(),saved_stock.size())):
+		stock[i] = clampi(int(saved_stock[i]),0,999999)
+	for i in range(mini(ITEMS.size(),saved_reserve.size())):
+		reserve[i] = clampi(int(saved_reserve[i]),0,999999)
+	var saved_bag: Array = data.get("backpack_slots",[])
+	for i in range(mini(BACKPACK_SIZE,saved_bag.size())):
+		if not saved_bag[i] is Array or saved_bag[i].size()!=2:
+			continue
+		var kind := int(saved_bag[i][0])
+		var count := int(saved_bag[i][1])
+		if kind>=0 and kind<ITEMS.size() and kind!=BACKPACK_ITEM and count>0:
+			backpack_slots[i] = Vector2i(kind,mini(count,BACKPACK_STACK_LIMIT))
+	tool_durability = (data.get("tool_durability",{}) as Dictionary).duplicate(true)
+	backpack_equipped = bool(data.get("backpack_equipped",false)) and stock[BACKPACK_ITEM]>0
+	sword_equipped = bool(data.get("sword_equipped",false))
+	shield_equipped = bool(data.get("shield_equipped",false))
+	hotbar_manual = bool(data.get("hotbar_manual",false))
+	var saved_slots: Array = data.get("inventory_slots",[])
+	for i in range(mini(inventory_slots.size(),saved_slots.size())):
+		var kind := int(saved_slots[i])
+		if kind>=0 and kind<ITEMS.size() and (stock[kind]>0 or reserve[kind]>0) and not inventory_slots.has(kind):
+			inventory_slots[i] = kind
+	var saved_hotbar: Array = data.get("bar_items",[])
+	for i in range(mini(bar_items.size(),saved_hotbar.size())):
+		var kind := int(saved_hotbar[i])
+		if kind>=0 and kind<ITEMS.size() and stock[kind]>0 and not bar_items.has(kind):
+			bar_items[i] = kind
+	selected = clampi(int(data.get("selected",0)),0,HOTBAR_SIZE-1)
+	health = clampi(int(data.get("health",100)),1,100)
+	stamina = clampf(float(data.get("stamina",100.0)),0.0,100.0)
+	exhausted = stamina<1.0
+	recovery_delay = 0.0
+	sync_inventory_slots()
+	sync_hotbar()
+	sync_tool_durability()
+	if is_instance_valid(backpack_visual):
+		backpack_visual.visible = backpack_equipped
+	apply_player_equipment()
+
+func save_lan_inventory() -> bool:
+	if net_role!="client" or not net_world_ready or not LAN_INVENTORY.valid_world_uid(net_remote_world_uid):
+		return false
+	var saved := LAN_INVENTORY.write_inventory(net_remote_world_uid,capture_inventory_state())
+	if not saved:
+		push_warning("Nao foi possivel salvar o inventario desta partida LAN.")
+	return saved
+
 func load_game() -> void:
 	var save_file: String = world_storage.save_path()
 	if not FileAccess.file_exists(save_file):
@@ -4557,6 +4640,9 @@ func load_game() -> void:
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_file))
 	if not data is Dictionary:
 		return
+	var saved_world_uid := str(data.get("world_uid",""))
+	if LAN_INVENTORY.valid_world_uid(saved_world_uid):
+		world_uid = saved_world_uid
 	var saved_stock: Array = data.get("stock",[])
 	var saved_reserve: Array = data.get("reserve",[])
 	for i in range(mini(ITEMS.size(),saved_stock.size())):
@@ -4602,7 +4688,9 @@ func load_game() -> void:
 
 func save_game() -> bool:
 	# O cliente nao salva o mundo do anfitriao sobre um arquivo local.
-	if net_role=="client" or not is_instance_valid(player):
+	if net_role=="client":
+		return save_lan_inventory()
+	if not is_instance_valid(player):
 		return false
 	if not world_storage.prepare_save():
 		return false
@@ -4611,7 +4699,7 @@ func save_game() -> bool:
 	var file := FileAccess.open(file_path+".tmp",FileAccess.WRITE)
 	if file:
 		var p := player.position
-		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
+		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
 			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
@@ -4642,6 +4730,12 @@ func lan_local_ipv4_addresses() -> PackedStringArray:
 
 func host_game() -> void:
 	disconnect_game()
+	# O ID do mapa precisa existir no disco antes de receber visitantes.
+	if not save_game():
+		net_session_message = "Nao foi possivel salvar o mapa para hospedar a partida."
+		notice(net_session_message)
+		show_menu()
+		return
 	var peer := ENetMultiplayerPeer.new()
 	var error := peer.create_server(NET_PORT,7)
 	if error!=OK:
@@ -4702,6 +4796,7 @@ func join_at_address(ip: String) -> void:
 		show_menu()
 		return
 	disconnect_game()
+	net_offline_inventory_backup = capture_inventory_state()
 	net_address = ip
 	net_world_backup = capture_net_world()
 	var peer := ENetMultiplayerPeer.new()
@@ -4709,6 +4804,7 @@ func join_at_address(ip: String) -> void:
 	if error!=OK:
 		peer.close()
 		net_world_backup.clear()
+		net_offline_inventory_backup.clear()
 		net_address = last_connected_lan_ip
 		net_session_message = "Falha ao iniciar a conexão. Verifique o IP e a porta UDP %d." % NET_PORT
 		notice(net_session_message)
@@ -4781,6 +4877,7 @@ func net_kick_message(message: String) -> void:
 
 func capture_net_world() -> Dictionary:
 	return {
+		"world_uid": world_uid,
 		"placed": placed.duplicate(true),
 		"removed": removed.duplicate(true),
 		"cleared_stumps": cleared_stumps.duplicate(true),
@@ -4853,7 +4950,18 @@ func apply_net_world(snapshot: Dictionary) -> void:
 func net_send_snapshot(snapshot: Dictionary) -> void:
 	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or net_world_ready:
 		return
+	var incoming_world_uid := str(snapshot.get("world_uid",""))
+	if not LAN_INVENTORY.valid_world_uid(incoming_world_uid):
+		disconnect_game()
+		net_session_message = "Anfitriao sem identificador de mundo. Atualize os dois jogos."
+		notice(net_session_message)
+		show_menu()
+		return
+	net_remote_world_uid = incoming_world_uid
 	apply_net_world(snapshot)
+	# O anfitriao envia somente o mundo: os itens sao carregados por visitante.
+	var returning_player := LAN_INVENTORY.has_inventory(incoming_world_uid)
+	apply_inventory_state(LAN_INVENTORY.read_inventory(incoming_world_uid))
 	net_world_ready = true
 	net_connected = true
 	remember_connected_lan_ip()
@@ -4862,7 +4970,7 @@ func net_send_snapshot(snapshot: Dictionary) -> void:
 	var enter_z := float(host_position[2])+2.0
 	player.position = Vector3(enter_x,ground(enter_x,enter_z)+.85,enter_z)
 	player.velocity = Vector3.ZERO
-	net_session_message = "Mundo sincronizado. Partida em rede ativa."
+	net_session_message = "Mundo sincronizado. Inventario restaurado." if returning_player else "Primeira visita a este mundo: inventario vazio."
 	notice(net_session_message)
 	begin()
 
@@ -5212,12 +5320,15 @@ func disconnect_and_show_menu() -> void:
 
 
 func disconnect_game() -> void:
+	var was_client := net_role=="client"
+	if was_client and net_world_ready:
+		save_lan_inventory()
 	if multiplayer.multiplayer_peer:
 		multiplayer.multiplayer_peer.close()
 		multiplayer.multiplayer_peer = null
 	for id in remotes.keys():
 		remove_remote(id)
-	var restore := net_role=="client" and not net_world_backup.is_empty()
+	var restore := was_client and not net_world_backup.is_empty()
 	net_role = "solo"
 	net_connected = false
 	net_world_ready = false
@@ -5225,7 +5336,11 @@ func disconnect_game() -> void:
 		apply_net_world(net_world_backup)
 		var previous: Array = net_world_backup.get("pos",[0,1,0])
 		player.position = Vector3(float(previous[0]),float(previous[1]),float(previous[2]))
+	if was_client and not net_offline_inventory_backup.is_empty():
+		apply_inventory_state(net_offline_inventory_backup)
 	net_world_backup.clear()
+	net_offline_inventory_backup.clear()
+	net_remote_world_uid = ""
 
 
 func disconnected() -> void:
