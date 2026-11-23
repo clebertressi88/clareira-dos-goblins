@@ -30,3 +30,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha na importacao' }
           & $godot --headless --path Projeto-Godot --script res://tests/test_goblin_skirmisher_scene.gd
           if ($LASTEXITCODE -ne 0) { throw 'Teste do laboratorio Skirmisher falhou' }
+          if (Test-Path 'Projeto-Godot/modelos/goblin_skirmisher/Character/GoblinSkirmisher.scn') {
+            & $godot --headless --path Projeto-Godot --script res://tests/test_goblin_skirmisher_asset.gd
+            if ($LASTEXITCODE -ne 0) { throw 'Modelo Skirmisher ou suas animacoes falharam no teste' }
+          } else {
+            Write-Host 'Aviso: asset binario ainda nao foi enviado a branch de teste.'
+          }
