@@ -15,6 +15,8 @@ const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueir
 const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
+const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70}
+var tool_durability: Dictionary = {} # Item -> durabilidade individual de cada unidade
 const VINE := 11
 const ROPE := 12
 const BENCH_PATTERN := [7,7,1,1]
@@ -1898,6 +1900,43 @@ func sync_inventory_slots() -> void:
 			if free>=0:
 				inventory_slots[free] = item
 
+func sync_tool_durability() -> void:
+	for kind in TOOL_MAX_DURABILITY:
+		var item: int = int(kind)
+		var count: int = maxi(0,stock[item])+maxi(0,reserve[item])
+		for slot in backpack_slots:
+			if slot.x==item:
+				count += slot.y
+		var values: Array = tool_durability.get(str(item),[])
+		while values.size()<count:
+			values.append(int(TOOL_MAX_DURABILITY[item]))
+		while values.size()>count:
+			values.pop_back()
+		tool_durability[str(item)] = values
+
+func tool_remaining(item: int) -> int:
+	if not TOOL_MAX_DURABILITY.has(item):
+		return -1
+	sync_tool_durability()
+	var values: Array = tool_durability.get(str(item),[])
+	return int(values[0]) if not values.is_empty() else 0
+
+func use_tool(item: int) -> void:
+	if not TOOL_MAX_DURABILITY.has(item) or stock[item]<=0:
+		return
+	sync_tool_durability()
+	var values: Array = tool_durability[str(item)]
+	if values.is_empty():
+		return
+	values[0] = maxi(0,int(values[0])-1)
+	if int(values[0])==0:
+		values.pop_front()
+		stock[item] -= 1
+		sync_hotbar()
+		notice("%s quebrou! Fabrique outra ferramenta." % ITEMS[item])
+	tool_durability[str(item)] = values
+	save_game()
+
 func item_received(item: int) -> void:
 	# Coleta/fabricação: primeiro espaço vazio dos 9 atalhos, mesmo com ordem manual.
 	if item<0 or item>=ITEMS.size():
@@ -1934,8 +1973,8 @@ func update_player_hud() -> void:
 		var item: int = bar_items[i]
 		hotbar_icons[i].texture = ITEM_ICONS[item] if item>=0 else null
 		hotbar_slots[i].text = ""
-		hotbar_frames[i].tooltip_text = ITEMS[item] if item>=0 else "Atalho vazio"
-		hotbar_counts[i].text = "×%d" % stock[item] if item>=0 else ""
+		hotbar_frames[i].tooltip_text = (ITEMS[item] + (" · Durabilidade %d/%d" % [tool_remaining(item),int(TOOL_MAX_DURABILITY[item])] if TOOL_MAX_DURABILITY.has(item) else "")) if item>=0 else "Atalho vazio"
+		hotbar_counts[i].text = ("×%d · %d%%" % [stock[item],roundi(100.0*tool_remaining(item)/float(TOOL_MAX_DURABILITY[item]))] if TOOL_MAX_DURABILITY.has(item) else "×%d" % stock[item]) if item>=0 else ""
 		hotbar_slots[i].modulate = Color("#ffe29c") if active else Color.WHITE
 
 func sprint_step(wants_run: bool,dt: float) -> bool:
@@ -2209,6 +2248,8 @@ func show_inventory() -> void:
 			var available := craft_available(kind)
 			item.text = "×%d" % available if available>0 else ""
 			item.tooltip_text = ITEMS[kind]
+			if TOOL_MAX_DURABILITY.has(kind):
+				item.tooltip_text += " · Durabilidade %d/%d" % [tool_remaining(kind),int(TOOL_MAX_DURABILITY[kind])]
 			if reserve[kind]>0:
 				item.tooltip_text += " · %d na reserva" % reserve[kind]
 			if available>0:
@@ -3466,6 +3507,7 @@ func primary() -> void:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
+		use_tool(held)
 		var hits: int = int(o.get_meta("break_hits",0))+(2 if held==STONE_AXE else 1)
 		var needed := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2))
 		if hits<needed:
@@ -3489,9 +3531,12 @@ func primary() -> void:
 			return
 		if net_role=="client":
 			if net_world_ready:
-				net_request_hit_mob.rpc_id(1,str(o.get_meta("id","")),2 if bar_items[selected]==STONE_AXE else 1)
+				var damage: int = 2 if held==STONE_AXE else 1
+				use_tool(held)
+				net_request_hit_mob.rpc_id(1,str(o.get_meta("id","")),damage)
 			return
-		var hp := maxi(0, int(o.get_meta("hp"))-(2 if bar_items[selected]==STONE_AXE else 1))
+		var hp := maxi(0, int(o.get_meta("hp"))-(2 if held==STONE_AXE else 1))
+		use_tool(held)
 		o.set_meta("hp",hp)
 		impact(hit["position"],hit["normal"],false)
 		stagger(o,-camera.global_basis.z)
@@ -3550,10 +3595,13 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		return false
 	if net_role=="client" and not net_apply_in_progress:
 		if net_world_ready:
+			use_tool(tool)
 			net_request_chop_tree.rpc_id(1,str(tree.get_meta("id","")),tool)
 		else:
 			notice("Aguarde a sincronização do mundo.")
 		return false
+	if not net_apply_in_progress:
+		use_tool(tool)
 	var needed := 10 if tool==-1 else (4 if tool==STONE_AXE else 5)
 	var cuts := int(tree.get_meta("cuts",0))+1
 	if tool == -1:
@@ -3601,10 +3649,13 @@ func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 		return false
 	if net_role=="client" and not net_apply_in_progress:
 		if net_world_ready:
+			use_tool(tool)
 			net_request_dig_stump.rpc_id(1,str(stump.get_meta("id","")),tool)
 		else:
 			notice("Aguarde a sincronização do mundo.")
 		return false
+	if not net_apply_in_progress:
+		use_tool(tool)
 	var digs := int(stump.get_meta("dig_hits",0))+1
 	stump.set_meta("dig_hits",digs)
 	impact(pos,normal,true)
@@ -3760,6 +3811,7 @@ func load_game() -> void:
 		stock[i] = int(saved_stock[i])
 	for i in range(mini(ITEMS.size(),saved_reserve.size())):
 		reserve[i] = int(saved_reserve[i])
+	tool_durability = data.get("tool_durability",{})
 	hotbar_manual = bool(data.get("hotbar_manual",false))
 	backpack_equipped = bool(data.get("backpack_equipped",false)) and stock[BACKPACK_ITEM]>0
 	sword_equipped = bool(data.get("sword_equipped",false))
@@ -3783,6 +3835,7 @@ func load_game() -> void:
 		if item>=0 and item<ITEMS.size() and not bar_items.has(item):
 			bar_items[i] = item
 	sync_hotbar()
+	sync_tool_durability()
 	removed = data.get("removed",{})
 	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
@@ -3804,7 +3857,7 @@ func save_game() -> void:
 	var file := FileAccess.open(SAVE+".tmp",FileAccess.WRITE)
 	if file:
 		var p := player.position
-		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"removed":removed,
+		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
 			"placed":placed,"tree_regrowth":tree_regrowth,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
