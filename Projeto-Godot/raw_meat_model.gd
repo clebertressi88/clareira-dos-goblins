@@ -110,6 +110,10 @@ static func build(parent: Node3D, from_rabbit: bool = false) -> void:
 			0.014,ivory,bone_joint)
 		_blob(parent,Vector3(0.138,0.10,-0.03),Vector3(0.030,0.022,0.025),connective)
 		_blob(parent,Vector3(-0.130,0.084,0.022),Vector3(0.043,0.020,0.022),fat)
+		# Pequenos feixes ao redor da articulação, sem listras flutuantes.
+		_blob(parent,Vector3(-0.107,0.109,-0.062),Vector3(0.055,0.018,0.029),connective)
+		_blob(parent,Vector3(0.080,0.090,0.070),Vector3(0.043,0.016,0.025),fat)
+		_blob(parent,Vector3(-0.015,0.132,-0.018),Vector3(0.040,0.020,0.028),torn)
 	else:
 		# Lobo: quarto traseiro rasgado, alto e pesado, com osso saindo da carne.
 		_raw_chunk(parent,Vector3(-0.047,0.135,-0.018),0.445,0.104,0.119,
