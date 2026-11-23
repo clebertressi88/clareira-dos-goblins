@@ -135,6 +135,13 @@ var stamina_text: Label
 var stamina := 100.0
 var exhausted := false
 var recovery_delay := 0.0
+# A reserva de ar e independente da energia usada para correr.
+const BREATH_UNDERWATER_SECONDS := 12.0
+const BREATH_RECOVERY_SECONDS := 7.0
+const BREATH_RECOVERY_PAUSE := 0.8
+var breath := 100.0
+var breath_recovery_delay := 0.0
+var drowning_damage_clock := 0.0
 const WALK_SPEED := 4.4
 const RUN_SPEED := 6.7
 const RABBIT_ESCAPE_SPEED := 3.45
@@ -697,7 +704,7 @@ func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
 	water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var water := mesh_part(chunk,surface.commit(),Vector3.ZERO,Vector3.ONE,water_material)
 	water.name = "Rio_Sinuoso"
-	# Agua visual: fisica de natacao e correnteza ficam para etapa posterior.
+	# Superficie visual do rio; a natacao e o folego usam WATER_LEVEL e o relevo deterministico.
 
 func village() -> void:
 	if not removed.has(STARTER_CABIN_ID):
@@ -2225,9 +2232,15 @@ func sync_hotbar() -> void:
 func update_player_hud() -> void:
 	sync_hotbar()
 	life_bar.value = health
-	stamina_bar.value = stamina
+	var showing_breath := player_in_water() or breath < 99.99
+	stamina_bar.value = breath if showing_breath else stamina
+	var meter_fill := stamina_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	meter_fill.bg_color = Color("#328fcb") if showing_breath else Color("#d4b85e")
 	life_text.text = "Vida %d/100" % health
-	stamina_text.text = "Recuperando o fôlego" if exhausted else "Fôlego %d/100" % roundi(stamina)
+	if showing_breath:
+		stamina_text.text = "Fôlego (água) %d/100" % roundi(breath) if player_head_submerged() else "Recuperando ar %d/100" % roundi(breath) if breath < 99.99 else "Fôlego (água) 100/100"
+	else:
+		stamina_text.text = "Recuperando o fôlego" if exhausted else "Fôlego %d/100" % roundi(stamina)
 	for i in range(HOTBAR_SIZE):
 		var active := i==selected
 		var style := slot_active if active else slot_idle
@@ -2256,6 +2269,31 @@ func sprint_step(wants_run: bool,dt: float) -> bool:
 		if stamina>=32.0:
 			exhausted = false
 	return false
+
+func player_in_water() -> bool:
+	# So conta como entrada na agua quando ela alcanca parte do corpo.
+	return TERRAIN.is_river(player.position.x,player.position.z) and player.position.y + 0.65 < TERRAIN.WATER_LEVEL
+
+func player_head_submerged() -> bool:
+	# A respiracao so diminui com a cabeca abaixo da superficie.
+	return TERRAIN.is_river(player.position.x,player.position.z) and player.position.y + eye_height < TERRAIN.WATER_LEVEL - 0.08
+
+func update_breath(dt: float) -> void:
+	if player_head_submerged():
+		breath = maxf(0.0,breath - dt * 100.0 / BREATH_UNDERWATER_SECONDS)
+		breath_recovery_delay = BREATH_RECOVERY_PAUSE
+		if breath <= 0.0:
+			drowning_damage_clock += dt
+			if drowning_damage_clock >= 1.0:
+				drowning_damage_clock -= 1.0
+				health = maxi(0,health - 10)
+				if health <= 0:
+					respawn()
+	else:
+		drowning_damage_clock = 0.0
+		breath_recovery_delay = maxf(0.0,breath_recovery_delay - dt)
+		if breath_recovery_delay <= 0.0:
+			breath = minf(100.0,breath + dt * 100.0 / BREATH_RECOVERY_SECONDS)
 
 func clear_menu() -> void:
 	center_panel.call_deferred()
@@ -3642,12 +3680,19 @@ func _physics_process(dt: float) -> void:
 	if moving:
 		var input_axis := movement_axis()
 		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X))
-		var running := sprint_step(not crouch and input_axis.y<0 and (Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_SHIFT)),dt)
-		var speed := 2. if crouch else RUN_SPEED if running else WALK_SPEED
+		var in_water := player_in_water()
+		var running := sprint_step(not in_water and not crouch and input_axis.y<0 and (Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_SHIFT)),dt)
+		var speed := 2.4 if in_water else 2. if crouch else RUN_SPEED if running else WALK_SPEED
 		var requested := player.basis*Vector3(input_axis.x,0,input_axis.y)*speed
 		player.velocity.x = move_toward(player.velocity.x,requested.x,dt*28)
 		player.velocity.z = move_toward(player.velocity.z,requested.z,dt*28)
-		if not player.is_on_floor():
+		if in_water:
+			# Espaco sobe/nada; X afunda; sem comando o corpo afunda devagar.
+			var swim_up := Input.is_physical_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_SPACE)
+			var swim_down := Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X)
+			var swim_vertical := 3.2 if swim_up else -2.2 if swim_down else -0.42
+			player.velocity.y = move_toward(player.velocity.y,swim_vertical,dt*7.0)
+		elif not player.is_on_floor():
 			player.velocity.y -= dt*15
 		elif jump and not crouch:
 			player.velocity.y = 5.2
@@ -3659,13 +3704,9 @@ func _physics_process(dt: float) -> void:
 		if player.position.y < ground_level-.18:
 			player.position.y = ground_level+.65
 			player.velocity.y = 0.0
-		# Agua do rio e visual, sem natacao implementada. Mantenha a camera
-		# acima da superficie para nao ver montanhas como ilhas flutuantes.
-		if TERRAIN.is_river(player.position.x,player.position.z):
-			var wading_level := TERRAIN.WATER_LEVEL-1.20
-			if player.position.y < wading_level:
-				player.position.y = wading_level
-				player.velocity.y = 0.0
+		# O jogador pode mergulhar ate o leito; oxigenio e dano sao locais
+		# a cada personagem, inclusive em partidas multiplayer.
+		update_breath(dt)
 		animate_npc_model(player_model,player.get_real_velocity(),dt,player.is_on_floor())
 		eye_height = move_toward(eye_height,.96 if crouch else 1.49,dt*4.5)
 		update_camera()
@@ -3929,6 +3970,9 @@ func respawn() -> void:
 	stamina = 100.0
 	exhausted = false
 	recovery_delay = 0.0
+	breath = 100.0
+	breath_recovery_delay = 0.0
+	drowning_damage_clock = 0.0
 	player.position = Vector3(0,.6,0)
 	player.velocity = Vector3.ZERO
 	notice("Você voltou à clareira.")
@@ -4618,6 +4662,9 @@ func apply_inventory_state(data: Dictionary) -> void:
 	stamina = clampf(float(data.get("stamina",100.0)),0.0,100.0)
 	exhausted = stamina<1.0
 	recovery_delay = 0.0
+	breath = 100.0
+	breath_recovery_delay = 0.0
+	drowning_damage_clock = 0.0
 	sync_inventory_slots()
 	sync_hotbar()
 	sync_tool_durability()
