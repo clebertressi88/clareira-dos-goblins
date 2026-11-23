@@ -9,13 +9,15 @@ const TERRAIN := preload("res://landscape_terrain.gd")
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
+const TOMATO_ITEM := 27
+const TOMATO_HEAL := 12
 const VINE_INTERVAL_SECONDS := 300.0 # Uma vinha a cada 5 min, apenas em arvores adultas.
 var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado pelo anfitriao.
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
 const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato"]
 const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira"}
 const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
@@ -636,7 +638,7 @@ func create_chunk(key: Vector2i) -> void:
 		var z := key.y*CHUNK+rng.randf_range(1,15)
 		if Vector2(x,z).length()<5 or Vector2(x-STARTER_CABIN_CENTER.x,z-STARTER_CABIN_CENTER.y).length()<5.8 or TERRAIN.is_river(x,z):
 			continue
-		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "stick"
+		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "tomato_plant"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
 		if kind=="tree" and cleared_stumps.has(id):
 			continue
@@ -981,6 +983,13 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			var fire := preload("res://fogueira.gd").new()
 			fire.name = "FogoAnimado"
 			o.add_child(fire)
+		"tomato_plant":
+			# Vegetacao rasteira com tomates verdes e maduros; so interativa, sem bloquear caminho.
+			preload("res://forest_tomato_plant.gd").build(o,id)
+			collider(o,Vector3(1.05,.45,1.05),Vector3.UP*.22)
+		"tomato":
+			preload("res://forest_tomato_plant.gd").build(o,id,true)
+			collider(o,Vector3(.26,.24,.26),Vector3.UP*.12)
 		"vine_bush":
 			for i in range(5):
 				var a := i*TAU/5.
@@ -3580,6 +3589,7 @@ func _physics_process(dt: float) -> void:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
+				"tomato_plant": interaction_hint = "Botão direito · Colher tomates"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
 				"stump": interaction_hint = "Pá + clique esquerdo · desenterrar toco"
@@ -4100,6 +4110,9 @@ func secondary() -> void:
 		if kind=="tree_vine":
 			harvest_tree_vine(o)
 			return
+		if kind=="tomato_plant":
+			harvest_tomatoes(o)
+			return
 		if kind in ["Bruma","Talo"]:
 			speak_to_goblin(o)
 			return
@@ -4124,7 +4137,9 @@ func secondary() -> void:
 		if kind=="Bruma" or kind=="Talo":
 			notice("Monte uma bancada e um abrigo com os materiais da floresta.")
 			return
-	if bar_items[selected]==3:
+	if bar_items[selected]==TOMATO_ITEM:
+		eat_tomato()
+	elif bar_items[selected]==3:
 		eat()
 
 func any_bench_placed() -> bool:
@@ -4152,6 +4167,54 @@ func drop_selected() -> void:
 	p.y = ground(p.x,p.z)
 	store_object(ITEM_KINDS[item],p)
 	stock[item] -= 1
+
+func eat_tomato() -> void:
+	if stock[TOMATO_ITEM]>0 and health<100:
+		stock[TOMATO_ITEM] -= 1
+		health = mini(100,health+TOMATO_HEAL)
+		sync_hotbar()
+		save_game()
+		notice("Tomate consumido: +%d de vida." % TOMATO_HEAL)
+
+func harvest_tomatoes(plant: Node3D) -> void:
+	var id := str(plant.get_meta("id",""))
+	if net_role=="client":
+		if net_world_ready:
+			net_request_harvest_tomatoes.rpc_id(1,id)
+		return
+	if str(plant.get_meta("kind",""))!="tomato_plant":
+		return
+	# Plantas naturais retiradas do mundo sao persistidas em removed.
+	remove_object(plant)
+	stock[TOMATO_ITEM] += 3
+	item_received(TOMATO_ITEM)
+	sync_hotbar()
+	save_game()
+	notice("Colhidos 3 tomates.")
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_harvest_tomatoes(id: String) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var avatar: Node3D = remotes.get(peer_id,null)
+	var plant: Node3D = objects[id]
+	if not is_instance_valid(avatar) or not is_instance_valid(plant):
+		return
+	if str(plant.get_meta("kind",""))!="tomato_plant" or avatar.global_position.distance_to(plant.global_position)>4.0:
+		return
+	remove_object(plant)
+	net_tomato_reward.rpc_id(peer_id,3)
+	save_game()
+
+@rpc("authority","call_remote","reliable")
+func net_tomato_reward(amount: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or amount!=3:
+		return
+	stock[TOMATO_ITEM] += amount
+	item_received(TOMATO_ITEM)
+	sync_hotbar()
+	notice("Colhidos 3 tomates.")
 
 func eat() -> void:
 	if stock[3]>0 and health<100:
