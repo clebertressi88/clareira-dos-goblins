@@ -2834,7 +2834,7 @@ func drop_backpack_inline(position: Vector2, data: Variant, index: int) -> void:
 	var item := int(data["item"])
 	var source_bag := int(data.get("backpack_slot",-1))
 	var entry: Vector2i = backpack_slots[index]
-	var available := backpack_slots[source_bag].y if source_bag>=0 else stock[item]
+	var available: int = backpack_slots[source_bag].y if source_bag>=0 else int(stock[item])
 	var count := mini(1 if bool(data.get("single",false)) else available,BACKPACK_STACK_LIMIT-entry.y)
 	if count<=0:
 		return
