@@ -11,13 +11,16 @@ const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
 const TOMATO_ITEM := 27
 const TOMATO_HEAL := 12
+const TOMATO_SEED_ITEM := 28
+const TOMATO_GROW_SECONDS := 300.0
+var tomato_crop_times: Dictionary = {}
 const VINE_INTERVAL_SECONDS := 300.0 # Uma vinha a cada 5 min, apenas em arvores adultas.
 var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado pelo anfitriao.
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato"]
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed"]
 const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira"}
 const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
@@ -70,7 +73,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 6 # Equipamento de espada e escudo sincronizado entre jogadores
-const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","tomato_plant"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -987,6 +990,19 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			# Vegetacao rasteira com tomates verdes e maduros; so interativa, sem bloquear caminho.
 			preload("res://forest_tomato_plant.gd").build(o,id)
 			collider(o,Vector3(1.05,.45,1.05),Vector3.UP*.22)
+		"tomato_crop":
+			var crop_visual := Node3D.new()
+			crop_visual.name = "Horta"
+			o.add_child(crop_visual)
+			preload("res://forest_tomato_plant.gd").build(crop_visual,id)
+			collider(o,Vector3(1.05,.45,1.05),Vector3.UP*.22)
+			update_tomato_crop(o)
+		"tomato_seed":
+			var seed := SphereMesh.new()
+			seed.radius = .042
+			seed.height = .038
+			mesh_part(o,seed,Vector3.UP*.035,Vector3.ONE,material("tomato_seed",Color("#d1bd83")))
+			collider(o,Vector3(.20,.12,.20),Vector3.UP*.06)
 		"tomato":
 			preload("res://forest_tomato_plant.gd").build(o,id,true)
 			collider(o,Vector3(.26,.24,.26),Vector3.UP*.12)
@@ -3665,6 +3681,7 @@ func _physics_process(dt: float) -> void:
 	if tree_regrowth_clock >= 2.0:
 		tree_regrowth_clock = 0.0
 		update_regrowing_trees()
+		update_all_tomato_crops()
 	if net_role!="solo" and multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
 		if net_role=="host" or net_connected:
@@ -3726,7 +3743,7 @@ func _physics_process(dt: float) -> void:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
-				"tomato_plant": interaction_hint = "Botão direito · Colher tomates"
+				"tomato_plant","tomato_crop": interaction_hint = "Botão direito · Colher tomates"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
 				"stump": interaction_hint = "Pá + clique esquerdo · desenterrar toco"
@@ -4451,6 +4468,7 @@ func load_game() -> void:
 	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
 	tree_vines = data.get("tree_vines",{})
+	tomato_crop_times = data.get("tomato_crop_times",{})
 	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -4470,7 +4488,7 @@ func save_game() -> bool:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.flush()
@@ -4644,6 +4662,7 @@ func capture_net_world() -> Dictionary:
 		"cleared_stumps": cleared_stumps.duplicate(true),
 		"tree_regrowth": tree_regrowth.duplicate(true),
 		"tree_vines": tree_vines.duplicate(true),
+		"tomato_crop_times": tomato_crop_times.duplicate(true),
 		"hut":hut,"won":won,"bench":bench,
 		"pos":[player.position.x,player.position.y,player.position.z],
 		"entities":net_capture_entities()
@@ -4683,6 +4702,7 @@ func apply_net_world(snapshot: Dictionary) -> void:
 	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
 	tree_vines = (snapshot.get("tree_vines",{}) as Dictionary).duplicate(true)
+	tomato_crop_times = (snapshot.get("tomato_crop_times",{}) as Dictionary).duplicate(true)
 	hut = bool(snapshot.get("hut",false))
 	won = bool(snapshot.get("won",false))
 	bench = bool(snapshot.get("bench",false))
