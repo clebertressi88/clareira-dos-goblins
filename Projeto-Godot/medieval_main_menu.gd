@@ -121,7 +121,7 @@ func _menu_button(parent: VBoxContainer, caption: String, action: String, featur
 
 func _activate(action: String) -> void:
 	match action:
-		"network", "controls":
+		"home", "network", "controls":
 			_page = action
 			_render_page()
 		_:
