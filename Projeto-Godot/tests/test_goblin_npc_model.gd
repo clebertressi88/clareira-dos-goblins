@@ -1,93 +1,81 @@
 extends SceneTree
-# Verifica articulacao real, pesos de vertices e atlas original dos NPCs/jogadores.
+## Valida modelo Skirmisher real para jogador, NPCs, guardiao e rede sem
+## interferir na IA, colisoes, inventarios, multiplayer ou saves.
+
 func _initialize() -> void:
 	call_deferred("_run")
 
 func fail(message: String) -> void:
-	printerr("GOBLIN MODEL FAIL: "+message)
+	printerr("GOBLIN MODEL FAIL: " + message)
 	quit(1)
 
-func _test_character(visual: Node3D, title: String) -> bool:
-	if visual == null or not visual.has_meta("modelo_goblin_npc"):
-		fail(title+": nao usa controlador independente")
+func _test_character(visual: Node3D, title: String, role: String) -> bool:
+	if visual == null or not bool(visual.get_meta("modelo_skirmisher", false)):
+		fail(title + ": modelo Skirmisher nao vinculado")
 		return false
 	var controller := visual.get_node_or_null("GoblinRig") as Node3D
 	if controller == null:
-		fail(title+": arquivo NPC nao instanciou controlador")
+		fail(title + ": controlador GoblinRig ausente")
 		return false
-	var skeletons: Array = controller.get("skeletons")
-	if skeletons.size()!=1:
-		fail(title+": deve existir apenas um Skeleton3D compartilhado")
+	if str(controller.get("variant")) != role:
+		fail(title + ": tipo de personagem incorreto")
 		return false
-	var meshes := controller.find_children("*","MeshInstance3D",true,false)
-	var arms := false
-	var legs := false
-	var both_feet := {}
-	var active_parts := 0
-	for node in meshes:
-		var part := node as MeshInstance3D
-		if part == null or part.mesh == null or part.skin == null:
-			continue
-		var skel := part.get_node_or_null(part.skeleton) as Skeleton3D
-		if skel == null or skel.get_bone_count()!=15:
-			fail(title+": ossos nao vinculados a malha")
-			return false
-		var arrays: Array = part.mesh.surface_get_arrays(0)
-		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-		if bones.size() != part.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size()*4:
-			fail(title+": quantidade invalida de pesos")
-			return false
-		for i in range(0,bones.size(),4):
-			if absf(weights[i]-1.0)>0.0001 or absf(weights[i+1])>0.0001 or absf(weights[i+2])>0.0001 or absf(weights[i+3])>0.0001:
-				fail(title+": vertices ainda possuem pesos misturados e deformam")
-				return false
-			if bones[i] in [3,4,5,6,13,14]:
-				arms = true
-			if bones[i] in [7,8,9,10,11,12]:
-				legs = true
-			if bones[i] == 11 or bones[i] == 12:
-				both_feet[bones[i]]=true
-		var material := part.get_active_material(0) as BaseMaterial3D
-		if material == null or material.albedo_texture == null:
-			fail(title+": textura original nao preservada")
-			return false
-		active_parts += 1
-	if active_parts<2 or not arms or not legs or both_feet.size()!=2:
-		fail(title+": nao ha pele articulada em bracos E pernas")
+	var skeleton := controller.call("get_skeleton") as Skeleton3D
+	var animator := controller.call("get_animation_player") as AnimationPlayer
+	if skeleton == null or skeleton.get_bone_count() != 24:
+		fail(title + ": esqueleto original de 24 ossos ausente")
 		return false
+	if animator == null or animator.get_animation_list().size() < 100:
+		fail(title + ": biblioteca de animacoes do Skirmisher ausente")
+		return false
+	for clip in ["A000_Idle", "A-02_Walking", "A-01_Running", "A219_Right_hand_Sword_Slash", "A178_Hit_Reaction", "A008_Dead"]:
+		if not animator.has_animation(clip):
+			fail(title + ": falta animacao " + clip)
+			return false
+	var label := controller.get_node_or_null("NomeNPC") as Label3D
+	if role == "player":
+		if label != null:
+			fail(title + ": jogador esta identificado erroneamente como NPC")
+			return false
+	else:
+		if label == null or label.text.is_empty():
+			fail(title + ": NPC sem nome visivel")
+			return false
+		if controller.get_node_or_null("FaixaIdentificacaoFrente") == null:
+			fail(title + ": NPC sem roupa diferenciada")
+			return false
 	var swords: Array = controller.get("sword_parts")
 	var shields: Array = controller.get("shield_parts")
 	if swords.is_empty() or shields.is_empty():
-		fail(title+": espada e escudo nao foram separados da malha do corpo")
+		fail(title + ": armas equipaveis ausentes")
 		return false
-	controller.call("set_equipment",false,false)
-	for piece in swords+shields:
-		if not is_instance_valid(piece) or piece.visible or (piece as MeshInstance3D).mesh == null:
-			fail(title+": item nao foi removido da mao corretamente")
+	controller.call("set_equipment", false, false)
+	for part in swords + shields:
+		if not is_instance_valid(part) or part.visible:
+			fail(title + ": item equipado ainda aparece quando removido")
 			return false
-	controller.call("set_equipment",true,true)
-	for piece in swords+shields:
-		if not piece.visible:
-			fail(title+": item nao reapareceu ao equipar")
+	controller.call("set_equipment", true, true)
+	for part in swords + shields:
+		if not is_instance_valid(part) or not part.visible:
+			fail(title + ": equipamento nao reapareceu")
 			return false
-	# Comeca sempre da mesma fase: sem isso uma passada pode cair
-	# exatamente no instante neutro, produzindo um falso negativo.
-	controller.set("walk_phase",0.0)
-	controller.set("walk_blend",0.0)
-	controller.call("animate",Vector3(2,0,0),.3,true)
-	var skeleton := skeletons[0] as Skeleton3D
-	var leg_angle := skeleton.get_bone_pose_rotation(7).angle_to(Quaternion.IDENTITY)
-	var arm_angle := skeleton.get_bone_pose_rotation(3).angle_to(Quaternion.IDENTITY)
-	print("GOBLIN RIG ANGLES (%s): perna=%.3f braco=%.3f" % [title,leg_angle,arm_angle])
-	if leg_angle<.05 or arm_angle<.05:
-		fail(title+": ossos dos bracos ou pernas nao animaram")
+	controller.call("animate", Vector3(3.2, 0.0, 0.0), 0.016, true)
+	if animator.current_animation != "A-01_Running":
+		fail(title + ": correr nao iniciou animacao original")
+		return false
+	controller.call("animate", Vector3(1.45, 0.0, 0.0), 0.016, true)
+	if animator.current_animation != "A-02_Walking":
+		fail(title + ": andar nao iniciou animacao original")
+		return false
+	controller.call("animate", Vector3.ZERO, 0.016, true)
+	if animator.current_animation != "A000_Idle":
+		fail(title + ": parado nao iniciou animacao original")
 		return false
 	return true
 
 func _run() -> void:
-	if not ResourceLoader.exists("res://modelos/goblin_npc.glb"):
-		fail("Modelo GLB original ausente")
+	if not ResourceLoader.exists("res://modelos/goblin_skirmisher/Character/GoblinSkirmisher.scn"):
+		fail("Asset original Skirmisher ausente")
 		return
 	var game_scene := load("res://main.tscn") as PackedScene
 	if game_scene == null:
@@ -98,16 +86,22 @@ func _run() -> void:
 	await process_frame
 	await physics_frame
 	var objects: Dictionary = game.get("objects")
-	for name in ["Bruma","Talo"]:
-		if not objects.has(name) or not _test_character(objects[name].get_node("Visual"),name):
+	for data in [["Bruma", "bruma"], ["Talo", "talo"]]:
+		var npc_name: String = data[0]
+		var npc_role: String = data[1]
+		if not objects.has(npc_name):
+			fail(npc_name + ": NPC ausente no mundo")
 			return
-	var guardian := game.call("creature","guardian","teste-guardiao-com-ossos",Vector3(3,0,-15),game) as CharacterBody3D
-	if guardian == null or not _test_character(guardian.get_node("Visual"),"Guardiao"):
+		var visual := (objects[npc_name] as Node3D).get_node_or_null("Visual") as Node3D
+		if not _test_character(visual, npc_name, npc_role):
+			return
+	var guardian := game.call("creature", "guardian", "teste-skirmisher-guardiao", Vector3(3,0,-15), game) as CharacterBody3D
+	if guardian == null or not _test_character(guardian.get_node_or_null("Visual") as Node3D, "Guardiao", "guardiao"):
 		return
-	if not _test_character(game.get("player_model"),"Jogador local"):
+	if not _test_character(game.get("player_model") as Node3D, "Jogador local", "player"):
 		return
-	var remote := game.call("net_create_avatar",82) as Node3D
-	if remote == null or not _test_character(remote.get_child(0),"Jogador remoto"):
+	var remote := game.call("net_create_avatar", 82) as Node3D
+	if remote == null or not _test_character(remote.get_child(0) as Node3D, "Jogador remoto", "player"):
 		return
-	print("GOBLIN MODEL OK: skin rigida sem deformacao, 15 articulacoes, espadas/escudos e UV preservados.")
+	print("GOBLIN MODEL OK: Skirmisher nativo, 24 ossos, animacoes, equipamentos e NPCs identificados.")
 	quit(0)
