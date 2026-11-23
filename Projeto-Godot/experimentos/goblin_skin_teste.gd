@@ -110,6 +110,7 @@ func _build_controls() -> void:
 	_button(column,"Zoom -",_zoom_out)
 	_button(column,"Equipar / retirar espada",_sword)
 	_button(column,"Equipar / retirar escudo",_shield)
+	_button(column,"Testar Goblin Skirmisher",_open_skirmisher)
 	_button(column,"Voltar ao jogo (ESC)",_back)
 	caption=Label.new()
 	caption.text="Estado: Parado"
@@ -195,6 +196,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE:
 		_back()
 
+
+func _open_skirmisher() -> void:
+	get_tree().change_scene_to_file("res://experimentos/goblin_skirmisher_teste.tscn")
 
 func _back() -> void:
 	get_tree().change_scene_to_file("res://main.tscn")
