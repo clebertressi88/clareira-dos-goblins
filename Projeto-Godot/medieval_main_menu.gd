@@ -9,19 +9,25 @@ const WOOD := Color("#30251ced")
 const BORDER := Color("#a47b44")
 
 var ip_input: LineEdit
+var world_picker: OptionButton
+var world_create_input: LineEdit
+var world_rename_input: LineEdit
 var _state: Dictionary = {}
 var _actions: Dictionary = {}
 var _page := "home"
 var _page_container: VBoxContainer
 
-func rebuild(state: Dictionary, actions: Dictionary) -> void:
+func rebuild(state: Dictionary, actions: Dictionary, starting_page: String = "home") -> void:
 	_state = state
 	_actions = actions
-	_page = "home"
+	_page = starting_page
 	_recreate()
 
 func _recreate() -> void:
 	ip_input = null
+	world_picker = null
+	world_create_input = null
+	world_rename_input = null
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -50,9 +56,15 @@ func _recreate() -> void:
 	var detail := _card(DARK, BORDER, 2, 22)
 	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(detail)
+	var scrolling := ScrollContainer.new()
+	scrolling.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scrolling.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scrolling.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	detail.add_child(scrolling)
 	_page_container = VBoxContainer.new()
+	_page_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_page_container.add_theme_constant_override("separation", 11)
-	detail.add_child(_page_container)
+	scrolling.add_child(_page_container)
 	_build_footer(base)
 	_render_page()
 
@@ -100,6 +112,7 @@ func _build_navigation(parent: HBoxContainer) -> void:
 	links.add_child(_text("✦ ESCOLHA SEU CAMINHO", 16, GOLD))
 	links.add_child(HSeparator.new())
 	_menu_button(links, "▶  Jogar / continuar", "play", true)
+	_menu_button(links, "▤  Meus mundos / mapas", "worlds")
 	_menu_button(links, "♜  Multijogador LAN", "network")
 	_menu_button(links, "⌨  Controles", "controls")
 	if String(_state.get("role", "solo")) == "solo":
@@ -121,7 +134,7 @@ func _menu_button(parent: VBoxContainer, caption: String, action: String, featur
 
 func _activate(action: String) -> void:
 	match action:
-		"home", "network", "controls":
+		"home", "network", "controls", "worlds":
 			_page = action
 			_render_page()
 		_:
@@ -137,10 +150,15 @@ func _render_page() -> void:
 	if not is_instance_valid(_page_container):
 		return
 	ip_input = null
+	world_picker = null
+	world_create_input = null
+	world_rename_input = null
 	for child in _page_container.get_children():
 		_page_container.remove_child(child)
 		child.queue_free()
 	match _page:
+		"worlds":
+			_render_worlds()
 		"network":
 			_render_network()
 		"controls":
@@ -150,6 +168,7 @@ func _render_page() -> void:
 
 func _render_home() -> void:
 	_page_container.add_child(_text("BEM-VINDO À CLAREIRA", 25, GOLD))
+	_page_container.add_child(_text("MUNDO ATIVO  ·  " + str(_state.get("active_world_name", "Mundo original")), 16, GOLD, true))
 	_page_container.add_child(_text("Explore, construa seu abrigo e sobreviva às criaturas do vale.", 17, CREAM, true))
 	_page_container.add_child(HSeparator.new())
 	var subtitle := _text("O QUE ESPERA POR VOCÊ", 15, GOLD)
@@ -174,9 +193,116 @@ func _render_home() -> void:
 	_page_container.add_child(start)
 	_add_message()
 
+func _render_worlds() -> void:
+	_page_container.add_child(_text("MEUS MUNDOS", 25, GOLD))
+	_page_container.add_child(_text("Cada mundo tem seu próprio inventário, construções e progresso.", 15, CREAM, true))
+	_page_container.add_child(HSeparator.new())
+	var records: Array = _state.get("worlds",[])
+	_page_container.add_child(_text("ESCOLHA O MAPA  ·  %d salvos" % records.size(), 16, GOLD))
+	world_picker = OptionButton.new()
+	world_picker.custom_minimum_size.y = 43
+	var current := str(_state.get("active_world_id","original"))
+	var selected_index := 0
+	for i in range(records.size()):
+		var entry: Dictionary = records[i]
+		var id := str(entry.get("id",""))
+		var display_name := str(entry.get("name","Mundo"))
+		world_picker.add_item(("★  " if id==current else "    ")+display_name)
+		world_picker.set_item_metadata(i,id)
+		if id==current:
+			selected_index = i
+	world_picker.select(selected_index)
+	world_picker.item_selected.connect(_world_choice_changed)
+	_page_container.add_child(world_picker)
+	_page_container.add_child(_text("★ indica o mundo carregado neste computador.", 12, MUTED))
+	var load_button := Button.new()
+	load_button.text = "▶  CARREGAR MUNDO SELECIONADO"
+	load_button.custom_minimum_size.y = 49
+	_style_button(load_button,true)
+	load_button.pressed.connect(_world_load_pressed)
+	_page_container.add_child(load_button)
+	_page_container.add_child(HSeparator.new())
+	_page_container.add_child(_text("RENOMEAR MAPA", 16, GOLD))
+	var rename_row := HBoxContainer.new()
+	rename_row.add_theme_constant_override("separation",8)
+	world_rename_input = LineEdit.new()
+	world_rename_input.max_length = 36
+	world_rename_input.custom_minimum_size.y = 43
+	world_rename_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rename_row.add_child(world_rename_input)
+	var rename_button := Button.new()
+	rename_button.text = "Renomear"
+	rename_button.custom_minimum_size.x = 125
+	_style_button(rename_button,false)
+	rename_button.pressed.connect(_world_rename_pressed)
+	rename_row.add_child(rename_button)
+	_page_container.add_child(rename_row)
+	_page_container.add_child(HSeparator.new())
+	_page_container.add_child(_text("CRIAR NOVO MUNDO", 16, GOLD))
+	var create_row := HBoxContainer.new()
+	create_row.add_theme_constant_override("separation",8)
+	world_create_input = LineEdit.new()
+	world_create_input.placeholder_text = "Nome do novo mapa (até 36 caracteres)"
+	world_create_input.max_length = 36
+	world_create_input.custom_minimum_size.y = 44
+	world_create_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	world_create_input.text_submitted.connect(func(_text: String): _world_create_pressed())
+	create_row.add_child(world_create_input)
+	var create_button := Button.new()
+	create_button.text = "＋  Criar"
+	create_button.custom_minimum_size.x = 125
+	_style_button(create_button,true)
+	create_button.pressed.connect(_world_create_pressed)
+	create_row.add_child(create_button)
+	_page_container.add_child(create_row)
+	_page_container.add_child(_text("Novo mundo começa do zero. O Mundo original permanece salvo.", 13, MUTED, true))
+	if str(_state.get("role","solo"))!="solo":
+		_page_container.add_child(_text("Para trocar de mundo, desconecte primeiro da partida LAN.", 13, Color("#f1c78b"), true))
+		load_button.disabled = true
+		rename_button.disabled = true
+		create_button.disabled = true
+		world_create_input.editable = false
+		world_rename_input.editable = false
+	_world_choice_changed(selected_index)
+	_add_message()
+
+func _selected_world_id() -> String:
+	if not is_instance_valid(world_picker) or world_picker.item_count==0:
+		return ""
+	return str(world_picker.get_item_metadata(world_picker.selected))
+
+func _world_choice_changed(index: int) -> void:
+	if not is_instance_valid(world_picker) or not is_instance_valid(world_rename_input):
+		return
+	if index<0 or index>=world_picker.item_count:
+		return
+	var selected_id := str(world_picker.get_item_metadata(index))
+	for record in _state.get("worlds",[]):
+		if str(record.get("id",""))==selected_id:
+			world_rename_input.text = str(record.get("name",""))
+			break
+
+func _world_load_pressed() -> void:
+	var id := _selected_world_id()
+	if not id.is_empty() and _actions.has("select_world"):
+		var action: Callable = _actions["select_world"]
+		action.call(id)
+
+func _world_rename_pressed() -> void:
+	var id := _selected_world_id()
+	if not id.is_empty() and is_instance_valid(world_rename_input) and _actions.has("rename_world"):
+		var action: Callable = _actions["rename_world"]
+		action.call(id,world_rename_input.text)
+
+func _world_create_pressed() -> void:
+	if is_instance_valid(world_create_input) and _actions.has("create_world"):
+		var action: Callable = _actions["create_world"]
+		action.call(world_create_input.text)
+
 func _render_network() -> void:
 	_page_container.add_child(_text("MULTIJOGADOR · REDE LOCAL", 24, GOLD))
 	_page_container.add_child(_text("Jogue no mesmo mapa com amigos ligados à mesma rede.", 16, CREAM, true))
+	_page_container.add_child(_text("Mapa do anfitrião: " + str(_state.get("active_world_name","Mundo original")), 15, GOLD, true))
 	_page_container.add_child(HSeparator.new())
 	var role := String(_state.get("role", "solo"))
 	if role == "solo":

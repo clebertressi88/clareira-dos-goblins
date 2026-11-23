@@ -1,6 +1,7 @@
 extends Node3D
 
-const SAVE := "user://clareira-nativa.json"
+const SAVE := "user://clareira-nativa.json" # Arquivo antigo continua sendo o Mundo original
+const WORLD_SLOTS := preload("res://world_slots.gd")
 const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
@@ -155,6 +156,7 @@ var net_apply_in_progress := false
 var net_session_message := ""
 var net_entities_clock := 0.0
 var net_last_hurt_by_peer: Dictionary = {}
+var world_storage = WORLD_SLOTS.new()
 
 func _ready() -> void:
 	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
@@ -169,6 +171,7 @@ func _ready() -> void:
 	backpack_slots.fill(Vector2i(-1,0))
 	setup_world()
 	configure_movement_inputs()
+	world_storage.initialize()
 	load_game()
 	make_player()
 	make_ui()
@@ -2212,7 +2215,7 @@ func set_gameplay_overlays_visible(visible_now: bool) -> void:
 		if is_instance_valid(overlay):
 			overlay.visible = visible_now
 
-func show_menu() -> void:
+func show_menu(starting_page: String = "home") -> void:
 	moving = false
 	inventory = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -2229,17 +2232,87 @@ func show_menu() -> void:
 		"ip": net_address,
 		"host_ips": ", ".join(ips) if ips.size()>0 else "verifique em ipconfig",
 		"players": multiplayer.get_peers().size()+1,
-		"message": message
+		"message": message,
+		"worlds": world_storage.list_worlds(),
+		"active_world_id": world_storage.active_id,
+		"active_world_name": world_storage.active_name()
 	}, {
 		"play": Callable(self,"begin"),
 		"host": Callable(self,"host_game"),
 		"join": Callable(self,"join_game"),
 		"disconnect": Callable(self,"disconnect_and_show_menu"),
 		"lab": Callable(self,"open_goblin_skin_test"),
+		"create_world": Callable(self,"create_named_world"),
+		"rename_world": Callable(self,"rename_named_world"),
+		"select_world": Callable(self,"select_named_world"),
 		"quit": func(): save_game(); get_tree().quit()
-	})
+	},starting_page)
 	medieval_menu.show()
 	address = null
+
+
+func world_action_available() -> bool:
+	if net_role=="solo":
+		return true
+	net_session_message = ""
+	notice("Desconecte-se da partida LAN antes de trocar de mundo.")
+	show_menu("worlds")
+	return false
+
+func world_action_error() -> void:
+	net_session_message = ""
+	notice(world_storage.last_error if not world_storage.last_error.is_empty() else "Não foi possível atualizar o mundo.")
+	show_menu("worlds")
+
+func create_named_world(name: String) -> void:
+	if not world_action_available():
+		return
+	if not save_game():
+		net_session_message = ""
+		notice("Não foi possível salvar o mundo atual. Nenhum mundo foi trocado.")
+		show_menu("worlds")
+		return
+	var previous_id := world_storage.active_id
+	if not world_storage.create_world(name):
+		world_action_error()
+		return
+	var new_id := world_storage.active_id
+	if get_tree().reload_current_scene()!=OK:
+		world_storage.select_world(previous_id)
+		net_session_message = ""
+		notice("Falha ao abrir o novo mundo: %s." % new_id)
+		show_menu("worlds")
+
+func rename_named_world(id: String, name: String) -> void:
+	if not world_action_available():
+		return
+	if not world_storage.rename_world(id,name):
+		world_action_error()
+		return
+	net_session_message = ""
+	notice("Nome do mundo atualizado.")
+	show_menu("worlds")
+
+func select_named_world(id: String) -> void:
+	if not world_action_available():
+		return
+	if id==world_storage.active_id:
+		begin()
+		return
+	if not save_game():
+		net_session_message = ""
+		notice("Não foi possível salvar o mundo atual. Nenhum mundo foi trocado.")
+		show_menu("worlds")
+		return
+	var previous_id := world_storage.active_id
+	if not world_storage.select_world(id):
+		world_action_error()
+		return
+	if get_tree().reload_current_scene()!=OK:
+		world_storage.select_world(previous_id)
+		net_session_message = ""
+		notice("Falha ao carregar o mundo selecionado.")
+		show_menu("worlds")
 
 
 func open_goblin_skin_test() -> void:
@@ -4004,9 +4077,10 @@ func notice(message: String) -> void:
 	feedback_until = elapsed+4
 
 func load_game() -> void:
-	if not FileAccess.file_exists(SAVE):
+	var save_file: String = world_storage.save_path()
+	if not FileAccess.file_exists(save_file):
 		return
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(SAVE))
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_file))
 	if not data is Dictionary:
 		return
 	var saved_stock: Array = data.get("stock",[])
@@ -4051,23 +4125,25 @@ func load_game() -> void:
 	won = bool(data.get("won",false))
 	set_meta("spawn",data.get("pos",[0,1,0]))
 
-func save_game() -> void:
-	# Nunca sobrescrever o progresso offline de um convidado com o mundo
-	# que pertence ao anfitriao. O host continua salvando normalmente.
-	if net_role=="client":
-		return
-	if not is_instance_valid(player):
-		return
+func save_game() -> bool:
+	# O cliente nao salva o mundo do anfitriao sobre um arquivo local.
+	if net_role=="client" or not is_instance_valid(player):
+		return false
+	if not world_storage.prepare_save():
+		return false
 	sync_hotbar()
-	var file := FileAccess.open(SAVE+".tmp",FileAccess.WRITE)
+	var file_path: String = world_storage.save_path()
+	var file := FileAccess.open(file_path+".tmp",FileAccess.WRITE)
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
 			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
+		file.flush()
 		file.close()
-		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE+".tmp"),ProjectSettings.globalize_path(SAVE))
+		return DirAccess.rename_absolute(ProjectSettings.globalize_path(file_path+".tmp"),ProjectSettings.globalize_path(file_path))==OK
+	return false
 
 func _notification(what: int) -> void:
 	if what==NOTIFICATION_WM_CLOSE_REQUEST:
