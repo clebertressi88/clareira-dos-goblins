@@ -1,0 +1,1872 @@
+[
+  {
+    "action_id": 0,
+    "name": "A000_Idle",
+    "display_name": "Idle",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 4,
+    "source_clip": "Idle",
+    "hips_end_delta_m": [
+      0.0003882384300231934,
+      -0.00120025634765625,
+      -0.0008866405487060547
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "f4a4c49311bd5069fd74be9b82934476e7aabf876aa3c3a34ef04468a4c8b157"
+  },
+  {
+    "action_id": 11,
+    "name": "A011_Idle_1",
+    "display_name": "Idle 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.3333333333333335,
+    "source_clip": "Idle_02",
+    "hips_end_delta_m": [
+      -6.878376007080079e-07,
+      3.0517578125e-07,
+      -1.621246337890625e-07
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "497547fca64fa015936d3592b5c0996c63f299934a4ff4c8e1056b2afc5aee3e"
+  },
+  {
+    "action_id": 12,
+    "name": "A012_Idle_2",
+    "display_name": "Idle 2",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 5.333333333333333,
+    "source_clip": "Idle_03",
+    "hips_end_delta_m": [
+      7.390975952148437e-08,
+      2.288818359375e-07,
+      -2.1457672119140624e-08
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "9988a02c0dc276ab1262bce99afd00f970ab69f9084582573ea5924498366987"
+  },
+  {
+    "action_id": 2,
+    "name": "A002_Alert",
+    "display_name": "Alert",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 4,
+    "source_clip": "Alert",
+    "hips_end_delta_m": [
+      -1.5497207641601563e-08,
+      0.0,
+      1.430511474609375e-08
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "eefa7400aded047111d1c832f21c76c1b0519832f1352e57505034cedbe9bdc7"
+  },
+  {
+    "action_id": 3,
+    "name": "A003_Arise",
+    "display_name": "Arise",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.8333333333333333,
+    "source_clip": "Arise",
+    "hips_end_delta_m": [
+      0.02195888161659241,
+      0.5452452850341797,
+      0.022231087684631348
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "69c27e66d9d70706e83b4555600bc83e555fe8241ce6199e8e14ea3f88d09461"
+  },
+  {
+    "action_id": 333,
+    "name": "A333_Look_Around_Dumbfounded",
+    "display_name": "Look Around Dumbfounded",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 6.366666666666666,
+    "source_clip": "Look_Around_Dumbfounded",
+    "hips_end_delta_m": [
+      0.0012842734158039094,
+      0.00196929931640625,
+      0.0014500927925109864
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "1ca5d0c7df69192dd56944be66fc4c90f2a6608946c0f46d6012c54fc8135c6e"
+  },
+  {
+    "action_id": 336,
+    "name": "A336_Long_Breathe_and_Look_Around",
+    "display_name": "Long Breathe and Look Around",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 11.266666666666667,
+    "source_clip": "Long_Breathe_and_Look_Around",
+    "hips_end_delta_m": [
+      0.00015079975128173828,
+      0.0001256561279296875,
+      0.00023675322532653808
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "b13d6e7ba8da04edf8fcee863b9e0e3d58a058a2b2bd78b92b7caa2130acca5c"
+  },
+  {
+    "action_id": 338,
+    "name": "A338_Short_Breathe_and_Look_Around",
+    "display_name": "Short Breathe and Look Around",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 7.866666666666666,
+    "source_clip": "Short_Breathe_and_Look_Around",
+    "hips_end_delta_m": [
+      4.7087669372558596e-07,
+      7.62939453125e-08,
+      4.00543212890625e-07
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "987104115853f0047ce0bd05e1ebcb32cafda0cb93067a7f096b3c4fd29e9e40"
+  },
+  {
+    "action_id": -2,
+    "name": "A-02_Walking",
+    "display_name": "Walking",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.0666666666666667,
+    "source_clip": "Armature|walking_man|baselayer",
+    "hips_end_delta_m": [
+      8.195638656616212e-09,
+      -7.62939453125e-08,
+      2.6226043701171875e-08
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "f949eb3160e5821ea6d6384180293a48e51a43b4d41cf639a4515825f6219cf6"
+  },
+  {
+    "action_id": -1,
+    "name": "A-01_Running",
+    "display_name": "Running",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.6666666666666666,
+    "source_clip": "Armature|running|baselayer",
+    "hips_end_delta_m": [
+      1.564621925354004e-08,
+      1.52587890625e-07,
+      8.493661880493165e-09
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "71a677c76593c9251ae55f63c98e00cb38d2deb941a67ba58eb9bb138447dfdb"
+  },
+  {
+    "action_id": 679,
+    "name": "A679_Walk_Backward",
+    "display_name": "Walk Backward",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.9,
+    "source_clip": "Walk_Backward_inplace",
+    "hips_end_delta_m": [
+      -2.060830593109131e-07,
+      1.4495849609375e-06,
+      1.6260147094726563e-06
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "406fa8be899ff7c4478a68a4b9202a12d59d61653fc51ce6905a00f91d4454ba"
+  },
+  {
+    "action_id": 576,
+    "name": "A576_Idle_Turn_Left",
+    "display_name": "Idle Turn Left",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.9333333333333333,
+    "source_clip": "Idle_Turn_Left",
+    "hips_end_delta_m": [
+      0.018761346340179445,
+      0.00016845703125000001,
+      -0.006408081520348788
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "b13c20b531b4da0458aca0849ac614285da02daa547cd086232ad719923f40ae"
+  },
+  {
+    "action_id": 586,
+    "name": "A586_Idle_Turn_Right",
+    "display_name": "Idle Turn Right",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.1333333333333333,
+    "source_clip": "Armature|Idle_Turn_Right|baselayer",
+    "hips_end_delta_m": [
+      0.029345535337924958,
+      0.0004068756103515625,
+      0.03021558403968811
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "6b28e9f39b7c1ff9ac9906fa575bdb2e3a7b97a82afd0c9fabda0dd56bf5f76a"
+  },
+  {
+    "action_id": 571,
+    "name": "A571_Run_Turn_Left",
+    "display_name": "Run Turn Left",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.6333333333333333,
+    "source_clip": "Armature|Run_Turn_Left|baselayer",
+    "hips_end_delta_m": [
+      1.361649804711342,
+      -0.010871047973632813,
+      1.4044802856445313
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "844adedd6934710a13165f4ffa5670a8b8cf53a089db166dbc8e47e17c50a84a"
+  },
+  {
+    "action_id": 582,
+    "name": "A582_Run_Turn_Right",
+    "display_name": "Run Turn Right",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.6333333333333333,
+    "source_clip": "Armature|Run_Turn_Right|baselayer",
+    "hips_end_delta_m": [
+      -2.1517666286230086,
+      0.00774566650390625,
+      1.0527305603027344
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "64e34fbd0cde8c78c078783b929e58c8f65320d5946d7fa6fe591023234e6292"
+  },
+  {
+    "action_id": 572,
+    "name": "A572_Walk_Turn_Left",
+    "display_name": "Walk Turn Left",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.066666666666667,
+    "source_clip": "Armature|Walk_Turn_Left|baselayer",
+    "hips_end_delta_m": [
+      0.7325743705034257,
+      0.005247344970703125,
+      1.3547738647460938
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "451cdc31f366405228166ee9922e0acc59aa2e898822fdb3ae8a77df938f65c8"
+  },
+  {
+    "action_id": 583,
+    "name": "A583_Walk_Turn_Right",
+    "display_name": "Walk Turn Right",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.2333333333333334,
+    "source_clip": "Armature|Walk_Turn_Right|baselayer",
+    "hips_end_delta_m": [
+      -1.4359598439931869,
+      0.013613815307617188,
+      1.0451021575927735
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "dd7fef5523a4baf97e904a3a83c3297a174cc606a77f6dfbec04e79c3b328626"
+  },
+  {
+    "action_id": 116,
+    "name": "A116_Run_to_Walk_Transition",
+    "display_name": "Run to Walk Transition",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.3,
+    "source_clip": "Armature|Run_to_Walk_Transition|baselayer",
+    "hips_end_delta_m": [
+      0.014875054061412811,
+      0.034894485473632816,
+      3.284084891080856
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "b26d32021baf51df4e32104407b379839a961a026efe9886df88d7c6c7b89e3e"
+  },
+  {
+    "action_id": 531,
+    "name": "A531_Sprint_and_Sudden_Stop",
+    "display_name": "Sprint and Sudden Stop",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.066666666666667,
+    "source_clip": "Armature|Sprint_and_Sudden_Stop|baselayer",
+    "hips_end_delta_m": [
+      -0.07673271179199219,
+      0.042136611938476565,
+      3.2227667999267577
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "ad1ce22ba3821e46452233bb922e48ce0a621b736130b2832bb7896296be2d17"
+  },
+  {
+    "action_id": 5,
+    "name": "A005_BackLeft_Run",
+    "display_name": "BackLeft Run",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.8333333333333334,
+    "source_clip": "Armature|BackLeft_run|baselayer",
+    "hips_end_delta_m": [
+      -1.3113021850585938e-08,
+      0.0,
+      -1.9073486328125e-08
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "7e8c990c42bab3090e7f20f98f0a2f63c3e6f51eb9fb4e03fc0ae87fc5f6b47d"
+  },
+  {
+    "action_id": 607,
+    "name": "A607_BackRight_Run",
+    "display_name": "BackRight Run",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.6333333333333333,
+    "source_clip": "Armature|BackRight_Run_inplace|baselayer",
+    "hips_end_delta_m": [
+      1.4901161193847656e-08,
+      0.0,
+      -9.5367431640625e-09
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "2673dea10f16fc03cd88f2a19b5ccfefcdc522c56adcd11665d6daf665349ef5"
+  },
+  {
+    "action_id": 630,
+    "name": "A630_ForwardLeft_Run_Fight",
+    "display_name": "ForwardLeft Run Fight",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.6333333333333333,
+    "source_clip": "Armature|ForwardLeft_Run_Fight_inplace|baselayer",
+    "hips_end_delta_m": [
+      -2.9802322387695314e-09,
+      7.62939453125e-08,
+      -8.344650268554688e-09
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "25e3afa5a69d6d11ff4bd3f564bf1fc9221322cb137b4427ec7a3f66f4478226"
+  },
+  {
+    "action_id": 631,
+    "name": "A631_ForwardRight_Run_Fight",
+    "display_name": "ForwardRight Run Fight",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.6,
+    "source_clip": "ForwardRight_Run_Fight_inplace",
+    "hips_end_delta_m": [
+      5.364418029785156e-09,
+      0.0,
+      4.172325134277344e-09
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "883926c296bed89f5fe43bb6ab93599de9cb6125bf3ee476d25bb3e2e370fb60"
+  },
+  {
+    "action_id": 692,
+    "name": "A692_Walking_2",
+    "display_name": "Walking 2",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.2,
+    "source_clip": "walking_2_inplace",
+    "hips_end_delta_m": [
+      3.3676624298095707e-08,
+      0.0,
+      -1.9550323486328126e-07
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "8dc9f7571cc2437387c65bd8978fad3fa3e2d0c82323ee7fae8784b4c98e5b29"
+  },
+  {
+    "action_id": 171,
+    "name": "A171_Hit_Reaction_to_Waist",
+    "display_name": "Hit Reaction to Waist",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.6333333333333333,
+    "source_clip": "Hit_Reaction_to_Waist",
+    "hips_end_delta_m": [
+      -0.0006599295139312745,
+      0.0003668975830078125,
+      0.00027955889701843263
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "8ecf00e071a02016646e3c8bd96ebc30830e037ce98164578d5471fee64e1702"
+  },
+  {
+    "action_id": 174,
+    "name": "A174_Face_Punch_Reaction",
+    "display_name": "Face Punch Reaction",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.8333333333333335,
+    "source_clip": "Face_Punch_Reaction",
+    "hips_end_delta_m": [
+      0.0004948818683624267,
+      -0.0013689422607421876,
+      -0.00011197015643119813
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "f374da8a5491436e1043ace83af815a4117f4c2e2c43e8643d008f6bbb29e4d2"
+  },
+  {
+    "action_id": 175,
+    "name": "A175_Face_Punch_Reaction_1",
+    "display_name": "Face Punch Reaction 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 4.5,
+    "source_clip": "Face_Punch_Reaction_1",
+    "hips_end_delta_m": [
+      0.0002634429931640625,
+      -0.0004259490966796875,
+      -0.0007676935195922852
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "e7ebe43c05345c0116ef9f90404a6eab42e79dafbec35e2e7b235898a3f2fbe5"
+  },
+  {
+    "action_id": 178,
+    "name": "A178_Hit_Reaction",
+    "display_name": "Hit Reaction",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.6333333333333333,
+    "source_clip": "Hit_Reaction",
+    "hips_end_delta_m": [
+      0.8421258807182312,
+      -0.000135498046875,
+      -7.555961608886719e-05
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "003b0bf2eeace6421c32e0fd2824388dfafee4c389248fe79a03e762be4ef8cc"
+  },
+  {
+    "action_id": 179,
+    "name": "A179_Hit_Reaction_1",
+    "display_name": "Hit Reaction 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.2333333333333334,
+    "source_clip": "Hit_Reaction_1",
+    "hips_end_delta_m": [
+      -0.000338207483291626,
+      -0.000579376220703125,
+      0.00017241090536117555
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "cce9f4797af6365a66f376ba69a933db7b5b01f234e26658958364771210760e"
+  },
+  {
+    "action_id": 7,
+    "name": "A007_BeHit_FlyUp",
+    "display_name": "BeHit FlyUp",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.5333333333333334,
+    "source_clip": "BeHit_FlyUp",
+    "hips_end_delta_m": [
+      -0.006795983314514161,
+      -0.4879397773742676,
+      -0.017750098705291747
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "54db3582b8d13c4ea195321493ae18f865e9f2757377acdf44420695dd370adb"
+  },
+  {
+    "action_id": 8,
+    "name": "A008_Dead",
+    "display_name": "Dead",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.966666666666667,
+    "source_clip": "Dead",
+    "hips_end_delta_m": [
+      0.140047128200531,
+      -0.4110856342315674,
+      0.5867167782783509
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "c2d3c2ac2f1518fbaf43c69168c2a08b1f8bdf9419742d0133a0ec30650753b3"
+  },
+  {
+    "action_id": 187,
+    "name": "A187_Knock_Down",
+    "display_name": "Knock Down",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.5,
+    "source_clip": "Knock_Down",
+    "hips_end_delta_m": [
+      0.03919429779052735,
+      -0.6130758476257324,
+      -0.5923786163330078
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "2f5b211f219024ffc09c22879dd6d13e6b5adb21104c1f2a4a9746dd63dfa9bf"
+  },
+  {
+    "action_id": 189,
+    "name": "A189_Dying_Backwards",
+    "display_name": "Dying Backwards",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.2333333333333334,
+    "source_clip": "dying_backwards",
+    "hips_end_delta_m": [
+      -0.044643287658691404,
+      -0.6341146898269654,
+      -0.6458561062812805
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "13f87378df82d22885431848f79b9e6a83689227e29047f9a3a46a1881ffdc20"
+  },
+  {
+    "action_id": 190,
+    "name": "A190_Knock_Down_1",
+    "display_name": "Knock Down 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 3.2666666666666666,
+    "source_clip": "Knock_Down_1",
+    "hips_end_delta_m": [
+      -0.06425513356924058,
+      -0.6782260704040527,
+      0.882978937625885
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "ca3307a50cd4d7a10483fe533892e9ae3b89b75bcdc428734c6653aedb94c446"
+  },
+  {
+    "action_id": 156,
+    "name": "A156_Stand_Dodge",
+    "display_name": "Stand Dodge",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.4333333333333333,
+    "source_clip": "Stand_Dodge",
+    "hips_end_delta_m": [
+      0.00028097212314605715,
+      0.00038429260253906253,
+      0.0018357968330383302
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "5f0635cbed24a18246c0f2bfb77a6c8fd464593c28fdda094df092b98f3c660c"
+  },
+  {
+    "action_id": 157,
+    "name": "A157_Stand_Dodge_1",
+    "display_name": "Stand Dodge 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.2666666666666666,
+    "source_clip": "Stand_Dodge_1",
+    "hips_end_delta_m": [
+      0.48201995372772216,
+      -0.00015167236328125,
+      0.322261518239975
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "f47cce7815ceca20e8baab8dab5d224a48b3d2e207da9a298e708ba5e193a74c"
+  },
+  {
+    "action_id": 158,
+    "name": "A158_Roll_Dodge",
+    "display_name": "Roll Dodge",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.8333333333333333,
+    "source_clip": "Roll_Dodge",
+    "hips_end_delta_m": [
+      0.31839174270629883,
+      -0.058471755981445314,
+      2.801776819229126
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "08371049610438a80c9ac76e427c9b7b02dc940beedf3787459b3f34887783ce"
+  },
+  {
+    "action_id": 159,
+    "name": "A159_Roll_Dodge_1",
+    "display_name": "Roll Dodge 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.2666666666666666,
+    "source_clip": "Roll_Dodge_1",
+    "hips_end_delta_m": [
+      -0.014763071537017822,
+      -0.026746749877929688,
+      4.507513408660889
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "a4b64949f4dcbcef5d4140d3954b8588208eb217e00d250cd6bcfae7a420abbd"
+  },
+  {
+    "action_id": 344,
+    "name": "A344_Stand_Up_1",
+    "display_name": "Stand Up 1",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 8.266666666666667,
+    "source_clip": "Stand_Up1",
+    "hips_end_delta_m": [
+      0.017038699984550477,
+      0.6749198389053345,
+      0.5987301254272461
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "613e794bc83580f04ee1bef70afaa75f728bc9ff0d75dbd428d80131dd2f04f4"
+  },
+  {
+    "action_id": 345,
+    "name": "A345_Stand_Up_2",
+    "display_name": "Stand Up 2",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 3.1,
+    "source_clip": "Stand_Up2",
+    "hips_end_delta_m": [
+      0.002142469882965088,
+      0.3566390609741211,
+      -0.1675511693954468
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "c17a37f498b460e05751fe4b10914c81b9dc4c197154098bb6639fc8ec015f0d"
+  },
+  {
+    "action_id": 346,
+    "name": "A346_Stand_Up_3",
+    "display_name": "Stand Up 3",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 6.066666666666666,
+    "source_clip": "Stand_Up3",
+    "hips_end_delta_m": [
+      0.05908865869045258,
+      0.6706473731994629,
+      0.04446929156780243
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "c680944442f061be2d11f7d30a1d105eeb8341622ff7fdf5ce6b2a719b054121"
+  },
+  {
+    "action_id": 347,
+    "name": "A347_Stand_Up_4",
+    "display_name": "Stand Up 4",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.6666666666666667,
+    "source_clip": "Stand_Up4",
+    "hips_end_delta_m": [
+      -0.06385499238967896,
+      0.5365943336486817,
+      0.6658031463623048
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "a04c204010d6d18930dceab38092da9570c4c391ed3d91936e414a6d31b4d17c"
+  },
+  {
+    "action_id": 466,
+    "name": "A466_Regular_Jump",
+    "display_name": "Regular Jump",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 1.9333333333333333,
+    "source_clip": "Armature|Regular_Jump|baselayer",
+    "hips_end_delta_m": [
+      -0.0006353050470352173,
+      -0.0038106536865234377,
+      0.0001961970329284668
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "752443d9724b33eccbe6de9ba3b6cd196cde84f850d05a0f4d9268119723b085"
+  },
+  {
+    "action_id": 468,
+    "name": "A468_Back_Jump",
+    "display_name": "Back Jump",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 0.9666666666666667,
+    "source_clip": "Armature|Back_Jump|baselayer",
+    "hips_end_delta_m": [
+      0.00016526512801647188,
+      -0.002575340270996094,
+      -1.8487904405593873
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "5bce0f4f679dd41db4d723b4bdb89b79e042482f39c0651c992c63d0d89e7969"
+  },
+  {
+    "action_id": 441,
+    "name": "A441_Climb_Stairs",
+    "display_name": "Climb Stairs",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 2.966666666666667,
+    "source_clip": "Armature|Climb_Stairs|baselayer",
+    "hips_end_delta_m": [
+      -0.014294655323028566,
+      0.8238750457763672,
+      0.318294370174408
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "46f5c05267e46aefe1b507f15151545c9dda26876f78281d84583514bdf712f7"
+  },
+  {
+    "action_id": 470,
+    "name": "A470_Jumping_Down",
+    "display_name": "Jumping Down",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 3.3,
+    "source_clip": "Armature|Jumping_Down|baselayer",
+    "hips_end_delta_m": [
+      0.010969837307929994,
+      -0.6246008300781251,
+      0.978916826248169
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "585e61d4e00bcf81de3eef2c8bde40c80283881efaa5ef4b83d33414f502d5b4"
+  },
+  {
+    "action_id": 31,
+    "name": "A031_Catching_Breath",
+    "display_name": "Catching Breath",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 7.033333333333333,
+    "source_clip": "Armature|Catching_Breath|baselayer",
+    "hips_end_delta_m": [
+      -5.861520767211914e-06,
+      -0.014560699462890625,
+      4.225328454971313
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "9dfbee4694ca3a8046251e0183005ebd45acba15d596a8547a46f0a454be598c"
+  },
+  {
+    "action_id": 391,
+    "name": "A391_Head_Hold_in_Pain",
+    "display_name": "Head Hold in Pain",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 3.7666666666666666,
+    "source_clip": "Armature|Head_Hold_in_Pain|baselayer",
+    "hips_end_delta_m": [
+      0.002252604365348816,
+      -0.0006908416748046875,
+      -0.003408045768737793
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "3f62c103cf0b24cf2692ed4161afbd39523c09d7cae0b03e6f75839fec4316b1"
+  },
+  {
+    "action_id": 59,
+    "name": "A059_Victory_Cheer",
+    "display_name": "Victory Cheer",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 9.366666666666667,
+    "source_clip": "Armature|Victory_Cheer|baselayer",
+    "hips_end_delta_m": [
+      0.0002311563491821289,
+      0.004264068603515625,
+      0.0012026119232177734
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "364211088c3d438844535eeed2c564b9eee01d3cdb9053002a82ddf1fdaa2651"
+  },
+  {
+    "action_id": 51,
+    "name": "A051_Shouting_Angrily",
+    "display_name": "Shouting Angrily",
+    "set": "common",
+    "loadout": "empty-hands",
+    "duration": 7.2,
+    "source_clip": "Armature|Shouting_Angrily|baselayer",
+    "hips_end_delta_m": [
+      -2.6358962059020997e-05,
+      0.0018746185302734376,
+      0.0008029174804687501
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "875b1d972f40fbcb383d92602c86bb102a9bd5879a554eeba8309293e377d00d"
+  },
+  {
+    "action_id": 219,
+    "name": "A219_Right_hand_Sword_Slash",
+    "display_name": "Right-hand Sword Slash",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 1.5333333333333334,
+    "source_clip": "Armature|Right_Hand_Sword_Slash|baselayer",
+    "hips_end_delta_m": [
+      -0.0004803714156150818,
+      0.0008521270751953125,
+      0.0005809694528579713
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "4a27fed83a5ce67f2ee251911b31d8bf21481910176c15ba5802c90d741311f7"
+  },
+  {
+    "action_id": 148,
+    "name": "A148_Sword_Parry_Backward",
+    "display_name": "Sword Parry Backward",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 1.4,
+    "source_clip": "Armature|Sword_Parry_Backward|baselayer",
+    "hips_end_delta_m": [
+      6.533145904541015e-05,
+      1.0223388671875e-05,
+      -0.00011470794677734375
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "9b52429ba6a728505fc0178c564aaed5326efe296552ce8fb574326264eb16b2"
+  },
+  {
+    "action_id": 240,
+    "name": "A240_Thrust_Slash",
+    "display_name": "Thrust Slash",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 3,
+    "source_clip": "Thrust_Slash",
+    "hips_end_delta_m": [
+      0.20359522104263306,
+      0.000516815185546875,
+      -0.16747646093368532
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "2fea06bbe4cf7733d7565409d820ea790e643d1db65105c73fec02d141aa288d"
+  },
+  {
+    "action_id": 221,
+    "name": "A221_Charged_Upward_Slash",
+    "display_name": "Charged Upward Slash",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 3.2,
+    "source_clip": "Charged_Upward_Slash",
+    "hips_end_delta_m": [
+      0.00030342817306518556,
+      0.00028411865234375,
+      0.0003755486011505127
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "89af2111a4e755f67fc8af5396fa7c0c1fcf61fa7658cb0f20ae0754b1a0adbd"
+  },
+  {
+    "action_id": 242,
+    "name": "A242_Charged_Slash",
+    "display_name": "Charged Slash",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 2.2333333333333334,
+    "source_clip": "Charged_Slash",
+    "hips_end_delta_m": [
+      1.247406005859375e-05,
+      0.0005640411376953126,
+      0.001245708465576172
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "36445af10331cb2b27ea7cccd0a4323bae1368e16cfdb1a88262f5f7816988f0"
+  },
+  {
+    "action_id": 151,
+    "name": "A151_Sword_Parry_Backward_1",
+    "display_name": "Sword Parry Backward 1",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 1.4,
+    "source_clip": "Sword_Parry_Backward_1",
+    "hips_end_delta_m": [
+      0.00017307043075561523,
+      -0.000192108154296875,
+      -0.00019368529319763184
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "5444c3e48a979e607547acc1e528b46e08c8e0ca584cc1d4276d2f22a2a53290"
+  },
+  {
+    "action_id": 152,
+    "name": "A152_Sword_Parry_Backward_2",
+    "display_name": "Sword Parry Backward 2",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 0.5666666666666667,
+    "source_clip": "Sword_Parry_Backward_2",
+    "hips_end_delta_m": [
+      -0.02170168399810791,
+      -0.05884025573730469,
+      0.1845274931192398
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "9da424fadbb25eb3bc0264111d09722f6d9c32d2976488bc80be7914c428c4ba"
+  },
+  {
+    "action_id": 147,
+    "name": "A147_Sword_Parry",
+    "display_name": "Sword Parry",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 1.8666666666666667,
+    "source_clip": "Sword_Parry",
+    "hips_end_delta_m": [
+      7.841825485229493e-05,
+      -0.0002379608154296875,
+      3.094911575317383e-05
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "1178ac1ddea862f3c97ec35907ce012ad79a01155b55ba4393bb37cbfd93d08b"
+  },
+  {
+    "action_id": 90,
+    "name": "A090_Counterstrike",
+    "display_name": "Counterstrike",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 6.5,
+    "source_clip": "Counterstrike",
+    "hips_end_delta_m": [
+      -0.00018634796142578126,
+      0.0010636901855468751,
+      0.0006827849149703979
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "26773aa7b73ef41ee64d8565f5b75c1da20c9ee1b71ade459110f34cc8ad0857"
+  },
+  {
+    "action_id": 93,
+    "name": "A093_Dodge_and_Counter",
+    "display_name": "Dodge and Counter",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 9.333333333333334,
+    "source_clip": "Dodge_and_Counter",
+    "hips_end_delta_m": [
+      -0.6729547595977783,
+      -0.06224281311035156,
+      0.8581045174598694
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "da436711d44f3cdfb0cf04d1baec4b71291eed702c349827e8c721addba30bcb"
+  },
+  {
+    "action_id": 671,
+    "name": "A671_Sneaky_Walk",
+    "display_name": "Sneaky Walk",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.8666666666666667,
+    "source_clip": "Sneaky_Walk_inplace",
+    "hips_end_delta_m": [
+      -0.0015941095352172852,
+      0.0015808868408203126,
+      -0.00022855758666992187
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "b195c78d1645d0e49b257f8bb1f4409455119c330575703c50890a3c72339f79"
+  },
+  {
+    "action_id": 615,
+    "name": "A615_Cautious_Crouch_Walk_Backward",
+    "display_name": "Cautious Crouch Walk Backward",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.2666666666666666,
+    "source_clip": "Cautious_Crouch_Walk_Backward_inplace",
+    "hips_end_delta_m": [
+      9.334087371826172e-06,
+      -7.05718994140625e-06,
+      1.71661376953125e-07
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "ae7a7ad3f6e14ec2f3df25cc45a966ed0ecd1f0df12f2f4041d7033e45f1fd02"
+  },
+  {
+    "action_id": 616,
+    "name": "A616_Cautious_Crouch_Walk_Forward",
+    "display_name": "Cautious Crouch Walk Forward",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.1333333333333333,
+    "source_clip": "Cautious_Crouch_Walk_Forward_inplace",
+    "hips_end_delta_m": [
+      0.00015706539154052734,
+      8.43048095703125e-05,
+      0.0003239822387695313
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "17ec79dab82af9ec67df19b34756de62d475e75f8b0c06b8f5fee3b82c3e4c28"
+  },
+  {
+    "action_id": 617,
+    "name": "A617_Cautious_Crouch_Walk_Left",
+    "display_name": "Cautious Crouch Walk Left",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.1666666666666667,
+    "source_clip": "Cautious_Crouch_Walk_Left_inplace",
+    "hips_end_delta_m": [
+      -1.4081001281738282e-05,
+      9.5367431640625e-07,
+      -3.814697265625e-06
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "1541afa628ebae77ca42258f6bd03a8c1e287156aaf9f91e1b8628c5f8db4928"
+  },
+  {
+    "action_id": 618,
+    "name": "A618_Cautious_Crouch_Walk_Right",
+    "display_name": "Cautious Crouch Walk Right",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.2666666666666666,
+    "source_clip": "Cautious_Crouch_Walk_Right_inplace",
+    "hips_end_delta_m": [
+      -2.4535655975341796e-05,
+      7.2860717773437505e-06,
+      7.562637329101563e-06
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "a3e8076f2284c05206855f59604673b3c57bc2125d00c3342eee85551ee0fcdc"
+  },
+  {
+    "action_id": 575,
+    "name": "A575_Combat_Idle_Turn_Left",
+    "display_name": "Combat Idle Turn Left",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.2666666666666666,
+    "source_clip": "Combat_Idle_Turn_Left",
+    "hips_end_delta_m": [
+      -0.4599615502357483,
+      0.000697021484375,
+      -0.22045427799224854
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "4ffda38e14ede1ee6a415417d4261f556a7cef3262a66999c67e161b0451c960"
+  },
+  {
+    "action_id": 589,
+    "name": "A589_Alert_Quick_Turn_Right",
+    "display_name": "Alert Quick Turn Right",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.8,
+    "source_clip": "Alert_Quick_Turn_Right",
+    "hips_end_delta_m": [
+      0.025309622883796692,
+      0.0005583953857421875,
+      0.020976144671440124
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "c22244144dea9c6f856f45cf9d1b110b9251baf95128b2d12cc16c49a2658d12"
+  },
+  {
+    "action_id": 339,
+    "name": "A339_Walking_Scan_with_Sudden_Look_Back",
+    "display_name": "Walking Scan with Sudden Look Back",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 6.733333333333333,
+    "source_clip": "Walking_Scan_with_Sudden_Look_Back",
+    "hips_end_delta_m": [
+      0.0007793828845024109,
+      -0.00481689453125,
+      3.49920122385025
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "55f95f5a6632eb16a6eec3cee1f5dea1f50a7072c3ea45381ca1ad4f1630d901"
+  },
+  {
+    "action_id": 341,
+    "name": "A341_Walk_Slowly_and_Look_Around",
+    "display_name": "Walk Slowly and Look Around",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 23.8,
+    "source_clip": "Walk_Slowly_and_Look_Around",
+    "hips_end_delta_m": [
+      -0.0004623435530811548,
+      0.0023433685302734378,
+      0.0040113282203674315
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "43c8ced1e3578e018bca68007029969367c6eca650a10b7009574b6f12f01af1"
+  },
+  {
+    "action_id": 404,
+    "name": "A404_Crouch_and_Step_Back",
+    "display_name": "Crouch and Step Back",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.7,
+    "source_clip": "Crouch_and_Step_Back",
+    "hips_end_delta_m": [
+      0.00029614269733428954,
+      0.00100250244140625,
+      -1.7510128712654114
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "7fab577ca2c1e90107e496081f47ff904eb1ca0705d24ad5aa2663605d89942b"
+  },
+  {
+    "action_id": 160,
+    "name": "A160_Roll_Dodge_2",
+    "display_name": "Roll Dodge 2",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.033333333333333,
+    "source_clip": "Roll_Dodge_2",
+    "hips_end_delta_m": [
+      2.5841569691896438,
+      -0.00692718505859375,
+      2.5434117555618285
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "2cd12a0176e152d6a4e9efc94582f234270d7a1d3ba24fc22781604d0f544135"
+  },
+  {
+    "action_id": 161,
+    "name": "A161_Roll_Dodge_3",
+    "display_name": "Roll Dodge 3",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.6333333333333333,
+    "source_clip": "Roll_Dodge_3",
+    "hips_end_delta_m": [
+      1.988764283657074,
+      -0.0016873931884765626,
+      1.9923075437545776
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "bd0cb05aa91a77d00f9e1f2f0ab7c4603d444ca7a5257e8f9a1f160608003cc2"
+  },
+  {
+    "action_id": 162,
+    "name": "A162_Stand_Dodge_2",
+    "display_name": "Stand Dodge 2",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.2666666666666666,
+    "source_clip": "Stand_Dodge_2",
+    "hips_end_delta_m": [
+      -0.0014524340629577636,
+      -0.017275924682617187,
+      -0.3859949254989624
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "e29cf065005b946e3757fbcb845e17d659ad99313ab3030c2a4f52b860aa757f"
+  },
+  {
+    "action_id": 163,
+    "name": "A163_Roll_Dodge_4",
+    "display_name": "Roll Dodge 4",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 3.1333333333333333,
+    "source_clip": "Roll_Dodge_4",
+    "hips_end_delta_m": [
+      -3.082397131919861,
+      -0.23548370361328125,
+      0.21501910869032145
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "181b74bf0c3b73ce2ab89b65cf583565addcda3b4187e396a40c31bf71348a4a"
+  },
+  {
+    "action_id": 164,
+    "name": "A164_Stand_Dodge_3",
+    "display_name": "Stand Dodge 3",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 4.333333333333333,
+    "source_clip": "Stand_Dodge_3",
+    "hips_end_delta_m": [
+      0.7946318411827088,
+      0.0015863800048828126,
+      0.1334601491689682
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "a3b88c84b581e7a86b8858cada4b2b7ce83dd9c67b053cd8450463f18962ba5d"
+  },
+  {
+    "action_id": 384,
+    "name": "A384_Quick_Step_and_Spin_Dodge",
+    "display_name": "Quick Step and Spin Dodge",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.2,
+    "source_clip": "Quick_Step_and_Spin_Dodge",
+    "hips_end_delta_m": [
+      1.132412977218628,
+      0.012043762207031251,
+      1.077164649963379
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "bb53d5af5a48c3ee3f1a32c3fa56ce31b66f716a775f466bb62160b887cfefec"
+  },
+  {
+    "action_id": 428,
+    "name": "A428_Unarmed_Vault",
+    "display_name": "Unarmed Vault",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 0.8666666666666667,
+    "source_clip": "Unarmed_Vault",
+    "hips_end_delta_m": [
+      -0.0012832719087600708,
+      -0.018432655334472657,
+      2.6068662321567535
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "d795740f4ddde24446213bfbe17cc91e6619c1bc433910d077010561d9da98dd"
+  },
+  {
+    "action_id": 429,
+    "name": "A429_Parkour_Vault",
+    "display_name": "Parkour Vault",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.6666666666666665,
+    "source_clip": "Parkour_Vault",
+    "hips_end_delta_m": [
+      0.29285999298095705,
+      0.03955352783203125,
+      2.2856383514404297
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "a98d2cbd76df6eaf0cf1b7f798e60289c16d1e8f712d974e81d24cf3f90090d9"
+  },
+  {
+    "action_id": 430,
+    "name": "A430_Parkour_Vault_with_Roll",
+    "display_name": "Parkour Vault with Roll",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.1,
+    "source_clip": "Parkour_Vault_with_Roll",
+    "hips_end_delta_m": [
+      -0.02537874221801758,
+      0.03891082763671875,
+      4.731811360120774
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "590c5f28f83d06d07f0ff939c12a65f39723b5131f033859826ac04e4012d5c6"
+  },
+  {
+    "action_id": 431,
+    "name": "A431_Parkour_Vault_1",
+    "display_name": "Parkour Vault 1",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.2,
+    "source_clip": "Parkour_Vault_1",
+    "hips_end_delta_m": [
+      0.008854831755161286,
+      0.03804313659667969,
+      3.159946844577789
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "be2b71338edc70eb81155a27e2bfb2945971abe5f25da25354a207c0fdeb8d7d"
+  },
+  {
+    "action_id": 452,
+    "name": "A452_Backflip",
+    "display_name": "Backflip",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.1333333333333333,
+    "source_clip": "Backflip",
+    "hips_end_delta_m": [
+      -0.0008006042242050171,
+      -0.00070343017578125,
+      -0.002821013927459717
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "865a6446e15c0c7f968e649203984a89bbcd4be4c348c8f0ca458b1831a48d9d"
+  },
+  {
+    "action_id": 463,
+    "name": "A463_Run_and_Jump",
+    "display_name": "Run and Jump",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.3333333333333335,
+    "source_clip": "Run_and_Jump",
+    "hips_end_delta_m": [
+      2.0134449005126954e-05,
+      7.36236572265625e-05,
+      4.71979412317276
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "6ab2746c0c9b5fb51b55ef41af33dac24901b5ff59618e3a8c5a946ea2b33410"
+  },
+  {
+    "action_id": 467,
+    "name": "A467_Jump_Over_Obstacle_2",
+    "display_name": "Jump Over Obstacle 2",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 0.9,
+    "source_clip": "Jump_Over_Obstacle_2",
+    "hips_end_delta_m": [
+      -0.000582660436630249,
+      0.000422821044921875,
+      2.727181512117386
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "d0734284eacbdaa7228aa9cfab7f0afad662d699753e7aa57a8446b4fb82ae99"
+  },
+  {
+    "action_id": 471,
+    "name": "A471_Jump_Over_Obstacle",
+    "display_name": "Jump Over Obstacle",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.033333333333333,
+    "source_clip": "Jump_Over_Obstacle",
+    "hips_end_delta_m": [
+      -0.030774253606796264,
+      0.01856403350830078,
+      4.564636119008064
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "c1a26e012e535e27e6bb213dcda2f633e6b2d8fb6ef1e558825f7dea08da7deb"
+  },
+  {
+    "action_id": 472,
+    "name": "A472_Jump_Over_Obstacle_1",
+    "display_name": "Jump Over Obstacle 1",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.1666666666666667,
+    "source_clip": "Jump_Over_Obstacle_1",
+    "hips_end_delta_m": [
+      -0.009207531213760375,
+      0.0016615676879882812,
+      3.825628920197487
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "848c40d752c5780fa053c54a90e36efed78b87a57765c4fbea72ff472dee672b"
+  },
+  {
+    "action_id": 318,
+    "name": "A318_Scheming_Hand_Rub",
+    "display_name": "Scheming Hand Rub",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 3.3,
+    "source_clip": "Scheming_Hand_Rub",
+    "hips_end_delta_m": [
+      7.547140121459961e-06,
+      -3.41033935546875e-05,
+      4.716634750366211e-05
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "150514a468aa8aa279d9da9ad89d93737b67098fd548a46626aeaa7bb3680f1b"
+  },
+  {
+    "action_id": 284,
+    "name": "A284_Collect_Object",
+    "display_name": "Collect Object",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 6,
+    "source_clip": "Collect_Object",
+    "hips_end_delta_m": [
+      2.3543834686279298e-08,
+      0.0,
+      1.9073486328125e-08
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "f269f072606824141aa5af7f9564cbab86bcec44787289cffcc1aec34960209b"
+  },
+  {
+    "action_id": 276,
+    "name": "A276_Male_Bend_Over_Pick_Up",
+    "display_name": "Male Bend Over Pick Up",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 7.2,
+    "source_clip": "Male_Bend_Over_Pick_Up",
+    "hips_end_delta_m": [
+      -0.00019532442092895508,
+      2.96783447265625e-05,
+      0.00011554867029190064
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "536996af9c8d120b8ba021f70ad47ee24bbbdbc31f6fe82aa6d6fe2c9ce8ac22"
+  },
+  {
+    "action_id": 409,
+    "name": "A409_Finger_Wag_No",
+    "display_name": "Finger Wag No",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 5,
+    "source_clip": "Finger_Wag_No",
+    "hips_end_delta_m": [
+      1.3211369514465332e-06,
+      0.0,
+      -2.47955322265625e-07
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "91c79dbc41f6c99bceca04183a368301160e33a77da4fe37ec628685b4f1f96c"
+  },
+  {
+    "action_id": 411,
+    "name": "A411_Neck_Slashing_Gesture",
+    "display_name": "Neck Slashing Gesture",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 4.233333333333333,
+    "source_clip": "Neck_Slashing_Gesture",
+    "hips_end_delta_m": [
+      0.0030449873208999636,
+      -7.843017578125e-05,
+      0.004807629585266113
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "943a502202cae71982efcb7fc8bb77b826a0d32bebb557fb669eecfe6c9a5899"
+  },
+  {
+    "action_id": 26,
+    "name": "A026_Angry_Stomp",
+    "display_name": "Angry Stomp",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 8.033333333333333,
+    "source_clip": "Armature|Angry_Stomp|baselayer",
+    "hips_end_delta_m": [
+      5.227405577898026e-05,
+      0.0015393829345703126,
+      0.05403620719909668
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "9a4771d0cd083aec44f3c1e6f8bf98d1899373ab04bb4c7927f5890ce0d1611b"
+  },
+  {
+    "action_id": 433,
+    "name": "A433_Parkour_Vault_3",
+    "display_name": "Parkour Vault 3",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.3666666666666667,
+    "source_clip": "Parkour_Vault_3",
+    "hips_end_delta_m": [
+      -0.00729023277759552,
+      -0.057956085205078126,
+      4.719542506933212
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "53687cf28c07fdb5d4c3b8c8912323587b5365651c52a23d503b2d84d3234d71"
+  },
+  {
+    "action_id": 434,
+    "name": "A434_Fast_Ladder_Climb",
+    "display_name": "Fast Ladder Climb",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 0.7666666666666667,
+    "source_clip": "Fast_Ladder_Climb",
+    "hips_end_delta_m": [
+      -0.010163803100585938,
+      0.3720582580566406,
+      -0.022336864471435548
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "7f03a7fb8e07abc074573c37db3643c2d70afa0969dc55209e2a5a30d82ba2ae"
+  },
+  {
+    "action_id": 435,
+    "name": "A435_Ladder_Climb_Finish",
+    "display_name": "Ladder Climb Finish",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 4,
+    "source_clip": "Ladder_Climb_Finish",
+    "hips_end_delta_m": [
+      -0.034548258781433104,
+      1.187142105102539,
+      0.9724156498908997
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "49d3dbe9cb8d64d8632459c2af88c2af1af03f73335a0c036062aa661b2a98e4"
+  },
+  {
+    "action_id": 436,
+    "name": "A436_Ladder_Mount_Start",
+    "display_name": "Ladder Mount Start",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.033333333333333,
+    "source_clip": "Ladder_Mount_Start",
+    "hips_end_delta_m": [
+      0.7829262691736222,
+      0.6483280181884766,
+      0.3366471254825592
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "2ce271e2a82b9fc068a46851fd9383cf4cc07f96991ddffa4e7285c4bd4df251"
+  },
+  {
+    "action_id": 438,
+    "name": "A438_Ladder_Climb_Loop",
+    "display_name": "Ladder Climb Loop",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.6,
+    "source_clip": "Ladder_Climb_Loop",
+    "hips_end_delta_m": [
+      -0.0038117122650146483,
+      0.44663635253906253,
+      0.16189745903015137
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "ddbdf78f5e7deea24fb91dd0a504d8c848b0887aacc5f4749c9afab8cd6997a7"
+  },
+  {
+    "action_id": 439,
+    "name": "A439_Climb_Left_with_Both_Limbs",
+    "display_name": "Climb Left with Both Limbs",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.1666666666666667,
+    "source_clip": "Climb_Left_with_Both_Limbs",
+    "hips_end_delta_m": [
+      0.4416959911584854,
+      0.000424041748046875,
+      -0.00012267619371414184
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "c645fb26a3a4c3abc14cbb1a41bfae20cb2e4212375b9921be6a5245b1595915"
+  },
+  {
+    "action_id": 440,
+    "name": "A440_Climb_Right_with_Both_Limbs",
+    "display_name": "Climb Right with Both Limbs",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.1666666666666667,
+    "source_clip": "Climb_Right_with_Both_Limbs",
+    "hips_end_delta_m": [
+      -0.44114011108875273,
+      -0.0003057098388671875,
+      0.00028191059827804567
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "fd140c2fb9d0c0ad71acf15297383527d3363e077b5754beb9d48f0ce9e520d4"
+  },
+  {
+    "action_id": 442,
+    "name": "A442_Fast_Stair_Climb",
+    "display_name": "Fast Stair Climb",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 0.7666666666666667,
+    "source_clip": "Fast_Stair_Climb",
+    "hips_end_delta_m": [
+      -0.004969406127929688,
+      0.3684385681152344,
+      -0.02179859161376953
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "ea3124f2665a6e7f1e943f27dba60ca820313ff80fd4c1d7daaa4c3741fb0e0c"
+  },
+  {
+    "action_id": 444,
+    "name": "A444_Climbing_Up_Wall",
+    "display_name": "Climbing Up Wall",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2,
+    "source_clip": "climbing_up_wall",
+    "hips_end_delta_m": [
+      -0.0010052165389060974,
+      0.9472963714599609,
+      0.002783358693122864
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "229c85a5a0e6671d0e36e7211b2048edcf9f7c37ee715b873c522d4cd42e961d"
+  },
+  {
+    "action_id": 453,
+    "name": "A453_Backflip_Sweep_Kick",
+    "display_name": "Backflip Sweep Kick",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 4.833333333333333,
+    "source_clip": "Backflip_Sweep_Kick",
+    "hips_end_delta_m": [
+      0.569359984099865,
+      0.0010363006591796876,
+      -0.25964928284287453
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "ad995cd4f53a9c2578ed36a93bdfa15a1ff92fbe012b5e0f6d6e76d665bb78fc"
+  },
+  {
+    "action_id": 455,
+    "name": "A455_Sweep_Kick",
+    "display_name": "Sweep Kick",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 4.066666666666666,
+    "source_clip": "Sweep_Kick",
+    "hips_end_delta_m": [
+      0.6722831523418427,
+      0.007513008117675781,
+      0.6531164836883545
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "3fbe5b55792e44f9e8d0eaf6246ed0015090011c0bb1b66a0e787e2a02bc7048"
+  },
+  {
+    "action_id": 457,
+    "name": "A457_Jumping_Punch",
+    "display_name": "Jumping Punch",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.7,
+    "source_clip": "Jumping_Punch",
+    "hips_end_delta_m": [
+      0.023246598541736604,
+      0.004921646118164063,
+      2.9113831424713137
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "eba3df488add2c7fab043aa45cae8125f68a24c8d7284db26f684f0e74bc59cc"
+  },
+  {
+    "action_id": 317,
+    "name": "A317_Shrug",
+    "display_name": "Shrug",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.033333333333333,
+    "source_clip": "Armature|Shrug|baselayer",
+    "hips_end_delta_m": [
+      -1.239776611328125e-07,
+      1.52587890625e-07,
+      -2.6226043701171875e-08
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "6ef8d62a8f17141f83628cb31d53618db85bb3951de7b00c8aa8a5adf3ec9fe7"
+  },
+  {
+    "action_id": 546,
+    "name": "A546_Walk_Backward_with_Sword",
+    "display_name": "Walk Backward with Sword",
+    "set": "specialized",
+    "loadout": "right-hand-dagger",
+    "duration": 1.3666666666666667,
+    "source_clip": "Walk_Backward_with_Sword",
+    "hips_end_delta_m": [
+      0.00019962310791015624,
+      7.77435302734375e-05,
+      -0.9735946786403656
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "e6878feb9c8ae96294b5d8b058941515225bde21353d658974db435df4c46c55"
+  },
+  {
+    "action_id": 212,
+    "name": "A212_Elbow_Strike",
+    "display_name": "Elbow Strike",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 2.466666666666667,
+    "source_clip": "Elbow_Strike",
+    "hips_end_delta_m": [
+      -0.0003967815637588501,
+      0.000806884765625,
+      -0.00013578638434410094
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "d15cb611bde868fac037569f38b51a43b6d6ed9e0a12ea1164deea91c8da2f3c"
+  },
+  {
+    "action_id": 173,
+    "name": "A173_Slap_Reaction",
+    "display_name": "Slap Reaction",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 4.866666666666666,
+    "source_clip": "Slap_Reaction",
+    "hips_end_delta_m": [
+      -0.00029779672622680663,
+      0.002542572021484375,
+      -0.0008343124389648438
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "6666a925b8d00cf2762ed96569dfe6d979c08fa3c3715253fa13a0f044e66aea"
+  },
+  {
+    "action_id": 176,
+    "name": "A176_Face_Punch_Reaction_2",
+    "display_name": "Face Punch Reaction 2",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 5.6,
+    "source_clip": "Face_Punch_Reaction_2",
+    "hips_end_delta_m": [
+      -0.0017339229583740235,
+      0.0006710815429687501,
+      -0.00028104782104492186
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "4d1a0c77f993e86cf064b7f7c857a4e91b7f383b00344a31c874391795c74f54"
+  },
+  {
+    "action_id": 403,
+    "name": "A403_Victory_Fist_Pump",
+    "display_name": "Victory Fist Pump",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 1.5333333333333334,
+    "source_clip": "Victory_Fist_Pump",
+    "hips_end_delta_m": [
+      2.4221092462539674e-05,
+      0.000573272705078125,
+      -0.0007121920585632324
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "7373d87355e829ef9a35b0fee42269fd9cae58485407b04620dbca095aacae28"
+  },
+  {
+    "action_id": 412,
+    "name": "A412_Victory",
+    "display_name": "Victory",
+    "set": "specialized",
+    "loadout": "empty-hands",
+    "duration": 8.566666666666666,
+    "source_clip": "victory",
+    "hips_end_delta_m": [
+      -8.13901424407959e-07,
+      -5.5694580078125e-06,
+      2.9754638671875e-06
+    ],
+    "loop": "not certified; imported as one-shot",
+    "root_motion": "authored Hips translation preserved; no in-place conversion",
+    "source_sha256": "4755b9f7203db7ca4648adc55ca3f54bd408e31646d8c85dd6954d6227e173ea"
+  }
+]

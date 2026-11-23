@@ -1,0 +1,68 @@
+name: Validar laboratorio Goblin Skirmisher
+
+on:
+  push:
+    branches: [teste-goblin-skirmisher]
+    paths:
+      - 'Projeto-Godot/**'
+      - '.github/workflows/testar-skirmisher.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar-skirmisher:
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+      - name: Importar e validar scripts com erro fatal
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $godot = 'C:\ProgramData\ClareiraGodot\4.7.2\Godot_v4.7.2-stable_win64_console.exe'
+          if (-not (Test-Path $godot)) { throw 'Godot 4.7.2 nao encontrado no runner' }
+          $ErrorActionPreference = 'Continue'
+          try {
+            $output = (& $godot --headless --path Projeto-Godot --import 2>&1 | Out-String)
+            $godotExit = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
+          Write-Host $output
+          if ($godotExit -ne 0 -or $output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+            throw 'Falha na importacao: erros de script detectados'
+          }
+          $ErrorActionPreference = 'Continue'
+          try {
+            $output = (& $godot --headless --path Projeto-Godot --check-only --script res://game_updater.gd 2>&1 | Out-String)
+            $godotExit = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
+          Write-Host $output
+          if ($godotExit -ne 0 -or $output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+            throw 'Atualizador game_updater.gd falhou no parse'
+          }
+      - name: Validar esqueleto, animacoes e laboratorio
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'Projeto-Godot/modelos/goblin_skirmisher/Character/GoblinSkirmisher.scn')) {
+            throw 'Asset Skirmisher .scn obrigatorio ausente na branch'
+          }
+          $godot = 'C:\ProgramData\ClareiraGodot\4.7.2\Godot_v4.7.2-stable_win64_console.exe'
+          foreach ($test in @('res://tests/test_goblin_skirmisher_asset.gd', 'res://tests/test_goblin_skirmisher_scene.gd')) {
+            $ErrorActionPreference = 'Continue'
+            try {
+              $output = (& $godot --headless --path Projeto-Godot --script $test 2>&1 | Out-String)
+              $code = $LASTEXITCODE
+            } finally { $ErrorActionPreference = 'Stop' }
+            Write-Host $output
+            if ($code -ne 0 -or $output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+              throw "Teste falhou: $test"
+            }
+            if ($test -like '*skirmisher_asset*' -and -not $output.Contains('SKIRMISHER ASSET OK')) { throw "Modelo nao validado: $test" }
+            if ($test -like '*skirmisher_scene*' -and -not $output.Contains('SKIRMISHER LAB OK')) { throw "Laboratorio nao validado: $test" }
+          }

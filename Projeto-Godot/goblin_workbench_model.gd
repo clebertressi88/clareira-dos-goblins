@@ -11,8 +11,8 @@ static func build(parent: Node3D, advanced: bool) -> void:
 	var iron := Color("#53575b")
 	for x_sign in [-1.0,1.0]:
 		for z_sign in [-1.0,1.0]:
-			var x := x_sign*(width*0.5-0.12)
-			var z := z_sign*(depth*0.5-0.11)
+			var x: float = float(x_sign) * (width * 0.5 - 0.12)
+			var z: float = float(z_sign) * (depth * 0.5 - 0.11)
 			_cylinder(parent,Vector3(x,top_y*0.49,z),0.084,top_y*0.98,timber)
 			_cylinder(parent,Vector3(x,top_y*0.23,z),0.093,0.10,dark)
 			# Amarras grossas nas juntas; no nivel 2, ferragens de reforco.
