@@ -4,18 +4,22 @@ extends Node3D
 
 const CURRENT_RIG = preload("res://npc_goblin.gd")
 const ASSET_DIR := "res://modelos/goblin_skirmisher"
+const ASSET_SCENE := "res://modelos/goblin_skirmisher/Character/GoblinSkirmisher.scn"
+const ASSET_INDEX := "res://modelos/goblin_skirmisher/animation-index.json"
 const MOTION_LABELS := {"idle": "Parado", "walk": "Andar", "run": "Correr", "attack": "Atacar", "hit": "Receber dano", "death": "Morrer"}
-const MOTION_WORDS := {
-	"idle": ["idle", "stand", "breath"],
-	"walk": ["walk", "scurry", "move"],
-	"run": ["run", "sprint", "jog"],
-	"attack": ["attack", "slash", "stab", "strike", "sword"],
-	"hit": ["hit", "hurt", "impact", "damage", "react"],
-	"death": ["death", "die", "dying"]
+const MOTION_CLIPS := {
+	"idle": ["A000_Idle", "A011_Idle_1", "A012_Idle_2"],
+	"walk": ["A-02_Walking", "A692_Walking_2", "A671_Sneaky_Walk"],
+	"run": ["A-01_Running", "A531_Sprint_and_Sudden_Stop"],
+	"attack": ["A219_Right_hand_Sword_Slash", "A240_Thrust_Slash", "A221_Charged_Upward_Slash"],
+	"hit": ["A178_Hit_Reaction", "A171_Hit_Reaction_to_Waist", "A174_Face_Punch_Reaction"],
+	"death": ["A008_Dead", "A189_Dying_Backwards", "A187_Knock_Down"]
 }
 
 var _current_rig: Node3D
 var _skirmisher: Node3D
+var _weapon: Node3D
+var _show_weapon := false
 var _animation_player: AnimationPlayer
 var _animation_names: PackedStringArray = PackedStringArray()
 var _animation_index := 0
@@ -79,7 +83,7 @@ func _spawn_current() -> void:
 func _load_skirmisher() -> void:
 	var candidate := _choose_model()
 	if candidate.is_empty():
-		_asset_status = "Pacote ausente. Extraia o ZIP Godot em:\nProjeto-Godot/modelos/goblin_skirmisher/\nDepois importe o projeto e gere uma nova compilacao."
+		_asset_status = "Pacote ausente. Copie Character/GoblinSkirmisher.scn para:\nProjeto-Godot/modelos/goblin_skirmisher/Character/\nConsulte LEIA-ME.md na pasta modelos."
 		return
 	var packed := load(candidate) as PackedScene
 	if packed == null:
@@ -95,6 +99,7 @@ func _load_skirmisher() -> void:
 		_asset_status = "O arquivo encontrado nao e uma cena 3D: " + candidate
 		return
 	holder.add_child(_skirmisher)
+	_weapon = _skirmisher.find_child("Dagger", true, false) as Node3D
 	var players := _skirmisher.find_children("*", "AnimationPlayer", true, false)
 	for node in players:
 		var player := node as AnimationPlayer
@@ -103,14 +108,18 @@ func _load_skirmisher() -> void:
 			_animation_names = player.get_animation_list()
 	for tree in _skirmisher.find_children("*", "AnimationTree", true, false):
 		(tree as AnimationTree).active = false
-	_add_label(holder, "GOBLIN SKIRMISHER")
+	_add_label(holder, "GOBLIN SKIRMISHER", 1.55)
 	_asset_status = "Modelo encontrado: " + candidate.get_file()
+	if FileAccess.file_exists(ASSET_INDEX):
+		_asset_status += "\nCatalogo original de 110 animacoes detectado."
 	if _animation_player == null:
 		_asset_status += "\nSem AnimationPlayer nesta cena. Procure o arquivo do modelo animado."
 	else:
 		_play_motion("idle")
 
 func _choose_model() -> String:
+	if FileAccess.file_exists(ASSET_SCENE):
+		return ASSET_SCENE
 	var files: Array[String] = []
 	_collect_models(ASSET_DIR, files, 0)
 	var best_path := ""
@@ -157,14 +166,14 @@ func _collect_models(folder: String, files: Array[String], depth: int) -> void:
 		var path := folder.path_join(entry)
 		if directory.current_is_dir():
 			_collect_models(path, files, depth + 1)
-		elif entry.get_extension().to_lower() in ["glb", "gltf"]:
+		elif entry.get_extension().to_lower() in ["scn", "glb", "gltf"]:
 			files.append(path)
 	directory.list_dir_end()
 
-func _add_label(holder: Node3D, label_text: String) -> void:
+func _add_label(holder: Node3D, label_text: String, at_height: float = 2.42) -> void:
 	var label := Label3D.new()
 	label.text = label_text
-	label.position = Vector3(0, 2.42, 0)
+	label.position = Vector3(0, at_height, 0)
 	label.font_size = 35
 	label.pixel_size = 0.0025
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -192,6 +201,7 @@ func _build_menu() -> void:
 		_add_button(column, title, _play_motion.bind(motion))
 	_add_button(column, "Proxima animacao", _advance_animation.bind(1))
 	_add_button(column, "Animacao anterior", _advance_animation.bind(-1))
+	_add_button(column, "Mostrar/ocultar adaga", _toggle_weapon)
 	_add_button(column, "Girar 90 graus", _turn)
 	_add_button(column, "Zoom +", _zoom_in)
 	_add_button(column, "Zoom -", _zoom_out)
@@ -211,21 +221,36 @@ func _play_motion(motion: String) -> void:
 	_motion = motion
 	if _animation_player != null:
 		var chosen := ""
-		for name in _animation_names:
-			var lowered := name.to_lower()
-			for keyword in MOTION_WORDS.get(motion, []):
-				if lowered.contains(keyword):
-					chosen = name
-					break
-			if not chosen.is_empty():
+		for clip in MOTION_CLIPS.get(motion, []):
+			if _animation_player.has_animation(clip):
+				chosen = clip
 				break
 		if chosen.is_empty():
-			_asset_status = "Nao achei animacao de '" + motion + "' no pacote."
+			_asset_status = "Animacao indisponivel: " + motion
 		else:
 			_asset_status = "Animacao ativa: " + chosen
 			_animation_index = _animation_names.find(chosen)
 			_animation_player.play(chosen)
+			_update_weapon_visibility()
 	_update_info()
+
+func _toggle_weapon() -> void:
+	_show_weapon = not _show_weapon
+	_update_weapon_visibility()
+	_asset_status = "Adaga visivel" if _show_weapon else "Adaga oculta"
+	_update_info()
+
+func _update_weapon_visibility() -> void:
+	if _weapon != null:
+		_weapon.visible = _show_weapon or _motion == "attack"
+	if _skirmisher != null:
+		for node in _skirmisher.find_children("*", "MeshInstance3D", true, false):
+			var mesh_instance := node as MeshInstance3D
+			if mesh_instance.mesh == null:
+				continue
+			for i in range(mesh_instance.get_blend_shape_count()):
+				if mesh_instance.mesh.get_blend_shape_name(i) == "WeaponGrip":
+					mesh_instance.set_blend_shape_value(i, 1.0 if _weapon != null and _weapon.visible else 0.0)
 
 func _advance_animation(direction: int) -> void:
 	if _animation_player == null or _animation_names.is_empty():
@@ -233,7 +258,8 @@ func _advance_animation(direction: int) -> void:
 	_animation_index = posmod(_animation_index + direction, _animation_names.size())
 	var name := _animation_names[_animation_index]
 	_animation_player.play(name)
-	_motion = "custom"
+	_motion = "attack" if name in MOTION_CLIPS["attack"] else "custom"
+	_update_weapon_visibility()
 	_asset_status = "Animacao %d/%d: %s" % [_animation_index + 1, _animation_names.size(), name]
 	_update_info()
 
