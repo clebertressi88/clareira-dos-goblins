@@ -4421,12 +4421,19 @@ func harvest_tomatoes(plant: Node3D) -> void:
 		if net_world_ready:
 			net_request_harvest_tomatoes.rpc_id(1,id)
 		return
-	if str(plant.get_meta("kind",""))!="tomato_plant":
+	var plant_kind := str(plant.get_meta("kind",""))
+	if plant_kind not in ["tomato_plant","tomato_crop"]:
 		return
+	if plant_kind=="tomato_crop" and not bool(plant.get_meta("ready",false)):
+		notice("O tomateiro ainda esta crescendo.")
+		return
+	tomato_crop_times.erase(id)
 	# Plantas naturais retiradas do mundo sao persistidas em removed.
 	remove_object(plant)
 	stock[TOMATO_ITEM] += 3
+	stock[TOMATO_SEED_ITEM] += 2
 	item_received(TOMATO_ITEM)
+	item_received(TOMATO_SEED_ITEM)
 	sync_hotbar()
 	save_game()
 	notice("Colhidos 3 tomates.")
@@ -4440,8 +4447,11 @@ func net_request_harvest_tomatoes(id: String) -> void:
 	var plant: Node3D = objects[id]
 	if not is_instance_valid(avatar) or not is_instance_valid(plant):
 		return
-	if str(plant.get_meta("kind",""))!="tomato_plant" or avatar.global_position.distance_to(plant.global_position)>4.0:
+	if str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"] or avatar.global_position.distance_to(plant.global_position)>4.0:
 		return
+	if str(plant.get_meta("kind",""))=="tomato_crop" and not bool(plant.get_meta("ready",false)):
+		return
+	tomato_crop_times.erase(id)
 	remove_object(plant)
 	net_tomato_reward.rpc_id(peer_id,3)
 	save_game()
@@ -4451,7 +4461,9 @@ func net_tomato_reward(amount: int) -> void:
 	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or amount!=3:
 		return
 	stock[TOMATO_ITEM] += amount
+	stock[TOMATO_SEED_ITEM] += 2
 	item_received(TOMATO_ITEM)
+	item_received(TOMATO_SEED_ITEM)
 	sync_hotbar()
 	notice("Colhidos 3 tomates.")
 
@@ -4481,6 +4493,9 @@ func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) 
 	var id := "item-"+str(Time.get_ticks_usec())+"-"+str(randi())
 	placed.append({"kind":kind,"id":id,"p":[pos.x,pos.y,pos.z],"r":yaw,"level":level})
 	spawn_object(kind,id,pos,self,yaw)
+	if kind=="tomato_crop":
+		tomato_crop_times[id] = Time.get_unix_time_from_system()
+		update_tomato_crop(objects[id])
 	if kind=="wood_floor" and level==0:
 		refresh_door_transitions(pos)
 	if kind in NET_SHARED_KINDS and net_role=="host" and not net_apply_in_progress:
@@ -4501,6 +4516,8 @@ func remove_object(o: Node3D) -> void:
 	elif id!="lobo-errante":
 		removed[id] = true
 	objects.erase(id)
+	if removed_kind=="tomato_crop":
+		tomato_crop_times.erase(id)
 	o.queue_free()
 	if removed_kind=="wood_floor":
 		refresh_door_transitions(removed_pos)
