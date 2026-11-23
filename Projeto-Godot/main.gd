@@ -4,6 +4,7 @@ const SAVE := "user://clareira-nativa.json"
 const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
+const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
 const VINE_INTERVAL_SECONDS := 1200.0 # Uma vinha a cada 20 min, apenas em arvores adultas.
@@ -126,6 +127,8 @@ const RUN_SPEED := 6.7
 const RABBIT_ESCAPE_SPEED := 3.45
 var panel: PanelContainer
 var menu: VBoxContainer
+var medieval_menu: Control
+var gameplay_overlays: Array[Control] = []
 var address: LineEdit
 var selected := 0
 var health := 100
@@ -222,9 +225,9 @@ func _input(event: InputEvent) -> void:
 		save_game()
 		get_viewport().set_input_as_handled()
 		return
-	if moving or inventory or not is_instance_valid(panel) or not panel.visible:
+	if moving or inventory or not is_instance_valid(medieval_menu) or not medieval_menu.visible:
 		return
-	if is_instance_valid(address) and address.has_focus() and not address.text.is_empty():
+	if is_instance_valid(medieval_menu.ip_input) and medieval_menu.ip_input.has_focus():
 		# Nao interrompe digitacao de IP ja iniciada no campo de rede.
 		return
 	# Permite iniciar com WASD/setas sem depender do foco do botao Jogar.
@@ -2036,6 +2039,12 @@ func make_ui() -> void:
 	panel.offset_bottom = 170
 	menu = VBoxContainer.new()
 	panel.add_child(menu)
+	gameplay_overlays = [crosshair,hud,hint,bottom]
+	medieval_menu = MEDIEVAL_MENU.new()
+	layer.add_child(medieval_menu)
+	medieval_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	medieval_menu.hide()
+	panel.hide()
 
 func hotbar_style(fill: Color, border: Color, width: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -2205,52 +2214,40 @@ func button(title: String, callback: Callable, use_craft_style: bool = false) ->
 		style_craft_button(b)
 	menu.add_child(b)
 
+func set_gameplay_overlays_visible(visible_now: bool) -> void:
+	for overlay in gameplay_overlays:
+		if is_instance_valid(overlay):
+			overlay.visible = visible_now
+
 func show_menu() -> void:
-	panel.remove_theme_stylebox_override("panel")
 	moving = false
 	inventory = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	panel.show()
-	clear_menu()
-	label("Clareira dos Goblins")
-	label(BUILD_TAG)
-	label("Visual NPC: GLB 3D obrigatório · Bruma, Talo e Guardião · versão 2")
-	var portrait := TextureRect.new()
-	portrait.texture = preload("res://protagonista.jpg")
-	portrait.custom_minimum_size = Vector2(92,125)
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	menu.add_child(portrait)
-	label("WASD ou setas: andar/iniciar · Shift correr · Espaço pular · X agachar")
-	label("Mouse para mirar · Direito pegar/usar · Esquerdo atacar/construir")
-	label("E inventário · B abrigo · Q largar · V câmera · F10 retornar à clareira")
-	if net_role=="host":
-		label("Sala LAN aberta · UDP %d · jogadores: %d/8" % [NET_PORT,multiplayer.get_peers().size()+1])
-		var ips := lan_local_ipv4_addresses()
-		label("IP do anfitrião: " + (", ".join(ips) if ips.size()>0 else "verifique em ipconfig"))
-		label("Outros jogadores devem estar no mesmo Wi-Fi ou roteador.")
-	elif net_role=="client":
-		label(("Conectado em " if net_connected else "Conectando a ")+net_address)
-	if not net_session_message.is_empty():
-		label(net_session_message)
-	button("Jogar / continuar", begin)
-	if net_role=="solo":
-		button("Laboratorio: comparar goblin atual e novo V3",open_goblin_skin_test)
-	if net_role=="solo":
-		address = LineEdit.new()
-		address.placeholder_text = "IP do computador anfitrião (ex.: 192.168.1.10)"
-		address.text = net_address
-		address.focus_mode = Control.FOCUS_CLICK
-		menu.add_child(address)
-		address.release_focus()
-		label("Mesmo roteador/rede Wi-Fi e mesma versão · UDP %d" % NET_PORT)
-		button("Hospedar partida na rede local (LAN)", host_game)
-		button("Entrar na partida pelo IP", join_game)
-	else:
-		button("Desconectar da partida", disconnect_and_show_menu)
-	if not feedback.is_empty():
-		label(feedback)
-	button("Salvar e sair", func(): save_game(); get_tree().quit())
+	panel.hide()
+	set_gameplay_overlays_visible(false)
+	var ips := lan_local_ipv4_addresses()
+	var message := net_session_message
+	if message.is_empty():
+		message = feedback
+	medieval_menu.rebuild({
+		"role": net_role,
+		"connected": net_connected,
+		"world_ready": net_world_ready,
+		"ip": net_address,
+		"host_ips": ", ".join(ips) if ips.size()>0 else "verifique em ipconfig",
+		"players": multiplayer.get_peers().size()+1,
+		"message": message
+	}, {
+		"play": Callable(self,"begin"),
+		"host": Callable(self,"host_game"),
+		"join": Callable(self,"join_game"),
+		"disconnect": Callable(self,"disconnect_and_show_menu"),
+		"lab": Callable(self,"open_goblin_skin_test"),
+		"quit": func(): save_game(); get_tree().quit()
+	})
+	medieval_menu.show()
+	address = null
+
 
 func open_goblin_skin_test() -> void:
 	# So entra no laboratorio em modo solo; nao interfere no servidor ou no save.
@@ -2267,6 +2264,9 @@ func begin() -> void:
 		show_menu()
 		return
 	panel.hide()
+	if is_instance_valid(medieval_menu):
+		medieval_menu.hide()
+	set_gameplay_overlays_visible(true)
 	inventory = false
 	moving = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -2304,6 +2304,9 @@ func player_equipment_mask() -> int:
 
 
 func show_inventory() -> void:
+	if is_instance_valid(medieval_menu):
+		medieval_menu.hide()
+	set_gameplay_overlays_visible(true)
 	sync_inventory_slots()
 	if not inventory:
 		craft_mode = "basic"
@@ -2909,6 +2912,9 @@ func open_backpack() -> void:
 	show_backpack()
 
 func show_backpack() -> void:
+	if is_instance_valid(medieval_menu):
+		medieval_menu.hide()
+	set_gameplay_overlays_visible(true)
 	inventory = true
 	moving = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -4099,9 +4105,11 @@ func host_game() -> void:
 
 
 func join_game() -> void:
-	if not is_instance_valid(address):
-		return
-	var ip := address.text.strip_edges()
+	var ip := ""
+	if is_instance_valid(medieval_menu) and is_instance_valid(medieval_menu.ip_input):
+		ip = medieval_menu.ip_input.text.strip_edges()
+	elif is_instance_valid(address):
+		ip = address.text.strip_edges()
 	join_at_address(ip)
 
 
