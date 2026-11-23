@@ -8,6 +8,7 @@ const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
+const GAME_UPDATER := preload("res://game_updater.gd")
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
 const TOMATO_ITEM := 27
@@ -148,6 +149,7 @@ const RABBIT_ESCAPE_SPEED := 3.45
 var panel: PanelContainer
 var menu: VBoxContainer
 var medieval_menu: Control
+var updater
 var gameplay_overlays: Array[Control] = []
 var address: LineEdit
 var selected := 0
@@ -201,6 +203,10 @@ func _ready() -> void:
 		world_uid = Crypto.new().generate_random_bytes(16).hex_encode()
 	make_player()
 	make_ui()
+	updater = GAME_UPDATER.new()
+	add_child(updater)
+	updater.status_changed.connect(_refresh_update_status)
+	updater.install_ready.connect(_install_verified_update)
 	village()
 	load_chunks()
 	show_menu()
@@ -2345,6 +2351,19 @@ func set_gameplay_overlays_visible(visible_now: bool) -> void:
 		if is_instance_valid(overlay):
 			overlay.visible = visible_now
 
+func _refresh_update_status(current_status: Dictionary) -> void:
+	if is_instance_valid(medieval_menu):
+		medieval_menu.refresh_update_state(current_status)
+
+func _install_verified_update() -> void:
+	# O jogo fecha apenas depois de baixar, validar e salvar o progresso.
+	if not save_game():
+		updater.abort_install("Não foi possível salvar o progresso. Atualização cancelada.")
+		return
+	if updater.launch_installer():
+		get_tree().quit()
+
+
 func show_menu(starting_page: String = "home") -> void:
 	moving = false
 	inventory = false
@@ -2366,7 +2385,8 @@ func show_menu(starting_page: String = "home") -> void:
 		"message": message,
 		"worlds": world_storage.list_worlds(),
 		"active_world_id": world_storage.active_id,
-		"active_world_name": world_storage.active_name()
+		"active_world_name": world_storage.active_name(),
+		"updater": updater.get_state()
 	}, {
 		"play": Callable(self,"begin"),
 		"host": Callable(self,"host_game"),
@@ -2376,6 +2396,8 @@ func show_menu(starting_page: String = "home") -> void:
 		"create_world": Callable(self,"create_named_world"),
 		"rename_world": Callable(self,"rename_named_world"),
 		"select_world": Callable(self,"select_named_world"),
+		"check_update": Callable(updater,"check_updates"),
+		"install_update": Callable(updater,"download_and_install"),
 		"quit": func(): save_game(); get_tree().quit()
 	},starting_page)
 	medieval_menu.show()

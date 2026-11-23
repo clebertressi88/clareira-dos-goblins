@@ -34,6 +34,10 @@ var _panel_art: TextureRect
 var _primary_button: Button
 var _nav_buttons: Dictionary = {}
 var _volume_label: Label
+var _update_status_label: Label
+var _update_progress: ProgressBar
+var _update_install_button: Button
+var _update_check_button: Button
 
 func _ready() -> void:
 	_font = SystemFont.new()
@@ -53,6 +57,10 @@ func _recreate() -> void:
 	world_create_input = null
 	world_rename_input = null
 	_volume_label = null
+	_update_status_label = null
+	_update_progress = null
+	_update_install_button = null
+	_update_check_button = null
 	_nav_buttons.clear()
 	for child in get_children():
 		remove_child(child)
@@ -158,6 +166,10 @@ func _render_page() -> void:
 	world_create_input = null
 	world_rename_input = null
 	_volume_label = null
+	_update_status_label = null
+	_update_progress = null
+	_update_install_button = null
+	_update_check_button = null
 	for child in _middle.get_children():
 		_middle.remove_child(child)
 		child.queue_free()
@@ -424,12 +436,56 @@ func _render_controls() -> void:
 	back.pressed.connect(func(): _activate("settings"))
 
 func _render_updates() -> void:
-	_page_container.add_child(_heading("⇩  ATUALIZAÇÕES"))
-	_page_container.add_child(_text("As versões Windows são publicadas no GitHub do jogo.",19,CREAM,true))
-	_page_container.add_child(_text("Você também pode usar o atualizador instalado no computador.",18,MUTED,true))
+	_page_container.add_child(_heading("⇩  ATUALIZAÇÕES DO JOGO"))
+	_page_container.add_child(_text("Atualize diretamente por aqui, sem abrir o navegador.",19,CREAM,true))
+	_page_container.add_child(_text("O download é feito antes de fechar o jogo. Depois, a instalação começa automaticamente.",17,MUTED,true))
 	_page_container.add_child(HSeparator.new())
-	var link := _action_button("⇩  ABRIR PÁGINA DE DOWNLOAD",true)
+	_update_status_label = _text("Consultando atualizações...",19,GOLD,true)
+	_page_container.add_child(_update_status_label)
+	_update_progress = ProgressBar.new()
+	_update_progress.max_value = 100
+	_update_progress.min_value = 0
+	_update_progress.value = 0
+	_update_progress.show_percentage = false
+	_update_progress.custom_minimum_size.y = 20
+	_page_container.add_child(_update_progress)
+	_update_install_button = _action_button("⇩  BAIXAR E INSTALAR",true)
+	_update_install_button.pressed.connect(func(): _call_action("install_update"))
+	_update_check_button = _action_button("↻  VERIFICAR NOVAMENTE")
+	_update_check_button.pressed.connect(func(): _call_action("check_update"))
+	_page_container.add_child(HSeparator.new())
+	_page_container.add_child(_text("O atualizador confere o arquivo antes de instalar e mantém um backup do executável anterior.",16,CREAM,true))
+	_page_container.add_child(_text("Se a instalação falhar, o jogo não deve perder seus mundos e inventários salvos.",16,MUTED,true))
+	var link := _action_button("↗  DOWNLOAD MANUAL (GITHUB)")
 	link.pressed.connect(func(): OS.shell_open("https://github.com/clebertressi88/clareira-dos-goblins/releases/tag/jogo-windows"))
+	_refresh_update_controls()
+	if str((_state.get("updater",{}) as Dictionary).get("phase","idle"))=="idle":
+		_call_action("check_update")
+
+func refresh_update_state(info: Dictionary) -> void:
+	_state["updater"] = info.duplicate(true)
+	if _page=="updates":
+		_refresh_update_controls()
+
+func _refresh_update_controls() -> void:
+	if not is_instance_valid(_update_status_label):
+		return
+	var status: Dictionary = _state.get("updater",{})
+	var phase := str(status.get("phase","idle"))
+	var message := str(status.get("message","Clique em verificar para buscar a última versão."))
+	_update_status_label.text = message
+	_update_progress.visible = phase in ["downloading","verified","installing"]
+	_update_progress.value = clampf(float(status.get("percent",0)),0.0,100.0)
+	_update_install_button.visible = phase in ["ready","downloading","verified","installing"]
+	_update_install_button.disabled = phase!="ready"
+	_update_install_button.text = "⇩  BAIXAR E INSTALAR" if phase=="ready" else "⇩  TRANSFERINDO / INSTALANDO..."
+	_update_check_button.disabled = phase in ["checking","downloading","verified","installing"]
+	if phase=="current":
+		_update_status_label.add_theme_color_override("font_color",Color("#b8e58f"))
+	elif phase=="error":
+		_update_status_label.add_theme_color_override("font_color",Color("#f4b89c"))
+	else:
+		_update_status_label.add_theme_color_override("font_color",GOLD)
 
 func _render_credits() -> void:
 	_page_container.add_child(_heading("ⓘ  CRÉDITOS"))
