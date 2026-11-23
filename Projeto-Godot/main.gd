@@ -104,6 +104,7 @@ var hotbar_icons: Array[TextureRect] = []
 var hotbar_slots: Array[Label] = []
 var hotbar_frames: Array[PanelContainer] = []
 var hotbar_counts: Array[Label] = []
+var hotbar_durability_bars: Array[ProgressBar] = []
 var slot_idle: StyleBoxFlat
 var slot_active: StyleBoxFlat
 var next_interaction_hint := 0.0
@@ -1843,6 +1844,13 @@ func make_ui() -> void:
 		item.add_theme_font_size_override("font_size",12)
 		content.add_child(item)
 		hotbar_slots.append(item)
+		var durability_bar := ProgressBar.new()
+		durability_bar.custom_minimum_size = Vector2(54,5)
+		durability_bar.show_percentage = false
+		durability_bar.max_value = 100
+		durability_bar.visible = false
+		content.add_child(durability_bar)
+		hotbar_durability_bars.append(durability_bar)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel = PanelContainer.new()
 	layer.add_child(panel)
@@ -1974,7 +1982,10 @@ func update_player_hud() -> void:
 		hotbar_icons[i].texture = ITEM_ICONS[item] if item>=0 else null
 		hotbar_slots[i].text = ""
 		hotbar_frames[i].tooltip_text = (ITEMS[item] + (" · Durabilidade %d/%d" % [tool_remaining(item),int(TOOL_MAX_DURABILITY[item])] if TOOL_MAX_DURABILITY.has(item) else "")) if item>=0 else "Atalho vazio"
-		hotbar_counts[i].text = ("×%d · %d%%" % [stock[item],roundi(100.0*tool_remaining(item)/float(TOOL_MAX_DURABILITY[item]))] if TOOL_MAX_DURABILITY.has(item) else "×%d" % stock[item]) if item>=0 else ""
+		hotbar_counts[i].text = "×%d" % stock[item] if item>=0 else ""
+		hotbar_durability_bars[i].visible = item>=0 and TOOL_MAX_DURABILITY.has(item)
+		if item>=0 and TOOL_MAX_DURABILITY.has(item):
+			hotbar_durability_bars[i].value = 100.0*tool_remaining(item)/float(TOOL_MAX_DURABILITY[item])
 		hotbar_slots[i].modulate = Color("#ffe29c") if active else Color.WHITE
 
 func sprint_step(wants_run: bool,dt: float) -> bool:
@@ -2247,6 +2258,8 @@ func show_inventory() -> void:
 		if kind>=0:
 			var available := craft_available(kind)
 			item.text = "×%d" % available if available>0 else ""
+			if TOOL_MAX_DURABILITY.has(kind) and available>0:
+				item.text += "\n%d%%" % roundi(100.0*tool_remaining(kind)/float(TOOL_MAX_DURABILITY[kind]))
 			item.tooltip_text = ITEMS[kind]
 			if TOOL_MAX_DURABILITY.has(kind):
 				item.tooltip_text += " · Durabilidade %d/%d" % [tool_remaining(kind),int(TOOL_MAX_DURABILITY[kind])]
