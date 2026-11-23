@@ -4847,7 +4847,7 @@ func net_send_snapshot(snapshot: Dictionary) -> void:
 
 @rpc("any_peer","call_remote","reliable")
 func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
-	if net_role!="host" or kind=="hut" or kind not in NET_SHARED_KINDS:
+	if net_role!="host" or kind in ["hut","tomato_crop"] or kind not in NET_SHARED_KINDS:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
@@ -4886,7 +4886,7 @@ func net_request_remove(id: String) -> void:
 		return
 	var avatar: Node3D = remotes.get(peer_id,null)
 	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS or str(obj.get_meta("kind","")) in ["stone","block","tomato_plant"]:
+	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS or str(obj.get_meta("kind","")) in ["stone","block","tomato_plant","tomato_crop"]:
 		return
 	if not is_instance_valid(avatar) or avatar.global_position.distance_to(obj.global_position)>6.5:
 		return
