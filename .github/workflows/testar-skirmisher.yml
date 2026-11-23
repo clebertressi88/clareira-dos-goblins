@@ -1,0 +1,32 @@
+name: Validar laboratorio Goblin Skirmisher
+
+on:
+  push:
+    branches: [teste-goblin-skirmisher]
+    paths:
+      - 'Projeto-Godot/**'
+      - '.github/workflows/testar-skirmisher.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar-skirmisher:
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+      - name: Validar cena no Godot instalado
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $godot = 'C:\ProgramData\ClareiraGodot\4.7.2\Godot_v4.7.2-stable_win64_console.exe'
+          if (-not (Test-Path $godot)) { throw 'Godot 4.7.2 nao encontrado no runner' }
+          & $godot --headless --path Projeto-Godot --import
+          if ($LASTEXITCODE -ne 0) { throw 'Falha na importacao' }
+          & $godot --headless --path Projeto-Godot --script res://tests/test_goblin_skirmisher_scene.gd
+          if ($LASTEXITCODE -ne 0) { throw 'Teste do laboratorio Skirmisher falhou' }
