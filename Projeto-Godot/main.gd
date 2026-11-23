@@ -2043,8 +2043,16 @@ func make_ui() -> void:
 	panel.offset_right = 245
 	panel.offset_top = -190
 	panel.offset_bottom = 170
+	var panel_scroll := ScrollContainer.new()
+	panel_scroll.name = "PanelScroll"
+	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(panel_scroll)
 	menu = VBoxContainer.new()
-	panel.add_child(menu)
+	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel_scroll.add_child(menu)
+	get_viewport().size_changed.connect(func(): center_panel.call_deferred())
 	gameplay_overlays = [crosshair,hud,hint,bottom]
 	medieval_menu = MEDIEVAL_MENU.new()
 	layer.add_child(medieval_menu)
@@ -2199,13 +2207,30 @@ func clear_menu() -> void:
 		child.queue_free()
 
 func center_panel() -> void:
-	var minimum := panel.get_combined_minimum_size()
-	var width := maxf(490.,minimum.x)
-	var height := minimum.y
-	panel.offset_left = -width/2.
-	panel.offset_right = width/2.
-	panel.offset_top = -height/2.
-	panel.offset_bottom = height/2.
+	if not is_instance_valid(panel):
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var available := Vector2(maxf(320.0,viewport_size.x-24.0),maxf(240.0,viewport_size.y-24.0))
+	if inventory:
+		# Tamanho logico da interface completa; escala uniforme e rolagem interna.
+		var desired := Vector2(1380,790)
+		var fit := minf(1.0,minf(available.x/desired.x,available.y/desired.y))
+		panel.scale = Vector2.ONE*fit
+		panel.offset_left = -desired.x/2.0
+		panel.offset_right = desired.x/2.0
+		panel.offset_top = -desired.y/2.0
+		panel.offset_bottom = desired.y/2.0
+		panel.pivot_offset = desired/2.0
+	else:
+		var minimum := menu.get_combined_minimum_size()+Vector2(40,40)
+		var desired := Vector2(maxf(490.0,minimum.x),maxf(360.0,minimum.y))
+		var fit := minf(1.0,minf(available.x/desired.x,available.y/desired.y))
+		panel.scale = Vector2.ONE*fit
+		panel.offset_left = -desired.x/2.0
+		panel.offset_right = desired.x/2.0
+		panel.offset_top = -desired.y/2.0
+		panel.offset_bottom = desired.y/2.0
+		panel.pivot_offset = desired/2.0
 
 func label(text_value: String) -> void:
 	var l := Label.new()
@@ -2412,10 +2437,8 @@ func show_inventory() -> void:
 	menu.add_child(title)
 	# Tres paineis: personagem/equipamento, itens, e fabricacao.
 	# Largura ampliada para nao sobrepor grade e resultado do craft.
-	panel.offset_left = -690
-	panel.offset_right = 690
-	panel.offset_top = -395
-	panel.offset_bottom = 395
+	# A centralizacao responsiva cuida do tamanho final apos montar a interface.
+	center_panel.call_deferred()
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation",18)
 	menu.add_child(columns)
@@ -2441,6 +2464,8 @@ func show_inventory() -> void:
 	var portrait_view := SubViewport.new()
 	portrait_view.size = Vector2i(256,450)
 	portrait_view.transparent_bg = true
+	# Cena 3D isolada: nunca herdar terreno, ceu ou paisagem da partida.
+	portrait_view.own_world_3d = true
 	portrait_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	preview.add_child(portrait_view)
 	var portrait_stage := Node3D.new()
