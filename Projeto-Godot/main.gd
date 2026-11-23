@@ -859,6 +859,12 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 	parent.add_child(o)
 	o.position = pos
 	o.rotation.y = yaw
+	# Drops devem repousar sobre o terreno na posicao final, inclusive em
+	# encostas e ao restaurar partidas antigas ou sincronizar multiplayer.
+	if kind in ["meat","meat_wolf","meat_rabbit","hide","foot","wolf_tooth"]:
+		var floor_pos: Vector3 = o.global_position
+		floor_pos.y = ground(floor_pos.x,floor_pos.z) + 0.008
+		o.global_position = floor_pos
 	objects[id] = o
 	match kind:
 		"tree":
@@ -1031,11 +1037,12 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			collider(o,Vector3(.45,.35,.85),Vector3.UP*.17)
 		"meat","meat_wolf","meat_rabbit":
 			preload("res://raw_meat_model.gd").build(o,kind=="meat_rabbit")
-			collider(o,Vector3(.52,.22,.43),Vector3.UP*.11)
+			# Colisao maior que o corte novo, incluindo a parte do osso.
+			collider(o,Vector3(.85,.34,.48),Vector3.UP*.17)
 		"hide":
-			# Pele de coelho estendida no chao; antes usava a esfera generica.
-			preload("res://rabbit_pelt_model.gd").new().build(o)
-			collider(o,Vector3(1.15,.16,1.12),Vector3.UP*.08)
+			# Pele pequena e fina: cada vertice acompanha a altura do terreno.
+			preload("res://rabbit_pelt_model.gd").new().build(o,Callable(self,"ground"))
+			collider(o,Vector3(.65,.10,.62),Vector3.UP*.045)
 		_:
 			var item_colors := {"meat":Color("#a95842"),"hide":Color("#ad7c59"),"foot":Color("#eadcc1"),"spear":Color("#8e744d")}
 			ball(o,Vector3.UP*.14,Vector3(.42,.27,.33),kind,item_colors.get(kind,Color.WHITE))
