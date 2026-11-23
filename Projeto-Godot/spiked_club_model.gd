@@ -54,8 +54,12 @@ static func build(parent: Node3D) -> void:
 	var grain := _mat(Color("#a2764b"))
 	var dark := _mat(Color("#46291b"))
 	var cord := _mat(Color("#d5b77a"))
-	var fang := _mat(Color("#ebddbc"))
-	var fang_tip := _mat(Color("#f7e9c9"))
+	# Marfim fosco com raiz escurecida: distingue os dentes da casca do tronco.
+	var fang := _mat(Color("#ded0a9"))
+	fang.roughness = 0.68
+	var fang_tip := _mat(Color("#f5e9ce"))
+	fang_tip.roughness = 0.55
+	var fang_root := _mat(Color("#887257"))
 	# Cabo afunilado e tronco pesado, diferentes de uma espada.
 	_tube(parent,Vector3(0,-0.54,0),Vector3(0,0.08,0),0.051,bark,12)
 	_tube(parent,Vector3(0,0.07,0),Vector3(0,0.62,0),0.158,bark,12)
@@ -78,6 +82,8 @@ static func build(parent: Node3D) -> void:
 			var angle: float = TAU*(float(col)+float(row)*0.5)/6.0
 			var outward := Vector3(cos(angle),0.23,sin(angle)).normalized()
 			var base := Vector3(cos(angle)*0.151,y,sin(angle)*0.151)
+			# Encaixe da presa na madeira, sem espinhos brancos flutuantes.
+			_sphere(parent,base,Vector3.ONE*0.028,fang_root)
 			_fang(parent,base,outward,0.125 if row==1 else 0.105,fang)
 			_fang(parent,base+outward*0.055,outward,0.065,fang_tip)
 	# Duas ligaduras nos extremos do tronco e uma no punho.
