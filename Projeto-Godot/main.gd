@@ -5142,7 +5142,6 @@ func net_send_snapshot(snapshot: Dictionary) -> void:
 	begin()
 
 
-@rpc("any_peer","call_remote","reliable")
 func remote_can_interact(peer_id: int, pos: Vector3, max_distance: float) -> bool:
 	if net_role!="host" or peer_id<=1 or not multiplayer.get_peers().has(peer_id) or not pos.is_finite():
 		return false
@@ -5202,7 +5201,6 @@ func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
 		return
 	if not pos.is_finite() or not is_finite(yaw) or level<0 or level>BUILD_MAX_LEVEL:
 		return
-	var avatar: Node3D = remotes.get(peer_id,null)
 	if not remote_can_interact(peer_id,pos,12.0):
 		return
 	store_object(kind,pos,yaw,level)
