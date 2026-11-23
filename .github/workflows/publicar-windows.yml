@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   windows:
-    # Qualquer runner Windows proprio que tenha acesso a este repositorio.
-    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    # Runner hospedado pelo GitHub: nao depende do PC local nem da etiqueta clareira-goblins.
+    runs-on: windows-latest
     concurrency:
       group: publicar-clareira-windows
       cancel-in-progress: false
