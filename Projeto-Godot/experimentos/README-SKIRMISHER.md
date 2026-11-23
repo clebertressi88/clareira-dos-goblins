@@ -1,16 +1,21 @@
 # Laboratório Goblin Skirmisher (experimental)
 
-A comparação fica acessível pelo **Laboratório de Skin** atual, botão
-**Testar Goblin Skirmisher**. Esquerda = modelo atual; direita = pacote
-externo, caso os arquivos 3D tenham sido importados.
+Entrada: menu de laboratório do jogo > **Testar Goblin Skirmisher**.
 
-Movimentos disponíveis para inspeção: parado, andar, correr, atacar, receber
-dano e morrer, além de avançar/voltar animações, girar e usar zoom. As
-animações são escolhidas pelo nome; a ligação final do AnimationTree,
-root motion, equipamentos e física ainda não foi feita.
+Com o arquivo original `Character/GoblinSkirmisher.scn` instalado em
+`res://modelos/goblin_skirmisher/Character/`:
 
-Para instalar o pacote externo, siga `modelos/goblin_skirmisher/LEIA-ME.md`.
-Se o pacote estiver ausente, a tela exibe instruções e mantém o atual à
-esquerda para não quebrar o jogo.
+- Esquerda: modelo atual. Direita: Goblin Skirmisher verdadeiro (G4G).
+- Parado: `A000_Idle`; andar: `A-02_Walking`; correr: `A-01_Running`.
+- Atacar: `A219_Right_hand_Sword_Slash`; receber dano: `A178_Hit_Reaction`; morrer: `A008_Dead`.
+- Controles: animacao proxima/anterior, mostrar adaga, girar e zoom.
+- `WeaponGrip` fecha a mao direita quando a adaga estiver visivel.
 
-**Não há substituição do player nem dos NPCs neste estágio.**
+**Limites do pacote:** animacoes preservam o movimento de Hips. Este
+laboratorio serve para comparacao visual e nao substitui a logica de
+movimento, combate, redes ou root motion do jogo real.
+
+Teste automatizado `res://tests/test_goblin_skirmisher_asset.gd`
+verifica o modelo original, ossos e animacoes essenciais. A publicacao
+Windows deve ocorrer apenas apos o arquivo binario estar versionado e
+os testes do runner passarem.
