@@ -53,7 +53,7 @@ jobs:
             throw 'Asset Skirmisher .scn obrigatorio ausente na branch'
           }
           $godot = 'C:\ProgramData\ClareiraGodot\4.7.2\Godot_v4.7.2-stable_win64_console.exe'
-          foreach ($test in @('res://tests/test_goblin_skirmisher_asset.gd', 'res://tests/test_goblin_skirmisher_scene.gd')) {
+          foreach ($test in @('res://tests/test_goblin_skirmisher_asset.gd', 'res://tests/test_goblin_skirmisher_scene.gd', 'res://tests/test_goblin_npc_model.gd')) {
             $ErrorActionPreference = 'Continue'
             try {
               $output = (& $godot --headless --path Projeto-Godot --script $test 2>&1 | Out-String)
@@ -65,4 +65,5 @@ jobs:
             }
             if ($test -like '*skirmisher_asset*' -and -not $output.Contains('SKIRMISHER ASSET OK')) { throw "Modelo nao validado: $test" }
             if ($test -like '*skirmisher_scene*' -and -not $output.Contains('SKIRMISHER LAB OK')) { throw "Laboratorio nao validado: $test" }
+            if ($test -like '*goblin_npc_model*' -and -not $output.Contains('GOBLIN MODEL OK')) { throw "Jogo real e NPCs nao validados: $test" }
           }

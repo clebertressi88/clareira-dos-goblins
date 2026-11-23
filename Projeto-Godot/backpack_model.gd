@@ -79,7 +79,7 @@ func _ready() -> void:
 	_box(Vector3(0,.85,-.647),Vector3(.065,.12,.034),leather_light)
 	# Presilhas na parte superior e ombros.
 	for side in [-1.0,1.0]:
-		var x := side*.235
+		var x: float = float(side) * 0.235
 		_box(Vector3(x,1.38,-.26),Vector3(.083,.045,.20),flap)
 		_strap(Vector3(x,.76,-.10),Vector3(x,1.34,-.14),.071,leather_light)
 		# Bolso lateral arredondado e sua pequena tampa.

@@ -55,7 +55,7 @@ const WALL_SIZE := CELL * 3.0
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
-const NPC_RIG_SCRIPT := preload("res://npc_goblin.gd")
+const NPC_RIG_SCRIPT := preload("res://npc_goblin_skirmisher.gd")
 const GOBLIN_SKIN_TEST_SCENE: PackedScene = preload("res://experimentos/goblin_skin_teste.tscn")
 # O script independente cria malha com pesos, Skeleton3D e animacao articulada.
 const BUILD_TAG := "Árvores regenerativas · pisos e tetos · multiplayer LAN"
@@ -455,7 +455,7 @@ func make_player() -> void:
 	player_model.name = "Protagonista"
 	player.add_child(player_model)
 	player_model.rotation.y = PI
-	goblin_npc(player_model,Color("#895938"))
+	goblin_npc(player_model,Color("#895938"),"player")
 	apply_player_equipment()
 	# Modelo 3D medieval detalhado, substitui os blocos antigos da mochila.
 	backpack_visual = preload("res://backpack_model.gd").new()
@@ -765,7 +765,7 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	var visual := Node3D.new()
 	visual.name = "Visual"
 	npc.add_child(visual)
-	goblin_npc(visual,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
+	goblin_npc(visual,Color("#9b4b78") if kind=="Bruma" else Color("#866342"), "bruma" if kind=="Bruma" else "talo")
 	collider(npc,Vector3(.63,1.47,.55),Vector3.UP*.74)
 	objects[kind] = npc
 	villagers.append(npc)
@@ -1002,7 +1002,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			preload("res://starter_cabin.gd").build(self,o)
 		"Bruma","Talo":
 			o.collision_layer |= SOLID
-			goblin_npc(o,Color("#9b4b78") if kind=="Bruma" else Color("#866342"))
+			goblin_npc(o,Color("#9b4b78") if kind=="Bruma" else Color("#866342"), "bruma" if kind=="Bruma" else "talo")
 			collider(o,Vector3(.63,1.47,.55),Vector3.UP*.74)
 		"fire":
 			collider(o,Vector3(.77,.41,.77),Vector3.UP*.205)
@@ -1427,19 +1427,21 @@ func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) ->
 			if i%2==1:
 				pivot.position.y += maxf(0.,cos(phase+(PI if i%4==3 else 0.)))*.046*blend
 
-# Mantém toda a lógica do NPC (colisão, patrulha, interação e rede) independente da aparência.
-# O GLB fornecido não possui skeleton nem animações. Normaliza escala e chão
-# mesmo quando o recurso foi exportado com unidades muito grandes.
-func goblin_npc(o: Node3D, _garment: Color) -> void:
-	# A malha e a animacao ficam exclusivamente no script npc_goblin.gd.
+# Mantem IA, colisoes, inventario, multiplayer e saves independentes da aparencia.
+# Skirmisher: modelo nativo do Godot, 24 ossos e animacoes incluidas no asset.
+func goblin_npc(o: Node3D, _garment: Color, role: String = "player") -> void:
+	# Todas as entidades continuam com a mesma logica; apenas o modelo e seu
+	# controlador visual passam a usar os 24 ossos nativos do Skirmisher.
 	var controller: Node3D = NPC_RIG_SCRIPT.new()
 	controller.name = "GoblinRig"
 	o.add_child(controller)
+	controller.call("set_variant", role)
 	if not bool(controller.call("install")):
-		push_error("Falha ao instalar esqueleto do goblin NPC.")
+		push_error("Falha ao carregar modelo Skirmisher no jogo.")
 		controller.queue_free()
 		return
-	o.set_meta("modelo_goblin_npc",true)
+	o.set_meta("modelo_goblin_npc", true) # Compatibilidade dos metadados antigos.
+	o.set_meta("modelo_skirmisher", true)
 
 
 func animate_npc_model(visual: Node3D, velocity: Vector3, dt: float, grounded: bool) -> void:
@@ -1585,7 +1587,7 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 	visual.name = "Visual"
 	body.add_child(visual)
 	if kind=="guardian":
-		goblin_npc(visual,Color("#784d88"))
+		goblin_npc(visual,Color("#784d88"),"guardiao")
 		collider(body,Vector3(.8,1.5,.6),Vector3.UP*.75)
 		return body
 	var rabbit := kind=="rabbit"
@@ -2601,7 +2603,7 @@ func show_inventory() -> void:
 	portrait_view.add_child(portrait_stage)
 	var portrait_goblin := Node3D.new()
 	portrait_stage.add_child(portrait_goblin)
-	goblin_npc(portrait_goblin,Color("#895938"))
+	goblin_npc(portrait_goblin,Color("#895938"),"player")
 	var portrait_rig := portrait_goblin.get_node_or_null("GoblinRig")
 	if portrait_rig != null:
 		portrait_rig.call("set_equipment",sword_equipped,shield_equipped)
@@ -5465,7 +5467,7 @@ func net_create_avatar(peer_id: int) -> Node3D:
 	var visual := Node3D.new()
 	avatar.add_child(visual)
 	visual.rotation.y = PI
-	goblin_npc(visual,Color("#895938"))
+	goblin_npc(visual,Color("#895938"),"player")
 	var remote_rig := visual.get_node_or_null("GoblinRig")
 	if remote_rig != null:
 		remote_rig.call("set_equipment",false,false)
