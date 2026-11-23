@@ -70,7 +70,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 6 # Equipamento de espada e escudo sincronizado entre jogadores
-const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","tomato_plant"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -4627,7 +4627,7 @@ func net_request_remove(id: String) -> void:
 		return
 	var avatar: Node3D = remotes.get(peer_id,null)
 	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS or str(obj.get_meta("kind","")) in ["stone","block"]:
+	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS or str(obj.get_meta("kind","")) in ["stone","block","tomato_plant"]:
 		return
 	if not is_instance_valid(avatar) or avatar.global_position.distance_to(obj.global_position)>6.5:
 		return
