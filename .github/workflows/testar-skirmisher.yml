@@ -34,7 +34,7 @@ jobs:
             $godotExit = $LASTEXITCODE
           } finally { $ErrorActionPreference = 'Stop' }
           Write-Host $output
-          if ($godotExit -ne 0 -or $output -match '(?m)^\\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+          if ($godotExit -ne 0 -or $output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
             throw 'Falha na importacao: erros de script detectados'
           }
           $ErrorActionPreference = 'Continue'
@@ -43,7 +43,7 @@ jobs:
             $godotExit = $LASTEXITCODE
           } finally { $ErrorActionPreference = 'Stop' }
           Write-Host $output
-          if ($godotExit -ne 0 -or $output -match '(?m)^\\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+          if ($godotExit -ne 0 -or $output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
             throw 'Atualizador game_updater.gd falhou no parse'
           }
       - name: Validar esqueleto, animacoes e laboratorio
@@ -60,7 +60,7 @@ jobs:
               $code = $LASTEXITCODE
             } finally { $ErrorActionPreference = 'Stop' }
             Write-Host $output
-            if ($code -ne 0 -or $output -match '(?m)^\\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+            if ($code -ne 0 -or $output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
               throw "Teste falhou: $test"
             }
             if ($test -like '*skirmisher_asset*' -and -not $output.Contains('SKIRMISHER ASSET OK')) { throw "Modelo nao validado: $test" }
