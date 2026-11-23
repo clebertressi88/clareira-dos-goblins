@@ -995,18 +995,11 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			collider(o,Vector3(.78,.23,.33),Vector3.UP*.115)
 		"bench","bench2":
 			o.collision_layer |= SOLID
-			for x in [-.39,.39]:
-				for z in [-.25,.25]:
-					cylinder(o,Vector3(x,.38,z),.08,.76,"wood",Color("#855b36"))
-			if kind=="bench2":
-				# Bancada reforçada: quatro pernas de tronco e tampo único de pedra.
-				box(o,Vector3(0,.78,0),Vector3(1.04,.20,.77),"stone_counter",Color("#69706b"))
-				for segment in [-.36,.0,.36]:
-					box(o,Vector3(segment,.892,0),Vector3(.025,.018,.72),"stone_joint",Color("#454b46"))
-			else:
-				for i in range(3):
-					box(o,Vector3(0,.81,(i-1)*.23),Vector3(1.02,.14,.22),"plank",Color("#ac7749"))
-			collider(o,Vector3(1.04,.93,.80),Vector3.UP*.465)
+			var advanced_workbench := kind=="bench2"
+			preload("res://goblin_workbench_model.gd").build(o,advanced_workbench)
+			# A colisao cobre o tampo e o rack, sem bloquear area livre ao redor.
+			collider(o,Vector3(1.36,1.34,0.92) if advanced_workbench else Vector3(1.16,0.89,0.80),
+				Vector3.UP*(0.67 if advanced_workbench else 0.445))
 		"hut":
 			o.collision_layer |= SOLID
 			preload("res://starter_cabin.gd").build(self,o)
