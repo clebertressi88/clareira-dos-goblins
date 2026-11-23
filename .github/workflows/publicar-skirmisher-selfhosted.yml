@@ -1,0 +1,232 @@
+name: Publicar Skirmisher no runner Windows proprio (fallback)
+# Compila no runner Windows e envia diretamente para a Release.
+# Evita cota de actions/upload-artifact, que bloqueava publicacao.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publicar-skirmisher-selfhosted.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  statuses: write
+
+jobs:
+  windows:
+    # Execucao unica do laboratorio no runner Windows proprio.
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    concurrency:
+      group: publicar-clareira-skirmisher-selfhosted
+      cancel-in-progress: false
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Baixar codigo do jogo
+        uses: actions/checkout@v4
+
+      - name: Registrar inicio da compilacao
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -f state=pending -f context=clareira/windows-build -f description="Compilacao Windows iniciada" -f target_url="$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao registrar status inicial da compilacao.' }
+
+      - name: Diagnosticar ambiente da compilacao
+        run: |
+          Write-Host "Commit: $env:GITHUB_SHA"
+          Write-Host "Runner: $env:RUNNER_NAME ($env:RUNNER_OS / $env:RUNNER_ARCH)"
+          Write-Host "Windows: $([Environment]::OSVersion.VersionString)"
+          Write-Host "GitHub CLI:"
+          gh --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI indisponivel no runner.' }
+
+      - name: Preparar Godot 4.7.2 Windows e export templates
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '4.7.2'
+          $base = "https://github.com/godotengine/godot/releases/download/$version-stable"
+          $shared = "C:\ProgramData\ClareiraGodot\$version"
+          $sharedExe = Join-Path $shared "Godot_v$version-stable_win64_console.exe"
+          $sharedTemplates = Join-Path $shared 'templates'
+          $sharedRelease = Join-Path $sharedTemplates 'windows_release_x86_64.exe'
+          $templateDir = Join-Path $env:APPDATA "Godot/export_templates/$version.stable"
+          $templateExe = Join-Path $templateDir 'windows_release_x86_64.exe'
+          $toolsDir = Join-Path $env:RUNNER_TEMP 'clareira-godot'
+          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+          if ((Test-Path $sharedExe) -and (Test-Path $sharedRelease)) {
+            Write-Host "Utilizando Godot pre-instalado: $sharedExe"
+            $godotExe = $sharedExe
+            # Runners no mesmo PC podem compartilhar o perfil SYSTEM. Evita copiar ao mesmo tempo.
+            $mutex = New-Object System.Threading.Mutex($false, 'Global\ClareiraGodot472Templates')
+            $locked = $false
+            try {
+              $locked = $mutex.WaitOne(120000)
+              if (-not $locked) { throw 'Tempo limite aguardando preparacao dos templates compartilhados.' }
+              if (-not (Test-Path $templateExe)) {
+                New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+                Copy-Item (Join-Path $sharedTemplates 'windows_*_x86_64.exe') -Destination $templateDir -Force
+              }
+            } finally {
+              if ($locked) { $mutex.ReleaseMutex() }
+              $mutex.Dispose()
+            }
+          } else {
+            Write-Host 'Cache compartilhado ausente. Usando preparacao tradicional.'
+            $godotExe = Join-Path $toolsDir "Godot_v$version-stable_win64_console.exe"
+            if (-not (Test-Path $godotExe)) {
+              $archive = Join-Path $toolsDir 'godot.zip'
+              Invoke-WebRequest -Uri "$base/Godot_v$version-stable_win64.exe.zip" -OutFile $archive
+              Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
+            }
+            if (-not (Test-Path $godotExe)) {
+              $godotExe = (Get-ChildItem $toolsDir -Filter '*console*.exe' -File -Recurse | Select-Object -First 1 -ExpandProperty FullName)
+            }
+            if (-not (Test-Path $templateExe)) {
+              $templateZip = Join-Path $toolsDir 'templates.zip'
+              Invoke-WebRequest -Uri "$base/Godot_v$version-stable_export_templates.tpz" -OutFile $templateZip
+              $extractDir = Join-Path $toolsDir 'template-files'
+              Expand-Archive -Path $templateZip -DestinationPath $extractDir -Force
+              New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+              $files = Get-ChildItem $extractDir -Filter 'windows_*_x86_64.exe' -File -Recurse
+              foreach ($file in $files) { Copy-Item $file.FullName (Join-Path $templateDir $file.Name) -Force }
+            }
+          }
+          if (-not $godotExe -or -not (Test-Path $godotExe)) { throw 'Executavel do Godot nao encontrado.' }
+          if (-not (Test-Path $templateExe)) { throw 'Template Windows release nao encontrado.' }
+          "GODOT_EXE=$godotExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $godotExe --version
+          if ($LASTEXITCODE -ne 0) { throw 'Godot nao iniciou.' }
+
+      - name: Validar script de atualizacao separadamente
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & $env:GODOT_EXE --headless --path Projeto-Godot --check-only --script res://game_updater.gd 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-updater-parse.log')
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) { throw 'Erro no script isolado do atualizador.' }
+
+      - name: Importar recursos e validar scripts
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Windows PowerShell 5.1 transforma stderr de programas nativos em NativeCommandError
+          # quando ErrorActionPreference=Stop, inclusive avisos normais de importacao GLB.
+          $ErrorActionPreference = 'Continue'
+          try {
+            & $env:GODOT_EXE --headless --path Projeto-Godot --import 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-import.log')
+            $godotExit = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
+          if ($godotExit -ne 0) { throw 'Falha na importacao do Godot.' }
+          $log = Get-Content (Join-Path $env:RUNNER_TEMP 'clareira-import.log') -Raw
+          if ($log -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Erro de script na importacao.' }
+
+      - name: Testar modelos do machado e goblins
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'Projeto-Godot/modelos/goblin_npc.glb')) { throw 'GLB dos goblins ausente.' }
+          $tests = @(
+            @{path='res://tests/test_wood_axe_model.gd'; message='WOOD AXE MODEL OK'},
+            @{path='res://tests/test_wood_shovel_model.gd'; message='WOOD SHOVEL MODEL OK'},
+            @{path='res://tests/test_raw_meat_model.gd'; message='RAW MEAT MODEL OK'},
+            @{path='res://tests/test_rabbit_pelt_ground.gd'; message='RABBIT PELT GROUND OK'},
+            @{path='res://tests/test_spiked_club_model.gd'; message='SPIKED CLUB MODEL OK'},
+            @{path='res://tests/test_goblin_npc_model.gd'; message='GOBLIN MODEL OK'},
+            @{path='res://tests/test_goblin_skin_v2.gd'; message='SKIN V2 OK'},
+            @{path='res://tests/test_goblin_v3.gd'; message='GOBLIN V3 OK'},
+            @{path='res://tests/test_goblin_v4.gd'; message='GOBLIN V4 OK'},
+            @{path='res://tests/test_medieval_menu.gd'; message='MEDIEVAL MENU OK'},
+            @{path='res://tests/test_lan_inventory.gd'; message='LAN INVENTORY OK'},
+            @{path='res://tests/test_multiplayer_distant_chunks.gd'; message='MULTIPLAYER DISTANT CHUNKS OK'},
+            @{path='res://tests/test_goblin_skirmisher_asset.gd'; message='SKIRMISHER ASSET OK'},
+            @{path='res://tests/test_goblin_skirmisher_scene.gd'; message='SKIRMISHER LAB OK'},
+            @{path='res://tests/test_game_updater.gd'; message='GAME UPDATE OK'}
+          )
+          foreach ($test in $tests) {
+            Write-Host "Executando $($test.path)"
+            $ErrorActionPreference = 'Continue'
+            try {
+              $output = & $env:GODOT_EXE --headless --path Projeto-Godot --script $test.path 2>&1 | Out-String
+              $godotExit = $LASTEXITCODE
+            } finally { $ErrorActionPreference = 'Stop' }
+            Write-Host $output
+            if ($godotExit -ne 0 -or -not $output.Contains($test.message)) {
+              throw "Teste falhou: $($test.path)"
+            }
+          }
+
+      - name: Exportar EXE Windows e gerar ZIP
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          $exe = Join-Path $dist 'Clareira-dos-Goblins.exe'
+          $ErrorActionPreference = 'Continue'
+          try {
+            $output = & $env:GODOT_EXE --headless --path Projeto-Godot --export-release 'Windows Desktop' $exe 2>&1 | Out-String
+            $godotExit = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
+          Write-Host $output
+          if ($godotExit -ne 0 -or -not (Test-Path $exe)) { throw 'Exportacao Windows falhou.' }
+          if ((Get-Item $exe).Length -le 0) { throw 'EXE vazio.' }
+          if ($output -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Erros de script na exportacao.' }
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  Clareira-dos-Goblins.exe" | Set-Content (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii
+          $env:GITHUB_SHA | Set-Content (Join-Path $dist 'versao-github.txt') -Encoding ascii
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'Clareira-dos-Goblins-Windows.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path $exe,(Join-Path $dist 'versao-github.txt'),(Join-Path $dist 'SHA256SUMS.txt') -DestinationPath $zip -CompressionLevel Optimal
+          if (-not (Test-Path $zip)) { throw 'ZIP da release nao gerado.' }
+
+      - name: Publicar ZIP diretamente na Release (sem artefatos do Actions)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Uma compilacao antiga nunca deve sobrescrever a versao mais recente do jogo.
+          $head = (gh api "repos/$env:GITHUB_REPOSITORY/commits/main" | ConvertFrom-Json).sha
+          if ($LASTEXITCODE -ne 0 -or -not $head) { throw 'Falha ao verificar commit atual da main.' }
+          if ($head -ne $env:GITHUB_SHA) {
+            Write-Host "Build antigo ($env:GITHUB_SHA). Main atual: $head. Publicacao ignorada."
+            exit 0
+          }
+          gh --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI (gh) nao esta instalado no runner Windows.' }
+          gh release view jogo-windows *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create jogo-windows --title 'Clareira dos Goblins - Windows' --notes 'Versao compilada automaticamente da branch main. Baixe o ZIP e extraia antes de jogar.' --latest
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar Release.' }
+          }
+          $asset = 'Clareira-dos-Goblins-Windows.zip'
+          $zip = Join-Path $env:GITHUB_WORKSPACE $asset
+          if (-not (Test-Path $zip) -or (Get-Item $zip).Length -le 0) { throw 'ZIP ausente ou vazio antes da publicacao.' }
+          Write-Host "Publicando $asset ($((Get-Item $zip).Length) bytes)..."
+          gh release upload jogo-windows $zip --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falha no upload da Release.' }
+          gh release edit jogo-windows --draft=false --notes "Build Windows gerado do commit $env:GITHUB_SHA. Baixe o ZIP e extraia antes de jogar."
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar a Release.' }
+          # Nao reportar sucesso se o atualizador nao conseguir localizar o arquivo.
+          $confirmed = $false
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            $assets = @(gh release view jogo-windows --json assets --jq '.assets[].name')
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao consultar anexos da Release.' }
+            Write-Host "Tentativa $attempt - assets publicados: $($assets -join ', ')"
+            if ($assets -contains $asset) { $confirmed = $true; break }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $confirmed) {
+            throw "Publicacao incompleta: a Release jogo-windows nao contem $asset. O atualizador nao encontrara o ZIP."
+          }
+          Write-Host "Release verificada: $asset disponivel para o atualizador."
+
+      - name: Registrar resultado final do build
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RESULT: ${{ job.status }}
+        run: |
+          $state = if ($env:BUILD_RESULT -eq 'success') { 'success' } elseif ($env:BUILD_RESULT -eq 'cancelled') { 'error' } else { 'failure' }
+          $description = if ($state -eq 'success') { 'Windows EXE e ZIP publicados na Release' } else { "Workflow Windows terminou: $env:BUILD_RESULT" }
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -f state=$state -f context=clareira/windows-build -f description="$description" -f target_url="$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao registrar resultado do build.' }
