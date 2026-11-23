@@ -11,13 +11,13 @@ var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado p
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","wood_floor":"Piso / teto de madeira"}
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_floor":"Piso / teto de madeira"}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[1,-1,-1,-1,6,23,-1,23,6],"wood_floor":[7,7,7,7,6,7,7,7,7]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
-const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70}
+const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70,24:110}
 var tool_durability: Dictionary = {} # Item -> durabilidade individual de cada unidade
 const VINE := 11
 const ROPE := 12
@@ -33,6 +33,8 @@ const BENCH2_ITEM := 19
 const SHOVEL_ITEM := 20
 const SAPLING_ITEM := 21
 const FLOOR_ITEM := 22
+const WOLF_TOOTH := 23
+const SPIKED_CLUB := 24
 const BUILD_MAX_LEVEL := 3
 const STARTER_CABIN_ID := "starter-cabin"
 const STARTER_CABIN_CENTER := Vector2(0.0,-15.0)
@@ -94,11 +96,12 @@ var axe: Node3D
 var wood_axe_head: Node3D
 var stone_axe_head: Node3D
 var shovel_head: Node3D
+var spiked_club_head: Node3D
 var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -462,6 +465,11 @@ func make_player() -> void:
 	axe.add_child(shovel_head)
 	preload("res://wood_shovel_model.gd").build(shovel_head)
 	shovel_head.hide()
+	spiked_club_head = Node3D.new()
+	spiked_club_head.name = "PorreteEspinhos"
+	axe.add_child(spiked_club_head)
+	preload("res://spiked_club_model.gd").build(spiked_club_head)
+	spiked_club_head.hide()
 	stone_axe_sprite = Sprite3D.new()
 	stone_axe_sprite.name = "MachadoPedraAprovado"
 	stone_axe_sprite.texture = preload("res://icones/machado_pedra_equipado.png")
@@ -1003,6 +1011,22 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 				cylinder(tool,Vector3.ZERO,.035,.74,"wood",Color("#855b36"))
 				make_stone_axe_head(tool)
 			collider(o,Vector3(.4,.22,.76),Vector3.UP*.11)
+		"wolf_tooth":
+			var fang_mesh := CylinderMesh.new()
+			fang_mesh.top_radius = 0.0
+			fang_mesh.bottom_radius = 0.085
+			fang_mesh.height = 0.32
+			fang_mesh.radial_segments = 8
+			var fang := mesh_part(o,fang_mesh,Vector3(0,0.16,0),Vector3.ONE,material("wolf_tooth_ivory",Color("#e9dcc2")))
+			fang.rotation.z = 0.45
+			collider(o,Vector3(.32,.32,.28),Vector3.UP*.16)
+		"spiked_club":
+			var club := Node3D.new()
+			o.add_child(club)
+			club.position = Vector3(0,.17,0)
+			club.rotation.z = PI*.5
+			preload("res://spiked_club_model.gd").build(club)
+			collider(o,Vector3(.45,.35,.85),Vector3.UP*.17)
 		"meat","meat_wolf","meat_rabbit":
 			preload("res://raw_meat_model.gd").build(o,kind=="meat_rabbit")
 			collider(o,Vector3(.52,.22,.43),Vector3.UP*.11)
@@ -2671,7 +2695,7 @@ func craft_status(recipe: String) -> String:
 		return "Aproxime-se da bancada para fabricar os itens."
 	match craft_mode:
 		"station":
-			return "Lanças, machados, pá, paredes e piso/teto (8 tábuas + 1 tronco)."
+			return "Lanças, machados, pá, porrete de espinhos, paredes e piso/teto."
 		_:
 			var kinds: Array = []
 			for cell in craft_cells:
@@ -2830,7 +2854,7 @@ func craft_basic() -> void:
 			notice("Aproxime-se da bancada para fabricar o item.")
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"spiked_club":{1:1,6:2,WOLF_TOOTH:2},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
 	}[kind]
 	for index: int in costs:
 		stock[index] -= costs[index]
@@ -3362,12 +3386,13 @@ func _physics_process(dt: float) -> void:
 	spear.visible = not third_person and held in [0,8]
 	if spear.visible:
 		spear_tip.material_override = materials["rock"] if held==0 else material("wood",Color("#855b36"))
-	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM]
+	axe.visible = not third_person and held in [WOOD_AXE,STONE_AXE,SHOVEL_ITEM,SPIKED_CLUB]
 	wood_axe_head.visible = held==WOOD_AXE
 	# Machado de pedra aprovado: usar a arte dedicada, e nao a malha
 	# volumosa de rocha que escondia o formato correto na primeira pessoa.
 	stone_axe_head.visible = false
 	shovel_head.visible = axe.visible and held==SHOVEL_ITEM
+	spiked_club_head.visible = axe.visible and held==SPIKED_CLUB
 	stone_axe_sprite.visible = axe.visible and held==STONE_AXE
 	# O sprite do machado de pedra ja inclui cabo; somente a pa usa o cabo 3D compartilhado.
 	axe.get_node("CaboMachadoMadeira").visible = false
@@ -3683,16 +3708,16 @@ func primary() -> void:
 		notice("Abrigo inicial removido deste mundo." if kind=="hut" else "Estrutura recuperada para o inventário.")
 		return
 	if o.has_meta("hp"):
-		if bar_items[selected] not in [0,8,WOOD_AXE,STONE_AXE]:
+		if bar_items[selected] not in [0,8,WOOD_AXE,STONE_AXE,SPIKED_CLUB]:
 			notice("Equipe uma lança ou machado para atacar.")
 			return
 		if net_role=="client":
 			if net_world_ready:
-				var damage: int = 2 if held==STONE_AXE else 1
+				var damage: int = 3 if held==SPIKED_CLUB else 2 if held==STONE_AXE else 1
 				use_tool(held)
 				net_request_hit_mob.rpc_id(1,str(o.get_meta("id","")),damage)
 			return
-		var hp := maxi(0, int(o.get_meta("hp"))-(2 if held==STONE_AXE else 1))
+		var hp := maxi(0, int(o.get_meta("hp"))-(3 if held==SPIKED_CLUB else 2 if held==STONE_AXE else 1))
 		use_tool(held)
 		o.set_meta("hp",hp)
 		impact(hit["position"],hit["normal"],false)
@@ -3707,6 +3732,8 @@ func primary() -> void:
 				notice("Você conquistou o Vale da Névoa.")
 			else:
 				store_object("meat_rabbit" if kind=="rabbit" else "meat_wolf",pos)
+				if kind=="wolf" and randf()<0.50:
+					store_object("wolf_tooth",pos+Vector3(.36,0,0))
 				if kind=="rabbit":
 					store_object("hide",pos+Vector3(.41,0,0))
 					if randf()<.05:
@@ -4403,7 +4430,7 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 	if elapsed-last<.35:
 		return
 	target.set_meta("last_hit_"+str(peer_id),elapsed)
-	var hp := maxi(0,int(target.get_meta("hp",1))-clampi(damage,1,2))
+	var hp := maxi(0,int(target.get_meta("hp",1))-clampi(damage,1,3))
 	target.set_meta("hp",hp)
 	if hp<=0:
 		var p := target.global_position
@@ -4413,6 +4440,8 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 			won = true
 		else:
 			store_object("meat_rabbit" if kind=="rabbit" else "meat_wolf",p)
+			if kind=="wolf" and randf()<0.50:
+				store_object("wolf_tooth",p+Vector3(.36,0,0))
 			if kind=="rabbit":
 				store_object("hide",p+Vector3(.41,0,0))
 	net_sync_entities.rpc(net_capture_entities())
