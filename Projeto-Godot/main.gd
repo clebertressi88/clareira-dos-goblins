@@ -3974,6 +3974,31 @@ func primary() -> void:
 		return
 	var o: Node3D = hit["collider"]
 	var kind: String = o.get_meta("kind","")
+	if held==TOMATO_SEED_ITEM and stock[TOMATO_SEED_ITEM]>0:
+		if kind!="" or (hit["normal"] as Vector3).y<0.70:
+			notice("Plante sementes em terra livre.")
+			return
+		var spot: Vector3 = hit["position"]
+		spot.y = ground(spot.x,spot.z)
+		if TERRAIN.is_river(spot.x,spot.z) or player.global_position.distance_to(spot)>6.0:
+			notice("Procure terra seca perto de voce.")
+			return
+		for obj in objects.values():
+			if is_instance_valid(obj) and str(obj.get_meta("kind","")) in ["tomato_crop","tomato_plant","tree","stump"] and obj.global_position.distance_to(spot)<1.15:
+				notice("Ja existe vegetacao neste local.")
+				return
+		if net_role=="client":
+			if not net_world_ready:
+				notice("Aguarde a sincronizacao do mapa.")
+				return
+			net_request_plant_tomato.rpc_id(1,spot)
+		else:
+			plant_tomato_at(spot)
+		stock[TOMATO_SEED_ITEM] -= 1
+		sync_hotbar()
+		save_game()
+		notice("Semente plantada: tomates em 5 minutos.")
+		return
 	if held==SAPLING_ITEM and stock[SAPLING_ITEM]>0:
 		if kind!="" or (hit["normal"] as Vector3).y < .60:
 			notice("Plante a muda sobre um terreno livre.")
@@ -4264,7 +4289,7 @@ func secondary() -> void:
 		if kind=="tree_vine":
 			harvest_tree_vine(o)
 			return
-		if kind=="tomato_plant":
+		if kind in ["tomato_plant","tomato_crop"]:
 			harvest_tomatoes(o)
 			return
 		if kind in ["Bruma","Talo"]:
@@ -4329,6 +4354,66 @@ func eat_tomato() -> void:
 		sync_hotbar()
 		save_game()
 		notice("Tomate consumido: +%d de vida." % TOMATO_HEAL)
+
+func update_tomato_crop(crop: Node3D) -> void:
+	if not is_instance_valid(crop):
+		return
+	var visual := crop.get_node_or_null("Horta") as Node3D
+	if visual==null:
+		return
+	var id := str(crop.get_meta("id",""))
+	var planted := float(tomato_crop_times.get(id,Time.get_unix_time_from_system()))
+	var age := maxf(0.0,Time.get_unix_time_from_system()-planted)
+	var progress := clampf(age/TOMATO_GROW_SECONDS,0.0,1.0)
+	visual.scale = Vector3.ONE*lerpf(0.18,1.0,progress)
+	crop.set_meta("ready",progress>=1.0)
+
+func update_all_tomato_crops() -> void:
+	for id in tomato_crop_times.keys():
+		if objects.has(id):
+			update_tomato_crop(objects[id])
+
+func plant_tomato_at(pos: Vector3) -> void:
+	if net_role=="client":
+		return
+	store_object("tomato_crop",pos)
+	for entry in placed:
+		if str(entry.get("kind",""))!="tomato_crop":
+			continue
+		var p: Array = entry["p"]
+		if Vector3(float(p[0]),float(p[1]),float(p[2])).distance_to(pos)<0.01:
+			var id := str(entry["id"])
+			if not tomato_crop_times.has(id):
+				tomato_crop_times[id] = Time.get_unix_time_from_system()
+				if objects.has(id):
+					update_tomato_crop(objects[id])
+				if net_role=="host":
+					net_tomato_crop_time.rpc(id,float(tomato_crop_times[id]))
+				break
+	save_game()
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_plant_tomato(pos: Vector3) -> void:
+	if net_role!="host" or not pos.is_finite():
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	var avatar: Node3D = remotes.get(peer,null)
+	if not is_instance_valid(avatar) or avatar.global_position.distance_to(pos)>6.0:
+		return
+	if TERRAIN.is_river(pos.x,pos.z) or absf(ground(pos.x,pos.z)-pos.y)>0.3:
+		return
+	for obj in objects.values():
+		if is_instance_valid(obj) and str(obj.get_meta("kind","")) in ["tomato_crop","tomato_plant","tree","stump"] and obj.global_position.distance_to(pos)<1.15:
+			return
+	plant_tomato_at(pos)
+
+@rpc("authority","call_remote","reliable")
+func net_tomato_crop_time(id: String, planted: float) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	tomato_crop_times[id] = planted
+	if objects.has(id):
+		update_tomato_crop(objects[id])
 
 func harvest_tomatoes(plant: Node3D) -> void:
 	var id := str(plant.get_meta("id",""))
