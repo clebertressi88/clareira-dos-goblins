@@ -8,6 +8,22 @@ static func _mat(color: Color) -> StandardMaterial3D:
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
+static func _leaf_texture() -> ImageTexture:
+	# Padrao de verde irregular + nervuras claras, gerado sem arquivo externo.
+	var img := Image.create(64,64,false,Image.FORMAT_RGBA8)
+	for y in range(64):
+		for x in range(64):
+			var u := float(x)/63.0
+			var v := float(y)/63.0
+			var shade := 0.84+0.12*sin(u*38.0+v*13.0)*sin(v*31.0)
+			var vein_distance := abs(u-0.5)
+			if vein_distance<0.035:
+				shade += 0.17
+			elif abs(v-(0.16+abs(u-0.5)*0.92))<0.021 or abs(v-(0.84-abs(u-0.5)*0.92))<0.021:
+				shade += 0.10
+			img.set_pixel(x,y,Color(0.47*shade,0.69*shade,0.37*shade,1.0))
+	return ImageTexture.create_from_image(img)
+
 static func _stem(parent: Node3D, a: Vector3, b: Vector3, radius: float, mat: Material) -> void:
 	var delta := b-a
 	var tube := CylinderMesh.new()
@@ -29,6 +45,9 @@ static func build(parent: Node3D, seed: int) -> void:
 	var stem_light := _mat(Color("#718d3b"))
 	var leaf := _mat(Color("#477b39"))
 	var leaf_light := _mat(Color("#78a54b"))
+	var leaf_texture := _leaf_texture()
+	leaf.albedo_texture = leaf_texture
+	leaf_light.albedo_texture = leaf_texture
 	var vein := _mat(Color("#a2bd63"))
 	var last := Vector3.ZERO
 	var length := rng.randf_range(0.95,1.48)
