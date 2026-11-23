@@ -610,9 +610,13 @@ func load_chunks() -> void:
 			if not centers.has(remote_center):
 				centers.append(remote_center)
 	var desired: Dictionary = {}
-	for center in centers:
-		for z in range(center.y-2,center.y+3):
-			for x in range(center.x-2,center.x+3):
+	for center_index in range(centers.size()):
+		var center: Vector2i = centers[center_index]
+		# O host conserva cinco por cinco ao redor de si; para cada visitante,
+		# tres por tres bastam para validar acoes sem renderizar o mundo inteiro.
+		var radius := 2 if center_index==0 else 1
+		for z in range(center.y-radius,center.y+radius+1):
+			for x in range(center.x-radius,center.x+radius+1):
 				desired[Vector2i(x,z)] = true
 	for key: Vector2i in chunks.keys():
 		if desired.has(key):
