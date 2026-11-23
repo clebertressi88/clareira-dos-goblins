@@ -16,7 +16,7 @@ static func _leaf_texture() -> ImageTexture:
 			var u := float(x)/63.0
 			var v := float(y)/63.0
 			var shade: float = 0.84+0.12*sin(u*38.0+v*13.0)*sin(v*31.0)
-			var vein_distance := abs(u-0.5)
+			var vein_distance: float = absf(u-0.5)
 			if vein_distance<0.035:
 				shade += 0.17
 			elif abs(v-(0.16+abs(u-0.5)*0.92))<0.021 or abs(v-(0.84-abs(u-0.5)*0.92))<0.021:
