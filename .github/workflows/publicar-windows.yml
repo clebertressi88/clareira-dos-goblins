@@ -28,6 +28,15 @@ jobs:
       - name: Baixar codigo do jogo
         uses: actions/checkout@v4
 
+      - name: Diagnosticar ambiente da compilacao
+        run: |
+          Write-Host "Commit: $env:GITHUB_SHA"
+          Write-Host "Runner: $env:RUNNER_NAME ($env:RUNNER_OS / $env:RUNNER_ARCH)"
+          Write-Host "Windows: $([Environment]::OSVersion.VersionString)"
+          Write-Host "GitHub CLI:"
+          gh --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI indisponivel no runner.' }
+
       - name: Preparar Godot 4.7.2 Windows e export templates
         run: |
           $ErrorActionPreference = 'Stop'
