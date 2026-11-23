@@ -107,6 +107,7 @@ jobs:
             @{path='res://tests/test_wood_axe_model.gd'; message='WOOD AXE MODEL OK'},
             @{path='res://tests/test_wood_shovel_model.gd'; message='WOOD SHOVEL MODEL OK'},
             @{path='res://tests/test_raw_meat_model.gd'; message='RAW MEAT MODEL OK'},
+            @{path='res://tests/test_rabbit_pelt_ground.gd'; message='RABBIT PELT GROUND OK'},
             @{path='res://tests/test_spiked_club_model.gd'; message='SPIKED CLUB MODEL OK'},
             @{path='res://tests/test_goblin_npc_model.gd'; message='GOBLIN MODEL OK'},
             @{path='res://tests/test_goblin_skin_v2.gd'; message='SKIN V2 OK'},
