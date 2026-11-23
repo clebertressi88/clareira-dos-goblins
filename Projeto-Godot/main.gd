@@ -2329,7 +2329,7 @@ func center_panel() -> void:
 	var available := Vector2(maxf(320.0,viewport_size.x-24.0),maxf(240.0,viewport_size.y-24.0))
 	if inventory:
 		# Tamanho logico da interface completa; escala uniforme e rolagem interna.
-		var desired := Vector2(1380,790)
+		var desired := Vector2(1290,710)
 		var fit := minf(1.0,minf(available.x/desired.x,available.y/desired.y))
 		panel.scale = Vector2.ONE*fit
 		panel.offset_left = -desired.x/2.0
@@ -2572,11 +2572,11 @@ func show_inventory() -> void:
 	# A centralizacao responsiva cuida do tamanho final apos montar a interface.
 	center_panel.call_deferred()
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation",18)
+	columns.add_theme_constant_override("separation",10)
 	menu.add_child(columns)
 	columns.alignment = BoxContainer.ALIGNMENT_CENTER
 	var equipment_side := VBoxContainer.new()
-	equipment_side.custom_minimum_size = Vector2(330,450)
+	equipment_side.custom_minimum_size = Vector2(350,390)
 	columns.add_child(equipment_side)
 	var equipment_title := Label.new()
 	equipment_title.text = "Equipamento do personagem"
@@ -2589,7 +2589,7 @@ func show_inventory() -> void:
 	var left_slots := VBoxContainer.new()
 	equipment_row.add_child(left_slots)
 	var preview := SubViewportContainer.new()
-	preview.custom_minimum_size = Vector2(192,360)
+	preview.custom_minimum_size = Vector2(146,285)
 	preview.stretch = true
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	equipment_row.add_child(preview)
@@ -2621,7 +2621,7 @@ func show_inventory() -> void:
 	equipment_row.add_child(right_slots)
 	for kind in ["Capacete","Blusa","Calça","Bota","Costas"]:
 		var equipment_slot := Button.new()
-		equipment_slot.custom_minimum_size = Vector2(82,65)
+		equipment_slot.custom_minimum_size = Vector2(75,52)
 		equipment_slot.text = kind
 		equipment_slot.tooltip_text = "Espaço reservado para " + kind.to_lower()
 		if kind=="Costas":
@@ -2644,14 +2644,14 @@ func show_inventory() -> void:
 		bag_caption.add_theme_font_size_override("font_size",13)
 		left_slots.add_child(bag_caption)
 		var bag_grid := GridContainer.new()
-		bag_grid.columns = 2
+		bag_grid.columns = 3
 		bag_grid.add_theme_constant_override("h_separation",2)
 		bag_grid.add_theme_constant_override("v_separation",2)
 		left_slots.add_child(bag_grid)
 		for bag_index in range(BACKPACK_SIZE):
 			var bag_entry: Vector2i = backpack_slots[bag_index]
 			var bag_button := Button.new()
-			bag_button.custom_minimum_size = Vector2(46,43)
+			bag_button.custom_minimum_size = Vector2(38,43)
 			bag_button.text = "×%d" % bag_entry.y if bag_entry.y>0 else ""
 			bag_button.tooltip_text = ITEMS[bag_entry.x] if bag_entry.x>=0 else "Arraste um item para guardar"
 			if bag_entry.x>=0:
@@ -2663,10 +2663,10 @@ func show_inventory() -> void:
 			style_craft_button(bag_button)
 			bag_grid.add_child(bag_button)
 	var inventory_side := VBoxContainer.new()
-	inventory_side.custom_minimum_size = Vector2(380,450)
+	inventory_side.custom_minimum_size = Vector2(360,390)
 	columns.add_child(inventory_side)
 	var inventory_grid := GridContainer.new()
-	inventory_grid.columns = 4
+	inventory_grid.columns = 5
 	var caption := Label.new()
 	caption.text = "Inventário"
 	caption.add_theme_font_size_override("font_size",20)
@@ -2689,7 +2689,7 @@ func show_inventory() -> void:
 	for slot_index in range(inventory_slots.size()):
 		var kind: int = inventory_slots[slot_index]
 		var item := Button.new()
-		item.custom_minimum_size = Vector2(88,55)
+		item.custom_minimum_size = Vector2(66,48)
 		item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		item.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		item.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
@@ -2717,7 +2717,7 @@ func show_inventory() -> void:
 		style_craft_button(item)
 		inventory_grid.add_child(item)
 	var crafting_panel := VBoxContainer.new()
-	crafting_panel.custom_minimum_size = Vector2(395,450)
+	crafting_panel.custom_minimum_size = Vector2(400,390)
 	columns.add_child(crafting_panel)
 	var craft_caption := Label.new()
 	craft_caption.text = "Fabricação"
@@ -2725,7 +2725,7 @@ func show_inventory() -> void:
 	craft_caption.modulate = Color("#ffe29c")
 	crafting_panel.add_child(craft_caption)
 	var craft_side := HBoxContainer.new()
-	craft_side.custom_minimum_size = Vector2(380,155)
+	craft_side.custom_minimum_size = Vector2(390,155)
 	craft_side.add_theme_constant_override("separation",18)
 	craft_side.alignment = BoxContainer.ALIGNMENT_CENTER
 	crafting_panel.add_child(craft_side)
@@ -2772,10 +2772,10 @@ func show_inventory() -> void:
 	var explanation := Label.new()
 	explanation.text = craft_status(recipe)
 	explanation.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu.add_child(explanation)
+	crafting_panel.add_child(explanation)
 	var recipes := GridContainer.new()
 	recipes.columns = 4
-	menu.add_child(recipes)
+	crafting_panel.add_child(recipes)
 	var names: Array = ["plank","fire","bench","rope"]
 	if craft_mode=="station":
 		for station_recipe: String in STATION_PATTERNS.keys():
@@ -2785,7 +2785,7 @@ func show_inventory() -> void:
 		var recipe_button := Button.new()
 		# As receitas mostram a imagem do item, sem texto ocupando o botao.
 		# Icones maiores que os do inventario (27 px), sem ampliar o container.
-		recipe_button.custom_minimum_size = Vector2(140,48)
+		recipe_button.custom_minimum_size = Vector2(91,43)
 		recipe_button.text = ""
 		recipe_button.tooltip_text = "Preparar " + CRAFT_OUTPUT[kind] + (" · exige bancada nível 2" if kind in LEVEL_2_RECIPES else "")
 		var recipe_index := ITEM_KINDS.find(kind)
@@ -2805,14 +2805,14 @@ func show_inventory() -> void:
 	recipes.add_child(clear_button)
 	menu.add_child(HSeparator.new())
 	var hotbar_title := Label.new()
-	hotbar_title.text = "Atalhos 1–9 · arraste para reorganizar ou selecione e clique"
+	hotbar_title.text = "Atalhos 1–9 · arraste ou clique para organizar"
 	menu.add_child(hotbar_title)
 	var shortcut_row := HBoxContainer.new()
 	shortcut_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	menu.add_child(shortcut_row)
 	for slot_index in range(HOTBAR_SIZE):
 		var shortcut := Button.new()
-		shortcut.custom_minimum_size = Vector2(58,43)
+		shortcut.custom_minimum_size = Vector2(53,39)
 		shortcut.text = str(slot_index+1)
 		var mapped: int = bar_items[slot_index]
 		shortcut.tooltip_text = ITEMS[mapped] if mapped>=0 else "Espaço vazio"
@@ -2822,8 +2822,7 @@ func show_inventory() -> void:
 		shortcut.set_drag_forwarding(hotbar_drag.bind(shortcut,slot_index),can_drop_hotbar.bind(slot_index),drop_hotbar.bind(slot_index))
 		style_craft_button(shortcut)
 		shortcut_row.add_child(shortcut)
-	label("Selecione e clique para pôr 1 · Arraste para mover a pilha")
-	label("Direito na grade retira 1 · Direito no inventário alterna a reserva")
+	label("Clique: colocar 1 · Arraste: mover pilha · Direito: retirar 1 / alternar reserva")
 	# A mochila e os seus 12 espacos ficam integrados ao painel esquerdo.
 	if craft_mode=="station":
 		button("Fabricação básica",open_craft.bind("basic"),true)
