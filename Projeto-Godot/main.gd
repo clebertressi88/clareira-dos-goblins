@@ -2272,11 +2272,11 @@ func create_named_world(name: String) -> void:
 		notice("Não foi possível salvar o mundo atual. Nenhum mundo foi trocado.")
 		show_menu("worlds")
 		return
-	var previous_id := world_storage.active_id
+	var previous_id: String = str(world_storage.active_id)
 	if not world_storage.create_world(name):
 		world_action_error()
 		return
-	var new_id := world_storage.active_id
+	var new_id: String = str(world_storage.active_id)
 	if get_tree().reload_current_scene()!=OK:
 		world_storage.select_world(previous_id)
 		net_session_message = ""
@@ -2304,7 +2304,7 @@ func select_named_world(id: String) -> void:
 		notice("Não foi possível salvar o mundo atual. Nenhum mundo foi trocado.")
 		show_menu("worlds")
 		return
-	var previous_id := world_storage.active_id
+	var previous_id: String = str(world_storage.active_id)
 	if not world_storage.select_world(id):
 		world_action_error()
 		return
