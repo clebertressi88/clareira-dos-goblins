@@ -1,0 +1,882 @@
+[
+  {
+    "action_id": 0,
+    "name": "Idle",
+    "clip": "A000_Idle",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 11,
+    "name": "Idle 1",
+    "clip": "A011_Idle_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 12,
+    "name": "Idle 2",
+    "clip": "A012_Idle_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 2,
+    "name": "Alert",
+    "clip": "A002_Alert",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 3,
+    "name": "Arise",
+    "clip": "A003_Arise",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 333,
+    "name": "Look Around Dumbfounded",
+    "clip": "A333_Look_Around_Dumbfounded",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 336,
+    "name": "Long Breathe and Look Around",
+    "clip": "A336_Long_Breathe_and_Look_Around",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 338,
+    "name": "Short Breathe and Look Around",
+    "clip": "A338_Short_Breathe_and_Look_Around",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": -2,
+    "name": "Walking",
+    "clip": "A-02_Walking",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": -1,
+    "name": "Running",
+    "clip": "A-01_Running",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 679,
+    "name": "Walk Backward",
+    "clip": "A679_Walk_Backward",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 576,
+    "name": "Idle Turn Left",
+    "clip": "A576_Idle_Turn_Left",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 586,
+    "name": "Idle Turn Right",
+    "clip": "A586_Idle_Turn_Right",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 571,
+    "name": "Run Turn Left",
+    "clip": "A571_Run_Turn_Left",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 582,
+    "name": "Run Turn Right",
+    "clip": "A582_Run_Turn_Right",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 572,
+    "name": "Walk Turn Left",
+    "clip": "A572_Walk_Turn_Left",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 583,
+    "name": "Walk Turn Right",
+    "clip": "A583_Walk_Turn_Right",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 116,
+    "name": "Run to Walk Transition",
+    "clip": "A116_Run_to_Walk_Transition",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 531,
+    "name": "Sprint and Sudden Stop",
+    "clip": "A531_Sprint_and_Sudden_Stop",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 5,
+    "name": "BackLeft Run",
+    "clip": "A005_BackLeft_Run",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 607,
+    "name": "BackRight Run",
+    "clip": "A607_BackRight_Run",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 630,
+    "name": "ForwardLeft Run Fight",
+    "clip": "A630_ForwardLeft_Run_Fight",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 631,
+    "name": "ForwardRight Run Fight",
+    "clip": "A631_ForwardRight_Run_Fight",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 692,
+    "name": "Walking 2",
+    "clip": "A692_Walking_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 171,
+    "name": "Hit Reaction to Waist",
+    "clip": "A171_Hit_Reaction_to_Waist",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 174,
+    "name": "Face Punch Reaction",
+    "clip": "A174_Face_Punch_Reaction",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 175,
+    "name": "Face Punch Reaction 1",
+    "clip": "A175_Face_Punch_Reaction_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 178,
+    "name": "Hit Reaction",
+    "clip": "A178_Hit_Reaction",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 179,
+    "name": "Hit Reaction 1",
+    "clip": "A179_Hit_Reaction_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 7,
+    "name": "BeHit FlyUp",
+    "clip": "A007_BeHit_FlyUp",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 8,
+    "name": "Dead",
+    "clip": "A008_Dead",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 187,
+    "name": "Knock Down",
+    "clip": "A187_Knock_Down",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 189,
+    "name": "Dying Backwards",
+    "clip": "A189_Dying_Backwards",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 190,
+    "name": "Knock Down 1",
+    "clip": "A190_Knock_Down_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 156,
+    "name": "Stand Dodge",
+    "clip": "A156_Stand_Dodge",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 157,
+    "name": "Stand Dodge 1",
+    "clip": "A157_Stand_Dodge_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 158,
+    "name": "Roll Dodge",
+    "clip": "A158_Roll_Dodge",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 159,
+    "name": "Roll Dodge 1",
+    "clip": "A159_Roll_Dodge_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 344,
+    "name": "Stand Up 1",
+    "clip": "A344_Stand_Up_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 345,
+    "name": "Stand Up 2",
+    "clip": "A345_Stand_Up_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 346,
+    "name": "Stand Up 3",
+    "clip": "A346_Stand_Up_3",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 347,
+    "name": "Stand Up 4",
+    "clip": "A347_Stand_Up_4",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 466,
+    "name": "Regular Jump",
+    "clip": "A466_Regular_Jump",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 468,
+    "name": "Back Jump",
+    "clip": "A468_Back_Jump",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 441,
+    "name": "Climb Stairs",
+    "clip": "A441_Climb_Stairs",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 470,
+    "name": "Jumping Down",
+    "clip": "A470_Jumping_Down",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 31,
+    "name": "Catching Breath",
+    "clip": "A031_Catching_Breath",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 391,
+    "name": "Head Hold in Pain",
+    "clip": "A391_Head_Hold_in_Pain",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 59,
+    "name": "Victory Cheer",
+    "clip": "A059_Victory_Cheer",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 51,
+    "name": "Shouting Angrily",
+    "clip": "A051_Shouting_Angrily",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "common",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 219,
+    "name": "Right-hand Sword Slash",
+    "clip": "A219_Right_hand_Sword_Slash",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 148,
+    "name": "Sword Parry Backward",
+    "clip": "A148_Sword_Parry_Backward",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 240,
+    "name": "Thrust Slash",
+    "clip": "A240_Thrust_Slash",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 221,
+    "name": "Charged Upward Slash",
+    "clip": "A221_Charged_Upward_Slash",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 242,
+    "name": "Charged Slash",
+    "clip": "A242_Charged_Slash",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 151,
+    "name": "Sword Parry Backward 1",
+    "clip": "A151_Sword_Parry_Backward_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 152,
+    "name": "Sword Parry Backward 2",
+    "clip": "A152_Sword_Parry_Backward_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 147,
+    "name": "Sword Parry",
+    "clip": "A147_Sword_Parry",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 90,
+    "name": "Counterstrike",
+    "clip": "A090_Counterstrike",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 93,
+    "name": "Dodge and Counter",
+    "clip": "A093_Dodge_and_Counter",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 671,
+    "name": "Sneaky Walk",
+    "clip": "A671_Sneaky_Walk",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 615,
+    "name": "Cautious Crouch Walk Backward",
+    "clip": "A615_Cautious_Crouch_Walk_Backward",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 616,
+    "name": "Cautious Crouch Walk Forward",
+    "clip": "A616_Cautious_Crouch_Walk_Forward",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 617,
+    "name": "Cautious Crouch Walk Left",
+    "clip": "A617_Cautious_Crouch_Walk_Left",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 618,
+    "name": "Cautious Crouch Walk Right",
+    "clip": "A618_Cautious_Crouch_Walk_Right",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 575,
+    "name": "Combat Idle Turn Left",
+    "clip": "A575_Combat_Idle_Turn_Left",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 589,
+    "name": "Alert Quick Turn Right",
+    "clip": "A589_Alert_Quick_Turn_Right",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 339,
+    "name": "Walking Scan with Sudden Look Back",
+    "clip": "A339_Walking_Scan_with_Sudden_Look_Back",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 341,
+    "name": "Walk Slowly and Look Around",
+    "clip": "A341_Walk_Slowly_and_Look_Around",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 404,
+    "name": "Crouch and Step Back",
+    "clip": "A404_Crouch_and_Step_Back",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 160,
+    "name": "Roll Dodge 2",
+    "clip": "A160_Roll_Dodge_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 161,
+    "name": "Roll Dodge 3",
+    "clip": "A161_Roll_Dodge_3",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 162,
+    "name": "Stand Dodge 2",
+    "clip": "A162_Stand_Dodge_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 163,
+    "name": "Roll Dodge 4",
+    "clip": "A163_Roll_Dodge_4",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 164,
+    "name": "Stand Dodge 3",
+    "clip": "A164_Stand_Dodge_3",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 384,
+    "name": "Quick Step and Spin Dodge",
+    "clip": "A384_Quick_Step_and_Spin_Dodge",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 428,
+    "name": "Unarmed Vault",
+    "clip": "A428_Unarmed_Vault",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 429,
+    "name": "Parkour Vault",
+    "clip": "A429_Parkour_Vault",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 430,
+    "name": "Parkour Vault with Roll",
+    "clip": "A430_Parkour_Vault_with_Roll",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 431,
+    "name": "Parkour Vault 1",
+    "clip": "A431_Parkour_Vault_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 452,
+    "name": "Backflip",
+    "clip": "A452_Backflip",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 463,
+    "name": "Run and Jump",
+    "clip": "A463_Run_and_Jump",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 467,
+    "name": "Jump Over Obstacle 2",
+    "clip": "A467_Jump_Over_Obstacle_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 471,
+    "name": "Jump Over Obstacle",
+    "clip": "A471_Jump_Over_Obstacle",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 472,
+    "name": "Jump Over Obstacle 1",
+    "clip": "A472_Jump_Over_Obstacle_1",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 318,
+    "name": "Scheming Hand Rub",
+    "clip": "A318_Scheming_Hand_Rub",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 284,
+    "name": "Collect Object",
+    "clip": "A284_Collect_Object",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 276,
+    "name": "Male Bend Over Pick Up",
+    "clip": "A276_Male_Bend_Over_Pick_Up",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 409,
+    "name": "Finger Wag No",
+    "clip": "A409_Finger_Wag_No",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 411,
+    "name": "Neck Slashing Gesture",
+    "clip": "A411_Neck_Slashing_Gesture",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 26,
+    "name": "Angry Stomp",
+    "clip": "A026_Angry_Stomp",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 433,
+    "name": "Parkour Vault 3",
+    "clip": "A433_Parkour_Vault_3",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 434,
+    "name": "Fast Ladder Climb",
+    "clip": "A434_Fast_Ladder_Climb",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 435,
+    "name": "Ladder Climb Finish",
+    "clip": "A435_Ladder_Climb_Finish",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 436,
+    "name": "Ladder Mount Start",
+    "clip": "A436_Ladder_Mount_Start",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 438,
+    "name": "Ladder Climb Loop",
+    "clip": "A438_Ladder_Climb_Loop",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 439,
+    "name": "Climb Left with Both Limbs",
+    "clip": "A439_Climb_Left_with_Both_Limbs",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 440,
+    "name": "Climb Right with Both Limbs",
+    "clip": "A440_Climb_Right_with_Both_Limbs",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 442,
+    "name": "Fast Stair Climb",
+    "clip": "A442_Fast_Stair_Climb",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 444,
+    "name": "Climbing Up Wall",
+    "clip": "A444_Climbing_Up_Wall",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 453,
+    "name": "Backflip Sweep Kick",
+    "clip": "A453_Backflip_Sweep_Kick",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 455,
+    "name": "Sweep Kick",
+    "clip": "A455_Sweep_Kick",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 457,
+    "name": "Jumping Punch",
+    "clip": "A457_Jumping_Punch",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 317,
+    "name": "Shrug",
+    "clip": "A317_Shrug",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 546,
+    "name": "Walk Backward with Sword",
+    "clip": "A546_Walk_Backward_with_Sword",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "right-hand-dagger"
+  },
+  {
+    "action_id": 212,
+    "name": "Elbow Strike",
+    "clip": "A212_Elbow_Strike",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 173,
+    "name": "Slap Reaction",
+    "clip": "A173_Slap_Reaction",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 176,
+    "name": "Face Punch Reaction 2",
+    "clip": "A176_Face_Punch_Reaction_2",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 403,
+    "name": "Victory Fist Pump",
+    "clip": "A403_Victory_Fist_Pump",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  },
+  {
+    "action_id": 412,
+    "name": "Victory",
+    "clip": "A412_Victory",
+    "file": "res://Character/GoblinSkirmisher.scn",
+    "set": "specialized",
+    "loadout": "empty-hands"
+  }
+]
