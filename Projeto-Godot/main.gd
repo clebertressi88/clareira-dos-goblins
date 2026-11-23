@@ -6,6 +6,8 @@ const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
+const VINE_INTERVAL_SECONDS := 1200.0 # Uma vinha a cada 20 min, apenas em arvores adultas.
+var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado pelo anfitriao.
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
@@ -610,7 +612,7 @@ func create_chunk(key: Vector2i) -> void:
 		var z := key.y*CHUNK+rng.randf_range(1,15)
 		if Vector2(x,z).length()<5 or Vector2(x-STARTER_CABIN_CENTER.x,z-STARTER_CABIN_CENTER.y).length()<5.8 or TERRAIN.is_river(x,z):
 			continue
-		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "vine_bush"
+		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "stick"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
 		if kind=="tree" and cleared_stumps.has(id):
 			continue
@@ -875,6 +877,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			# Copas detalhadas, galhos e variacao deterministica por ID.
 			# O tronco continua sendo a unica colisao da arvore.
 			preload("res://forest_tree_visual.gd").decorate(growth,materials["tree_bark"],id)
+			var hanging_vines := Node3D.new()
+			hanging_vines.name = "Vinhas"
+			growth.add_child(hanging_vines)
 			var stump := Node3D.new()
 			stump.name = "Toco"
 			visual.add_child(stump)
@@ -1658,6 +1663,7 @@ func update_tree_visual(tree: Node3D) -> void:
 		stump.visible = false
 		stump_trunk.visible = false
 		growth.visible = true
+		update_tree_vines(tree)
 		growth.position = Vector3.ZERO
 		growth.scale = Vector3.ONE
 		sprout.position = Vector3.ZERO
@@ -1717,6 +1723,138 @@ func update_tree_visual(tree: Node3D) -> void:
 	shape.size = Vector3(.43,height,.43)
 	collision.position.y = height*.5
 
+# As vinhas sao objetos fisicos individuais e colhiveis, presos ao Crescimento.
+# Posicoes por ID garantem a mesma copa e os mesmos modelos no multiplayer.
+func update_tree_vines(tree: Node3D) -> void:
+	if not is_instance_valid(tree):
+		return
+	var growth := tree.get_node_or_null("Visual/Crescimento") as Node3D
+	if growth == null:
+		return
+	var holder := growth.get_node_or_null("Vinhas") as Node3D
+	if holder == null:
+		return
+	var id := str(tree.get_meta("id",""))
+	if tree_regrowth.has(id):
+		for child in holder.get_children():
+			child.queue_free()
+		return
+	if not tree_vines.has(id) and net_role!="client":
+		tree_vines[id] = {"count":0,"next":Time.get_unix_time_from_system()+VINE_INTERVAL_SECONDS}
+	var state: Dictionary = tree_vines.get(id,{})
+	var count := int(state.get("count",0))
+	if holder.get_child_count()==count:
+		return
+	for child in holder.get_children():
+		child.free()
+	for i in range(count):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = absi(hash(id+":vinha:"+str(i)))
+		var angle := rng.randf_range(0.0,TAU)
+		var radial := rng.randf_range(0.40,0.78)
+		var vine := StaticBody3D.new()
+		vine.name = "Cipo_%d" % i
+		vine.collision_layer = TARGET
+		vine.collision_mask = 0
+		vine.set_meta("kind","tree_vine")
+		vine.set_meta("tree_id",id)
+		vine.position = Vector3(cos(angle)*radial,rng.randf_range(2.20,2.62),sin(angle)*radial)
+		holder.add_child(vine)
+		preload("res://forest_hanging_vine.gd").build(vine,hash(id+":vinha:"+str(i)))
+		var collision := CollisionShape3D.new()
+		var shape := SphereShape3D.new()
+		shape.radius = 0.35
+		collision.shape = shape
+		collision.position = Vector3(0,-0.52,0)
+		vine.add_child(collision)
+
+func update_mature_tree_vines() -> void:
+	if net_role=="client":
+		return
+	var now := Time.get_unix_time_from_system()
+	for id in objects.keys():
+		var tree: Node3D = objects[id]
+		if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
+			continue
+		if not tree_vines.has(id):
+			tree_vines[id] = {"count":0,"next":now+VINE_INTERVAL_SECONDS}
+		var state: Dictionary = tree_vines[id]
+		var maximum := 1 + (absi(hash(id))%2)
+		if int(state.get("count",0))<maximum and now>=float(state.get("next",now+VINE_INTERVAL_SECONDS)):
+			state["count"] = int(state.get("count",0))+1
+			state["next"] = now+VINE_INTERVAL_SECONDS
+			tree_vines[id] = state
+			update_tree_vines(tree)
+			if net_role=="host":
+				net_tree_vines_changed.rpc(id,state)
+			save_game()
+
+func harvest_tree_vine(vine: Node3D) -> void:
+	var id := str(vine.get_meta("tree_id",""))
+	if net_role=="client":
+		if net_world_ready:
+			net_request_harvest_tree_vine.rpc_id(1,id)
+		return
+	if not tree_vines.has(id) or not objects.has(id):
+		return
+	var tree: Node3D = objects[id]
+	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
+		return
+	var state: Dictionary = tree_vines[id]
+	if int(state.get("count",0))<=0:
+		return
+	state["count"] = int(state["count"])-1
+	state["next"] = Time.get_unix_time_from_system()+VINE_INTERVAL_SECONDS
+	tree_vines[id] = state
+	stock[VINE] += 1
+	item_received(VINE)
+	sync_hotbar()
+	update_tree_vines(tree)
+	if net_role=="host":
+		net_tree_vines_changed.rpc(id,state)
+	save_game()
+	notice("Voce colheu um cipo da copa.")
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_harvest_tree_vine(id: String) -> void:
+	if net_role!="host" or not objects.has(id) or not tree_vines.has(id):
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	var avatar: Node3D = remotes.get(peer,null)
+	var tree: Node3D = objects[id]
+	if not is_instance_valid(avatar) or not is_instance_valid(tree):
+		return
+	if avatar.global_position.distance_to(tree.global_position)>4.2:
+		return
+	var state: Dictionary = tree_vines[id]
+	if int(state.get("count",0))<1 or str(tree.get_meta("kind",""))!="tree":
+		return
+	state["count"] = int(state["count"])-1
+	state["next"] = Time.get_unix_time_from_system()+VINE_INTERVAL_SECONDS
+	tree_vines[id] = state
+	update_tree_vines(tree)
+	net_tree_vines_changed.rpc(id,state)
+	# O inventario pertence ao jogador solicitante; entregar so ao cliente.
+	net_tree_vine_reward.rpc_id(peer)
+	save_game()
+
+@rpc("authority","call_remote","reliable")
+func net_tree_vine_reward() -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	stock[VINE] += 1
+	item_received(VINE)
+	sync_hotbar()
+	notice("Voce colheu um cipo da copa.")
+
+@rpc("authority","call_remote","reliable")
+func net_tree_vines_changed(id: String, state: Dictionary) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	tree_vines[id] = state.duplicate(true)
+	if objects.has(id):
+		update_tree_vines(objects[id])
+
 func update_regrowing_trees() -> void:
 	for id: String in tree_regrowth.keys():
 		var tree_age := float(Time.get_unix_time_from_system())-float(tree_regrowth[id])
@@ -1726,6 +1864,7 @@ func update_regrowing_trees() -> void:
 			var tree: Node3D = objects[id]
 			if is_instance_valid(tree):
 				update_tree_visual(tree)
+	update_mature_tree_vines()
 
 func timber(tree: Node3D, fell: bool) -> void:
 	var visual := tree.get_node("Visual") as Node3D
@@ -1754,6 +1893,7 @@ func timber(tree: Node3D, fell: bool) -> void:
 		play_tree_fall_sound(tree.global_position)
 		var id: String = str(tree.get_meta("id",""))
 		tree_regrowth[id] = Time.get_unix_time_from_system()
+		tree_vines.erase(id)
 		tree.set_meta("cuts",0)
 		update_tree_visual(tree)
 		var fall := fall_pivot.create_tween()
@@ -3706,6 +3846,9 @@ func secondary() -> void:
 			item = 2
 		if kind=="vine_bush":
 			item = VINE
+		if kind=="tree_vine":
+			harvest_tree_vine(o)
+			return
 		if kind in ["Bruma","Talo"]:
 			speak_to_goblin(o)
 			return
@@ -3852,6 +3995,7 @@ func load_game() -> void:
 	removed = data.get("removed",{})
 	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
+	tree_vines = data.get("tree_vines",{})
 	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -3871,7 +4015,7 @@ func save_game() -> void:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.close()
@@ -4011,6 +4155,7 @@ func capture_net_world() -> Dictionary:
 		"removed": removed.duplicate(true),
 		"cleared_stumps": cleared_stumps.duplicate(true),
 		"tree_regrowth": tree_regrowth.duplicate(true),
+		"tree_vines": tree_vines.duplicate(true),
 		"hut":hut,"won":won,"bench":bench,
 		"pos":[player.position.x,player.position.y,player.position.z],
 		"entities":net_capture_entities()
@@ -4049,6 +4194,7 @@ func apply_net_world(snapshot: Dictionary) -> void:
 		spawn_starter_cabin()
 	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
+	tree_vines = (snapshot.get("tree_vines",{}) as Dictionary).duplicate(true)
 	hut = bool(snapshot.get("hut",false))
 	won = bool(snapshot.get("won",false))
 	bench = bool(snapshot.get("bench",false))
@@ -4305,6 +4451,7 @@ func net_tree_chopped(id: String, cuts: int, fell: bool, cut_time: float, from_p
 		tree.set_meta("fall_from",from_position)
 		timber(tree,true)
 		tree_regrowth[id] = cut_time
+		tree_vines.erase(id)
 		update_tree_visual(tree)
 	else:
 		tree.set_meta("cuts",cuts)
@@ -4341,6 +4488,7 @@ func net_stump_dug(id: String, digs: int, removed_stump: bool) -> void:
 	if removed_stump:
 		cleared_stumps[id] = true
 		tree_regrowth.erase(id)
+		tree_vines.erase(id)
 		if is_instance_valid(stump):
 			objects.erase(id)
 			stump.collision_layer = 0
