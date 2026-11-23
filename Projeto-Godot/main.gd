@@ -1887,6 +1887,10 @@ func timber(tree: Node3D, fell: bool) -> void:
 		add_child(fall_pivot)
 		fall_pivot.global_position = tree.global_position + Vector3.UP * 0.53
 		var falling := original.duplicate() as Node3D
+		# A copa derrubada nao deve conservar vinhas colhiveis nem colisores extras.
+		var old_vines := falling.get_node_or_null("Vinhas")
+		if old_vines != null:
+			old_vines.free()
 		fall_pivot.add_child(falling)
 		falling.position = Vector3(0.0, -0.53, 0.0)
 		falling.rotation = original.rotation
