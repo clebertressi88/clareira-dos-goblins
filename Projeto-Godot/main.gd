@@ -75,8 +75,8 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 7 # Identificador persistente do mundo para inventarios LAN isolados
-const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_PROTOCOL := 8 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
+const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -593,20 +593,42 @@ func make_stone_axe_head(parent: Node3D) -> void:
 func ground(x: float,z: float) -> float:
 	return TERRAIN.height_at(x,z)
 
+func chunk_from_position(pos: Vector3) -> Vector2i:
+	return Vector2i(floori(pos.x/CHUNK),floori(pos.z/CHUNK))
+
 func load_chunks() -> void:
-	var center := Vector2i(floori(player.position.x/CHUNK), floori(player.position.z/CHUNK))
+	# Cada maquina desenha sua vizinhanca; o anfitriao mantem carregadas
+	# TODAS as vizinhancas ocupadas por jogadores, mesmo distantes entre si.
+	var centers: Array[Vector2i] = [chunk_from_position(player.global_position)]
+	if net_role=="host":
+		for peer_id in remotes.keys():
+			var avatar: Node3D = remotes[peer_id]
+			if not is_instance_valid(avatar):
+				continue
+			var remote_pos: Vector3 = avatar.get_meta("destination",avatar.global_position)
+			var remote_center := chunk_from_position(remote_pos)
+			if not centers.has(remote_center):
+				centers.append(remote_center)
+	var desired: Dictionary = {}
+	for center_index in range(centers.size()):
+		var center: Vector2i = centers[center_index]
+		# O host conserva cinco por cinco ao redor de si; para cada visitante,
+		# tres por tres bastam para validar acoes sem renderizar o mundo inteiro.
+		var radius := 2 if center_index==0 else 1
+		for z in range(center.y-radius,center.y+radius+1):
+			for x in range(center.x-radius,center.x+radius+1):
+				desired[Vector2i(x,z)] = true
 	for key: Vector2i in chunks.keys():
-		if absi(key.x-center.x)>2 or absi(key.y-center.y)>2:
-			var chunk: Node3D = chunks[key]
-			for child in chunk.get_children():
-				objects.erase(child.get_meta("id",""))
-			chunk.queue_free()
-			chunks.erase(key)
-	for z in range(center.y-2,center.y+3):
-		for x in range(center.x-2,center.x+3):
-			var key := Vector2i(x,z)
-			if not chunks.has(key):
-				create_chunk(key)
+		if desired.has(key):
+			continue
+		var chunk: Node3D = chunks[key]
+		for child in chunk.get_children():
+			objects.erase(child.get_meta("id",""))
+		chunk.queue_free()
+		chunks.erase(key)
+	for key: Vector2i in desired.keys():
+		if not chunks.has(key):
+			create_chunk(key)
 
 func create_chunk(key: Vector2i) -> void:
 	var chunk := Node3D.new()
@@ -973,18 +995,11 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			collider(o,Vector3(.78,.23,.33),Vector3.UP*.115)
 		"bench","bench2":
 			o.collision_layer |= SOLID
-			for x in [-.39,.39]:
-				for z in [-.25,.25]:
-					cylinder(o,Vector3(x,.38,z),.08,.76,"wood",Color("#855b36"))
-			if kind=="bench2":
-				# Bancada reforçada: quatro pernas de tronco e tampo único de pedra.
-				box(o,Vector3(0,.78,0),Vector3(1.04,.20,.77),"stone_counter",Color("#69706b"))
-				for segment in [-.36,.0,.36]:
-					box(o,Vector3(segment,.892,0),Vector3(.025,.018,.72),"stone_joint",Color("#454b46"))
-			else:
-				for i in range(3):
-					box(o,Vector3(0,.81,(i-1)*.23),Vector3(1.02,.14,.22),"plank",Color("#ac7749"))
-			collider(o,Vector3(1.04,.93,.80),Vector3.UP*.465)
+			var advanced_workbench := kind=="bench2"
+			preload("res://goblin_workbench_model.gd").build(o,advanced_workbench)
+			# A colisao cobre o tampo e o rack, sem bloquear area livre ao redor.
+			collider(o,Vector3(1.36,1.34,0.92) if advanced_workbench else Vector3(1.16,0.89,0.80),
+				Vector3.UP*(0.67 if advanced_workbench else 0.445))
 		"hut":
 			o.collision_layer |= SOLID
 			preload("res://starter_cabin.gd").build(self,o)
@@ -1934,7 +1949,7 @@ func net_request_harvest_tree_vine(id: String) -> void:
 	var tree: Node3D = objects[id]
 	if not is_instance_valid(avatar) or not is_instance_valid(tree):
 		return
-	if avatar.global_position.distance_to(tree.global_position)>4.2:
+	if not remote_can_interact(peer,tree.global_position,4.2):
 		return
 	var state: Dictionary = tree_vines[id]
 	if int(state.get("count",0))<1 or str(tree.get_meta("kind",""))!="tree":
@@ -2314,7 +2329,7 @@ func center_panel() -> void:
 	var available := Vector2(maxf(320.0,viewport_size.x-24.0),maxf(240.0,viewport_size.y-24.0))
 	if inventory:
 		# Tamanho logico da interface completa; escala uniforme e rolagem interna.
-		var desired := Vector2(1380,790)
+		var desired := Vector2(1290,710)
 		var fit := minf(1.0,minf(available.x/desired.x,available.y/desired.y))
 		panel.scale = Vector2.ONE*fit
 		panel.offset_left = -desired.x/2.0
@@ -2557,11 +2572,11 @@ func show_inventory() -> void:
 	# A centralizacao responsiva cuida do tamanho final apos montar a interface.
 	center_panel.call_deferred()
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation",18)
+	columns.add_theme_constant_override("separation",10)
 	menu.add_child(columns)
 	columns.alignment = BoxContainer.ALIGNMENT_CENTER
 	var equipment_side := VBoxContainer.new()
-	equipment_side.custom_minimum_size = Vector2(330,450)
+	equipment_side.custom_minimum_size = Vector2(350,390)
 	columns.add_child(equipment_side)
 	var equipment_title := Label.new()
 	equipment_title.text = "Equipamento do personagem"
@@ -2574,7 +2589,7 @@ func show_inventory() -> void:
 	var left_slots := VBoxContainer.new()
 	equipment_row.add_child(left_slots)
 	var preview := SubViewportContainer.new()
-	preview.custom_minimum_size = Vector2(192,360)
+	preview.custom_minimum_size = Vector2(146,285)
 	preview.stretch = true
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	equipment_row.add_child(preview)
@@ -2606,7 +2621,7 @@ func show_inventory() -> void:
 	equipment_row.add_child(right_slots)
 	for kind in ["Capacete","Blusa","Calça","Bota","Costas"]:
 		var equipment_slot := Button.new()
-		equipment_slot.custom_minimum_size = Vector2(82,65)
+		equipment_slot.custom_minimum_size = Vector2(75,52)
 		equipment_slot.text = kind
 		equipment_slot.tooltip_text = "Espaço reservado para " + kind.to_lower()
 		if kind=="Costas":
@@ -2629,14 +2644,14 @@ func show_inventory() -> void:
 		bag_caption.add_theme_font_size_override("font_size",13)
 		left_slots.add_child(bag_caption)
 		var bag_grid := GridContainer.new()
-		bag_grid.columns = 2
+		bag_grid.columns = 3
 		bag_grid.add_theme_constant_override("h_separation",2)
 		bag_grid.add_theme_constant_override("v_separation",2)
 		left_slots.add_child(bag_grid)
 		for bag_index in range(BACKPACK_SIZE):
 			var bag_entry: Vector2i = backpack_slots[bag_index]
 			var bag_button := Button.new()
-			bag_button.custom_minimum_size = Vector2(46,43)
+			bag_button.custom_minimum_size = Vector2(38,43)
 			bag_button.text = "×%d" % bag_entry.y if bag_entry.y>0 else ""
 			bag_button.tooltip_text = ITEMS[bag_entry.x] if bag_entry.x>=0 else "Arraste um item para guardar"
 			if bag_entry.x>=0:
@@ -2648,10 +2663,10 @@ func show_inventory() -> void:
 			style_craft_button(bag_button)
 			bag_grid.add_child(bag_button)
 	var inventory_side := VBoxContainer.new()
-	inventory_side.custom_minimum_size = Vector2(380,450)
+	inventory_side.custom_minimum_size = Vector2(360,390)
 	columns.add_child(inventory_side)
 	var inventory_grid := GridContainer.new()
-	inventory_grid.columns = 4
+	inventory_grid.columns = 5
 	var caption := Label.new()
 	caption.text = "Inventário"
 	caption.add_theme_font_size_override("font_size",20)
@@ -2674,7 +2689,7 @@ func show_inventory() -> void:
 	for slot_index in range(inventory_slots.size()):
 		var kind: int = inventory_slots[slot_index]
 		var item := Button.new()
-		item.custom_minimum_size = Vector2(88,55)
+		item.custom_minimum_size = Vector2(66,48)
 		item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		item.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		item.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
@@ -2702,7 +2717,7 @@ func show_inventory() -> void:
 		style_craft_button(item)
 		inventory_grid.add_child(item)
 	var crafting_panel := VBoxContainer.new()
-	crafting_panel.custom_minimum_size = Vector2(395,450)
+	crafting_panel.custom_minimum_size = Vector2(400,390)
 	columns.add_child(crafting_panel)
 	var craft_caption := Label.new()
 	craft_caption.text = "Fabricação"
@@ -2710,7 +2725,7 @@ func show_inventory() -> void:
 	craft_caption.modulate = Color("#ffe29c")
 	crafting_panel.add_child(craft_caption)
 	var craft_side := HBoxContainer.new()
-	craft_side.custom_minimum_size = Vector2(380,155)
+	craft_side.custom_minimum_size = Vector2(390,155)
 	craft_side.add_theme_constant_override("separation",18)
 	craft_side.alignment = BoxContainer.ALIGNMENT_CENTER
 	crafting_panel.add_child(craft_side)
@@ -2757,10 +2772,10 @@ func show_inventory() -> void:
 	var explanation := Label.new()
 	explanation.text = craft_status(recipe)
 	explanation.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu.add_child(explanation)
+	crafting_panel.add_child(explanation)
 	var recipes := GridContainer.new()
 	recipes.columns = 4
-	menu.add_child(recipes)
+	crafting_panel.add_child(recipes)
 	var names: Array = ["plank","fire","bench","rope"]
 	if craft_mode=="station":
 		for station_recipe: String in STATION_PATTERNS.keys():
@@ -2770,7 +2785,7 @@ func show_inventory() -> void:
 		var recipe_button := Button.new()
 		# As receitas mostram a imagem do item, sem texto ocupando o botao.
 		# Icones maiores que os do inventario (27 px), sem ampliar o container.
-		recipe_button.custom_minimum_size = Vector2(140,48)
+		recipe_button.custom_minimum_size = Vector2(91,43)
 		recipe_button.text = ""
 		recipe_button.tooltip_text = "Preparar " + CRAFT_OUTPUT[kind] + (" · exige bancada nível 2" if kind in LEVEL_2_RECIPES else "")
 		var recipe_index := ITEM_KINDS.find(kind)
@@ -2790,14 +2805,14 @@ func show_inventory() -> void:
 	recipes.add_child(clear_button)
 	menu.add_child(HSeparator.new())
 	var hotbar_title := Label.new()
-	hotbar_title.text = "Atalhos 1–9 · arraste para reorganizar ou selecione e clique"
+	hotbar_title.text = "Atalhos 1–9 · arraste ou clique para organizar"
 	menu.add_child(hotbar_title)
 	var shortcut_row := HBoxContainer.new()
 	shortcut_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	menu.add_child(shortcut_row)
 	for slot_index in range(HOTBAR_SIZE):
 		var shortcut := Button.new()
-		shortcut.custom_minimum_size = Vector2(58,43)
+		shortcut.custom_minimum_size = Vector2(53,39)
 		shortcut.text = str(slot_index+1)
 		var mapped: int = bar_items[slot_index]
 		shortcut.tooltip_text = ITEMS[mapped] if mapped>=0 else "Espaço vazio"
@@ -2807,8 +2822,7 @@ func show_inventory() -> void:
 		shortcut.set_drag_forwarding(hotbar_drag.bind(shortcut,slot_index),can_drop_hotbar.bind(slot_index),drop_hotbar.bind(slot_index))
 		style_craft_button(shortcut)
 		shortcut_row.add_child(shortcut)
-	label("Selecione e clique para pôr 1 · Arraste para mover a pilha")
-	label("Direito na grade retira 1 · Direito no inventário alterna a reserva")
+	label("Clique: colocar 1 · Arraste: mover pilha · Direito: retirar 1 / alternar reserva")
 	# A mochila e os seus 12 espacos ficam integrados ao painel esquerdo.
 	if craft_mode=="station":
 		button("Fabricação básica",open_craft.bind("basic"),true)
@@ -3732,7 +3746,7 @@ func _physics_process(dt: float) -> void:
 		animate_npc_model(player_model,player.get_real_velocity(),dt,player.is_on_floor())
 		eye_height = move_toward(eye_height,.96 if crouch else 1.49,dt*4.5)
 		update_camera()
-		var cell := Vector2i(floori(player.position.x/CHUNK),floori(player.position.z/CHUNK))
+		var cell := chunk_from_position(player.global_position)
 		if cell!=get_meta("chunk_center",Vector2i(100000,100000)):
 			set_meta("chunk_center",cell)
 			load_chunks()
@@ -4102,10 +4116,13 @@ func primary() -> void:
 		if not get_world_3d().direct_space_state.intersect_shape(check,1).is_empty():
 			notice("Existe um obstáculo neste local.")
 			return
-		var tree_id := "item-" + str(Time.get_ticks_usec()) + "-" + str(randi())
-		placed.append({"kind":"tree","id":tree_id,"p":[spot.x,spot.y,spot.z],"r":0.0})
-		tree_regrowth[tree_id] = Time.get_unix_time_from_system()-TREE_BUD_DELAY-1.0
-		spawn_object("tree",tree_id,spot,self)
+		if net_role=="client":
+			if not net_world_ready:
+				notice("Aguarde a sincronizacao do mundo.")
+				return
+			net_request_plant_sapling.rpc_id(1,spot)
+		else:
+			plant_sapling_at(spot)
 		stock[SAPLING_ITEM]-=1
 		sync_hotbar()
 		save_game()
@@ -4117,6 +4134,11 @@ func primary() -> void:
 	if kind in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
+			return
+		if net_role=="client":
+			if net_world_ready:
+				use_tool(held)
+				net_request_dismantle.rpc_id(1,str(o.get_meta("id","")),held)
 			return
 		use_tool(held)
 		var hits: int = int(o.get_meta("break_hits",0))+(2 if held==STONE_AXE else 1)
@@ -4340,11 +4362,8 @@ func net_request_mine_stone(id: String, tool: int) -> void:
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
 		return
-	var avatar: Node3D = remotes.get(peer_id,null)
 	var rock: Node3D = objects[id]
-	if not is_instance_valid(avatar) or not is_instance_valid(rock):
-		return
-	if str(rock.get_meta("kind","")) not in ["stone","block"] or avatar.global_position.distance_to(rock.global_position)>5.0:
+	if not is_instance_valid(rock) or str(rock.get_meta("kind","")) not in ["stone","block"] or not remote_can_interact(peer_id,rock.global_position,5.0):
 		return
 	apply_mining_hit(rock,tool,peer_id)
 
@@ -4360,16 +4379,22 @@ func net_mining_feedback(completed: bool, hits: int, required: int) -> void:
 	else:
 		notice("Minerando pedra: %d/%d golpes" % [hits,required])
 
+func collectible_item_for_kind(kind: String) -> int:
+	if kind in ["meat_wolf","meat_rabbit"]:
+		return 3
+	if kind=="vine_bush":
+		return VINE
+	# Bancadas, estruturas, arvores e rochas exigem mecanicas proprias.
+	if kind in ["tree","stump","stone","block","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","tomato_plant","tomato_crop"]:
+		return -1
+	return ITEM_KINDS.find(kind)
+
 func secondary() -> void:
 	var hit := ray()
 	if not hit.is_empty():
 		var o: Node3D = hit["collider"]
 		var kind: String = o.get_meta("kind","")
-		var item := 3 if kind in ["meat_wolf","meat_rabbit"] else ITEM_KINDS.find(kind)
-		if kind=="block":
-			item = 2
-		if kind=="vine_bush":
-			item = VINE
+		var item := collectible_item_for_kind(kind)
 		if kind=="tree_vine":
 			harvest_tree_vine(o)
 			return
@@ -4390,7 +4415,13 @@ func secondary() -> void:
 			notice("Não é possível pegar pedras com a mão. Use uma picareta.")
 			return
 		if item>=0:
-			sync_hotbar()
+			if net_role=="client":
+				if net_world_ready:
+					# Nao entregar itens antes de o servidor confirmar a retirada.
+					net_request_collect.rpc_id(1,str(o.get_meta("id","")))
+				else:
+					notice("Aguarde a sincronizacao do mundo.")
+				return
 			stock[item] += 2 if kind=="vine_bush" else 1
 			item_received(item)
 			sync_hotbar()
@@ -4404,6 +4435,35 @@ func secondary() -> void:
 		eat_tomato()
 	elif bar_items[selected]==3:
 		eat()
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_collect(id: String) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj) or not remote_can_interact(peer_id,obj.global_position,5.5):
+		return
+	var kind := str(obj.get_meta("kind",""))
+	var item := collectible_item_for_kind(kind)
+	if item<0:
+		return
+	var amount := 2 if kind=="vine_bush" else 1
+	remove_object(obj) # atualiza mundo persistido e notifica todos os clientes
+	net_collect_reward.rpc_id(peer_id,item,amount)
+	save_game()
+
+@rpc("authority","call_remote","reliable")
+func net_collect_reward(item: int, amount: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	if item<0 or item>=ITEMS.size() or amount<1 or amount>2:
+		return
+	stock[item] += amount
+	item_received(item)
+	sync_hotbar()
+	save_game()
+	notice("Você recolheu "+ITEMS[item].to_lower()+".")
 
 func any_bench_placed() -> bool:
 	for entry in placed:
@@ -4457,6 +4517,39 @@ func update_all_tomato_crops() -> void:
 		if objects.has(id):
 			update_tomato_crop(objects[id])
 
+func plant_sapling_at(pos: Vector3) -> void:
+	var tree_id := "item-" + str(Time.get_ticks_usec()) + "-" + str(randi())
+	var regrowth_time := Time.get_unix_time_from_system()-TREE_BUD_DELAY-1.0
+	placed.append({"kind":"tree","id":tree_id,"p":[pos.x,pos.y,pos.z],"r":0.0})
+	tree_regrowth[tree_id] = regrowth_time
+	spawn_object("tree",tree_id,pos,self)
+	if net_role=="host":
+		net_shared_place.rpc("tree",tree_id,pos,0.0,0)
+		net_sapling_planted.rpc(tree_id,regrowth_time)
+	save_game()
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_plant_sapling(pos: Vector3) -> void:
+	if net_role!="host" or not pos.is_finite():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if not remote_can_interact(peer_id,pos,6.0):
+		return
+	if TERRAIN.is_river(pos.x,pos.z) or absf(ground(pos.x,pos.z)-pos.y)>.3:
+		return
+	for obj in objects.values():
+		if is_instance_valid(obj) and str(obj.get_meta("kind","")) in ["tree","stump","tomato_crop","tomato_plant","wood_wall","wood_floor"] and obj.global_position.distance_to(pos)<1.15:
+			return
+	plant_sapling_at(pos)
+
+@rpc("authority","call_remote","reliable")
+func net_sapling_planted(id: String,regrowth_time: float) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not net_world_ready:
+		return
+	tree_regrowth[id] = regrowth_time
+	if objects.has(id):
+		update_tree_visual(objects[id])
+
 func plant_tomato_at(pos: Vector3) -> void:
 	if net_role=="client":
 		return
@@ -4482,7 +4575,7 @@ func net_request_plant_tomato(pos: Vector3) -> void:
 		return
 	var peer := multiplayer.get_remote_sender_id()
 	var avatar: Node3D = remotes.get(peer,null)
-	if not is_instance_valid(avatar) or avatar.global_position.distance_to(pos)>6.0:
+	if not remote_can_interact(peer,pos,6.0):
 		return
 	if TERRAIN.is_river(pos.x,pos.z) or absf(ground(pos.x,pos.z)-pos.y)>0.3:
 		return
@@ -4531,7 +4624,7 @@ func net_request_harvest_tomatoes(id: String) -> void:
 	var plant: Node3D = objects[id]
 	if not is_instance_valid(avatar) or not is_instance_valid(plant):
 		return
-	if str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"] or avatar.global_position.distance_to(plant.global_position)>4.0:
+	if str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"] or not remote_can_interact(peer_id,plant.global_position,4.0):
 		return
 	if str(plant.get_meta("kind",""))=="tomato_crop" and not bool(plant.get_meta("ready",false)):
 		return
@@ -4917,6 +5010,7 @@ func net_peer_connected(peer_id: int) -> void:
 func net_peer_disconnected(peer_id: int) -> void:
 	remove_remote(peer_id)
 	if net_role=="host":
+		load_chunks() # libera apenas as regioes que nenhum jogador utiliza
 		net_remove_avatar.rpc(peer_id)
 		notice("Jogador %d saiu da sala." % peer_id)
 
@@ -5044,6 +5138,56 @@ func net_send_snapshot(snapshot: Dictionary) -> void:
 	begin()
 
 
+func remote_can_interact(peer_id: int, pos: Vector3, max_distance: float) -> bool:
+	if net_role!="host" or peer_id<=1 or not multiplayer.get_peers().has(peer_id) or not pos.is_finite():
+		return false
+	var avatar: Node3D = remotes.get(peer_id,null)
+	if not is_instance_valid(avatar):
+		return false
+	# Usa o ultimo destino informado, nao a posicao interpolada que fica atrasada.
+	var remote_pos: Vector3 = avatar.get_meta("destination",avatar.global_position)
+	return remote_pos.distance_to(pos)<=max_distance
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_dismantle(id: String,tool: int) -> void:
+	if net_role!="host" or tool not in [WOOD_AXE,STONE_AXE] or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var obj: Node3D = objects[id]
+	if not is_instance_valid(obj) or not remote_can_interact(peer_id,obj.global_position,5.5):
+		return
+	var kind := str(obj.get_meta("kind",""))
+	if kind not in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
+		return
+	var last := float(obj.get_meta("net_last_dismantle_"+str(peer_id),-100.0))
+	if elapsed-last<0.30:
+		return
+	obj.set_meta("net_last_dismantle_"+str(peer_id),elapsed)
+	var hits := int(obj.get_meta("break_hits",0))+(2 if tool==STONE_AXE else 1)
+	var required := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2))
+	if hits<required:
+		obj.set_meta("break_hits",hits)
+		net_dismantle_feedback.rpc_id(peer_id,hits,required,-1)
+		return
+	var recovered_item := ITEM_KINDS.find(kind)
+	remove_object(obj)
+	bench = any_bench_placed()
+	net_dismantle_feedback.rpc_id(peer_id,required,required,recovered_item)
+	save_game()
+
+@rpc("authority","call_remote","reliable")
+func net_dismantle_feedback(hits: int,required: int,recovered_item: int) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	if recovered_item>=0 and recovered_item<ITEMS.size():
+		stock[recovered_item] += 1
+		item_received(recovered_item)
+		sync_hotbar()
+		save_game()
+		notice("Estrutura recuperada para o inventario.")
+	elif hits>=0 and required>0:
+		notice("Desmontando estrutura: %d/%d" % [hits,required])
+
 @rpc("any_peer","call_remote","reliable")
 func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
 	if net_role!="host" or kind in ["hut","tomato_crop"] or kind not in NET_SHARED_KINDS:
@@ -5053,8 +5197,7 @@ func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
 		return
 	if not pos.is_finite() or not is_finite(yaw) or level<0 or level>BUILD_MAX_LEVEL:
 		return
-	var avatar: Node3D = remotes.get(peer_id,null)
-	if not is_instance_valid(avatar) or avatar.global_position.distance_to(pos)>12.0:
+	if not remote_can_interact(peer_id,pos,12.0):
 		return
 	store_object(kind,pos,yaw,level)
 	save_game()
@@ -5083,26 +5226,31 @@ func net_request_remove(id: String) -> void:
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
 		return
-	var avatar: Node3D = remotes.get(peer_id,null)
 	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj) or obj.get_meta("kind","") not in NET_SHARED_KINDS or str(obj.get_meta("kind","")) in ["stone","block","tomato_plant","tomato_crop"]:
+	if not is_instance_valid(obj) or str(obj.get_meta("kind","")) not in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		return
-	if not is_instance_valid(avatar) or avatar.global_position.distance_to(obj.global_position)>6.5:
+	if not remote_can_interact(peer_id,obj.global_position,6.5):
 		return
-	remove_object(obj)
-	save_game()
+	# Remocao avulsa nao pode contornar o sistema de golpes nem gerar itens.
+	return
 
 
 @rpc("authority","call_remote","reliable")
 func net_shared_remove(id: String) -> void:
-	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not objects.has(id):
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or not net_world_ready:
 		return
-	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj):
-		return
-	net_apply_in_progress = true
-	remove_object(obj)
-	net_apply_in_progress = false
+	# O cliente pode estar a centenas de metros: persistir a remocao mesmo
+	# quando a regiao ainda nao foi carregada localmente.
+	var obj: Node3D = objects.get(id,null)
+	if is_instance_valid(obj):
+		net_apply_in_progress = true
+		remove_object(obj)
+		net_apply_in_progress = false
+	elif id.begins_with("item-"):
+		placed = placed.filter(func(entry): return str(entry.get("id",""))!=id)
+		tomato_crop_times.erase(id)
+	else:
+		removed[id] = true
 
 
 # O anfitriao e a unica maquina que executa a IA dos mobs. O ID dos
@@ -5203,7 +5351,7 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 	var target: Node3D = objects[id]
 	if not is_instance_valid(target) or str(target.get_meta("kind","")) not in ["rabbit","wolf","guardian"]:
 		return
-	if target.global_position.distance_to(remotes[peer_id].global_position)>4.5:
+	if not remote_can_interact(peer_id,target.global_position,4.5):
 		return
 	var last := float(target.get_meta("last_hit_"+str(peer_id),-100.0))
 	if elapsed-last<.35:
@@ -5237,7 +5385,7 @@ func net_request_chop_tree(id: String, tool: int) -> void:
 	var tree: Node3D = objects[id]
 	if not is_instance_valid(avatar) or not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
 		return
-	if avatar.global_position.distance_to(tree.global_position)>5.0:
+	if not remote_can_interact(peer_id,tree.global_position,5.0):
 		return
 	var last := float(tree.get_meta("net_last_chop_"+str(peer_id),-100.0))
 	if elapsed-last<0.30:
@@ -5256,14 +5404,18 @@ func net_tree_chopped(id: String, cuts: int, fell: bool, cut_time: float, from_p
 		return
 	if cuts<1 or cuts>10 or not from_position.is_finite():
 		return
+	# Registrar o corte mesmo se a arvore estiver fora dos chunks locais.
+	if fell:
+		tree_regrowth[id] = cut_time
+		tree_vines.erase(id)
 	var tree: Node3D = objects.get(id,null)
 	if not is_instance_valid(tree) or str(tree.get_meta("kind",""))!="tree":
 		return
 	if fell:
 		tree.set_meta("fall_from",from_position)
 		timber(tree,true)
+		# timber usa o relogio local; reestabelecer o horario do servidor.
 		tree_regrowth[id] = cut_time
-		tree_vines.erase(id)
 		update_tree_visual(tree)
 	else:
 		tree.set_meta("cuts",cuts)
@@ -5283,7 +5435,7 @@ func net_request_dig_stump(id: String, tool: int) -> void:
 	var stump: Node3D = objects[id]
 	if not is_instance_valid(avatar) or not is_instance_valid(stump) or str(stump.get_meta("kind",""))!="stump":
 		return
-	if avatar.global_position.distance_to(stump.global_position)>5.0:
+	if not remote_can_interact(peer_id,stump.global_position,5.0):
 		return
 	var last := float(stump.get_meta("net_last_dig_"+str(peer_id),-100.0))
 	if elapsed-last<0.30:
@@ -5330,13 +5482,17 @@ func net_apply_avatar_position(peer_id: int,pos: Vector3,facing: float,gear_mask
 	if pos.length()>50000:
 		return
 	var avatar: Node3D = remotes.get(peer_id,null)
-	if not is_instance_valid(avatar):
+	var created := not is_instance_valid(avatar)
+	var previous_center := chunk_from_position(avatar.get_meta("destination",avatar.global_position)) if not created else Vector2i(100000,100000)
+	if created:
 		avatar = net_create_avatar(peer_id)
 		avatar.position = pos
 	if avatar.position.distance_to(pos)>15.0:
 		avatar.position = pos
 	avatar.set_meta("destination",pos)
 	avatar.rotation.y = facing
+	if net_role=="host" and (created or previous_center!=chunk_from_position(pos)):
+		load_chunks()
 	var avatar_visual := avatar.get_child(0) as Node3D
 	var avatar_rig := avatar_visual.get_node_or_null("GoblinRig")
 	if avatar_rig != null:

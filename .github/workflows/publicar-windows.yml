@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   windows:
-    # Qualquer runner Windows proprio que tenha acesso a este repositorio.
-    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    # Runner hospedado pelo GitHub: nao depende do PC local nem da etiqueta clareira-goblins.
+    runs-on: windows-latest
     concurrency:
       group: publicar-clareira-windows
       cancel-in-progress: false
@@ -27,6 +27,15 @@ jobs:
     steps:
       - name: Baixar codigo do jogo
         uses: actions/checkout@v4
+
+      - name: Diagnosticar ambiente da compilacao
+        run: |
+          Write-Host "Commit: $env:GITHUB_SHA"
+          Write-Host "Runner: $env:RUNNER_NAME ($env:RUNNER_OS / $env:RUNNER_ARCH)"
+          Write-Host "Windows: $([Environment]::OSVersion.VersionString)"
+          Write-Host "GitHub CLI:"
+          gh --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI indisponivel no runner.' }
 
       - name: Preparar Godot 4.7.2 Windows e export templates
         run: |
@@ -85,6 +94,13 @@ jobs:
           & $godotExe --version
           if ($LASTEXITCODE -ne 0) { throw 'Godot nao iniciou.' }
 
+      - name: Validar script de atualizacao separadamente
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & $env:GODOT_EXE --headless --path Projeto-Godot --check-only --script res://game_updater.gd 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-updater-parse.log')
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) { throw 'Erro no script isolado do atualizador.' }
+
       - name: Importar recursos e validar scripts
         run: |
           $ErrorActionPreference = 'Stop'
@@ -115,6 +131,7 @@ jobs:
             @{path='res://tests/test_goblin_v4.gd'; message='GOBLIN V4 OK'},
             @{path='res://tests/test_medieval_menu.gd'; message='MEDIEVAL MENU OK'},
             @{path='res://tests/test_lan_inventory.gd'; message='LAN INVENTORY OK'},
+            @{path='res://tests/test_multiplayer_distant_chunks.gd'; message='MULTIPLAYER DISTANT CHUNKS OK'},
             @{path='res://tests/test_game_updater.gd'; message='GAME UPDATE OK'}
           )
           foreach ($test in $tests) {
