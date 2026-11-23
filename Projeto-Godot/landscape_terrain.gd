@@ -22,7 +22,7 @@ static func height_at(x: float, z: float) -> float:
 	# Escava uma calha real, com margens elevadas e leito abaixo da agua.
 	var river_distance := absf(x - river_x(z))
 	var valley := lerpf(-.38, terrain, smoothstep(8.0, 22.0, river_distance))
-	var river_bed := 1.82 * (1.0 - smoothstep(2.2, 5.9, river_distance))
+	var river_bed := 4.25 * (1.0 - smoothstep(2.2, 5.9, river_distance))
 	return valley - river_bed
 
 static func is_river(x: float, z: float) -> bool:
