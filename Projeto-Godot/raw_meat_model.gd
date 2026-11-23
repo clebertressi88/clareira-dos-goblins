@@ -76,6 +76,14 @@ static func build(parent: Node3D, from_rabbit: bool = false) -> void:
 		part.scale = Vector3(width * 0.27,0.017,depth * 0.31)
 		parent.add_child(part)
 	# Gordura nas bordas e fibras musculares da parte superior.
+	# Dois veios irregulares adicionais em ambos os cortes: deixam a
+	# superficie menos lisa e preservam a silhueta de carne (sem esfera).
+	_strand(parent,Vector3(-0.72*width,thick+0.012,0.43*depth),
+		Vector3(-0.19*width,thick+0.018,0.63*depth),
+		0.003 if from_rabbit else 0.004,inner)
+	_strand(parent,Vector3(0.18*width,thick+0.015,-0.63*depth),
+		Vector3(0.67*width,thick+0.014,-0.33*depth),
+		0.003 if from_rabbit else 0.004,grain)
 	var rim: Array[Vector3] = [
 		Vector3(-0.85*width,thick + 0.008,-0.42*depth),
 		Vector3(-0.60*width,thick + 0.008,-0.81*depth),
