@@ -2132,10 +2132,10 @@ func sync_inventory_slots() -> void:
 	# Tipos sem unidades são liberados; a ordem escolhida pelo jogador permanece.
 	for index in range(inventory_slots.size()):
 		var item: int = inventory_slots[index]
-		if item>=ITEMS.size() or (item>=0 and stock[item]<=0 and reserve[item]<=0):
+		if item>=ITEMS.size() or (item>=0 and stock[item]-(1 if item==BACKPACK_ITEM and backpack_equipped else 0)<=0 and reserve[item]<=0):
 			inventory_slots[index] = -1
 	for item in range(ITEMS.size()):
-		if (stock[item]>0 or reserve[item]>0) and not inventory_slots.has(item):
+		if (stock[item]-(1 if item==BACKPACK_ITEM and backpack_equipped else 0)>0 or reserve[item]>0) and not inventory_slots.has(item):
 			var free := inventory_slots.find(-1)
 			if free>=0:
 				inventory_slots[free] = item
@@ -2527,10 +2527,12 @@ func show_inventory() -> void:
 		equipment_slot.text = kind
 		equipment_slot.tooltip_text = "Espaço reservado para " + kind.to_lower()
 		if kind=="Costas":
-			equipment_slot.text = "Mochila" if backpack_equipped else "Costas"
-			equipment_slot.tooltip_text = "Abrir mochila equipada ou vestir uma mochila do inventário"
-			equipment_slot.disabled = not backpack_equipped and stock[BACKPACK_ITEM]<=0
-			equipment_slot.pressed.connect(open_backpack)
+			equipment_slot.text = "" if backpack_equipped else "Costas"
+			equipment_slot.icon = ITEM_ICONS[BACKPACK_ITEM] if backpack_equipped else null
+			equipment_slot.tooltip_text = "Arraste uma mochila até aqui. Clique para retirar se estiver vazia."
+			equipment_slot.disabled = false
+			equipment_slot.pressed.connect(toggle_backpack_from_slot)
+			equipment_slot.set_drag_forwarding(backpack_equipment_drag.bind(equipment_slot),can_drop_backpack_equipment,drop_backpack_equipment)
 		else:
 			equipment_slot.disabled = true # Tipos de armadura ainda nao existem no sistema de itens.
 		style_craft_button(equipment_slot)
@@ -2538,6 +2540,30 @@ func show_inventory() -> void:
 			left_slots.add_child(equipment_slot)
 		else:
 			right_slots.add_child(equipment_slot)
+	if backpack_equipped:
+		var bag_caption := Label.new()
+		bag_caption.text = "Mochila · 12"
+		bag_caption.add_theme_font_size_override("font_size",13)
+		left_slots.add_child(bag_caption)
+		var bag_grid := GridContainer.new()
+		bag_grid.columns = 2
+		bag_grid.add_theme_constant_override("h_separation",2)
+		bag_grid.add_theme_constant_override("v_separation",2)
+		left_slots.add_child(bag_grid)
+		for bag_index in range(BACKPACK_SIZE):
+			var bag_entry: Vector2i = backpack_slots[bag_index]
+			var bag_button := Button.new()
+			bag_button.custom_minimum_size = Vector2(46,43)
+			bag_button.text = "×%d" % bag_entry.y if bag_entry.y>0 else ""
+			bag_button.tooltip_text = ITEMS[bag_entry.x] if bag_entry.x>=0 else "Arraste um item para guardar"
+			if bag_entry.x>=0:
+				bag_button.icon = ITEM_ICONS[bag_entry.x]
+			bag_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			bag_button.pressed.connect(backpack_slot_inline_click.bind(bag_index))
+			bag_button.gui_input.connect(backpack_slot_inline_input.bind(bag_index))
+			bag_button.set_drag_forwarding(backpack_inline_drag.bind(bag_button,bag_index),can_drop_backpack_inline.bind(bag_index),drop_backpack_inline.bind(bag_index))
+			style_craft_button(bag_button)
+			bag_grid.add_child(bag_button)
 	var inventory_side := VBoxContainer.new()
 	inventory_side.custom_minimum_size = Vector2(380,450)
 	columns.add_child(inventory_side)
@@ -2571,6 +2597,8 @@ func show_inventory() -> void:
 		item.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 		if kind>=0:
 			var available := craft_available(kind)
+			if kind==BACKPACK_ITEM and backpack_equipped:
+				available = maxi(0,available-1)
 			item.text = "×%d" % available if available>0 else ""
 			if TOOL_MAX_DURABILITY.has(kind) and available>0:
 				item.text += "\n%d%%" % roundi(100.0*tool_remaining(kind)/float(TOOL_MAX_DURABILITY[kind]))
@@ -2696,8 +2724,7 @@ func show_inventory() -> void:
 		shortcut_row.add_child(shortcut)
 	label("Selecione e clique para pôr 1 · Arraste para mover a pilha")
 	label("Direito na grade retira 1 · Direito no inventário alterna a reserva")
-	if stock[BACKPACK_ITEM]>0 or backpack_equipped:
-		button("Abrir mochila (12 espaços)" if backpack_equipped else "Vestir mochila",open_backpack,true)
+	# A mochila e os seus 12 espacos ficam integrados ao painel esquerdo.
 	if craft_mode=="station":
 		button("Fabricação básica",open_craft.bind("basic"),true)
 	if not feedback.is_empty():
@@ -2717,9 +2744,108 @@ func assign_hotbar(slot_index: int) -> void:
 	save_game()
 	show_inventory()
 
+func toggle_backpack_from_slot() -> void:
+	if backpack_equipped:
+		unequip_backpack()
+	elif stock[BACKPACK_ITEM]>0:
+		backpack_equipped = true
+		backpack_visual.visible = true
+		backpack_selected_item = -1
+		sync_inventory_slots()
+		save_game()
+		show_inventory.call_deferred()
+
+func backpack_equipment_drag(_position: Vector2, source: Control) -> Variant:
+	if not backpack_equipped:
+		return null
+	var image := TextureRect.new()
+	image.texture = ITEM_ICONS[BACKPACK_ITEM]
+	image.custom_minimum_size = Vector2(42,42)
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	source.set_drag_preview(image)
+	return {"item":BACKPACK_ITEM,"equipped_backpack":true}
+
+func can_drop_backpack_equipment(_position: Vector2, data: Variant) -> bool:
+	return not backpack_equipped and data is Dictionary and int(data.get("item",-1))==BACKPACK_ITEM and int(data.get("inventory_slot",-1))>=0 and stock[BACKPACK_ITEM]>0
+
+func drop_backpack_equipment(position: Vector2, data: Variant) -> void:
+	if not can_drop_backpack_equipment(position,data):
+		return
+	backpack_equipped = true
+	backpack_visual.visible = true
+	backpack_selected_item = -1
+	sync_inventory_slots()
+	save_game()
+	show_inventory.call_deferred()
+
+func backpack_inline_drag(_position: Vector2, source: Control, index: int) -> Variant:
+	var entry: Vector2i = backpack_slots[index]
+	if entry.x<0 or entry.y<=0:
+		return null
+	var image := TextureRect.new()
+	image.texture = ITEM_ICONS[entry.x]
+	image.custom_minimum_size = Vector2(40,40)
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	source.set_drag_preview(image)
+	return {"item":entry.x,"backpack_slot":index,"single":Input.is_physical_key_pressed(KEY_SHIFT)}
+
+func can_drop_backpack_inline(_position: Vector2, data: Variant, index: int) -> bool:
+	if not backpack_equipped or not data is Dictionary:
+		return false
+	var item := int(data.get("item",-1))
+	if item<0 or item==BACKPACK_ITEM or item>=ITEMS.size():
+		return false
+	var entry: Vector2i = backpack_slots[index]
+	if entry.y>=BACKPACK_STACK_LIMIT or (entry.x>=0 and entry.x!=item):
+		return false
+	var source_bag := int(data.get("backpack_slot",-1))
+	if source_bag>=0:
+		return source_bag!=index and source_bag<BACKPACK_SIZE and backpack_slots[source_bag].y>0
+	return int(data.get("inventory_slot",-1))>=0 and stock[item]>0
+
+func drop_backpack_inline(position: Vector2, data: Variant, index: int) -> void:
+	if not can_drop_backpack_inline(position,data,index):
+		return
+	var item := int(data["item"])
+	var source_bag := int(data.get("backpack_slot",-1))
+	var entry: Vector2i = backpack_slots[index]
+	var available := backpack_slots[source_bag].y if source_bag>=0 else stock[item]
+	var count := mini(1 if bool(data.get("single",false)) else available,BACKPACK_STACK_LIMIT-entry.y)
+	if count<=0:
+		return
+	backpack_slots[index] = Vector2i(item,entry.y+count)
+	if source_bag>=0:
+		var remaining := backpack_slots[source_bag].y-count
+		backpack_slots[source_bag] = Vector2i(item,remaining) if remaining>0 else Vector2i(-1,0)
+	else:
+		stock[item] -= count
+	sync_inventory_slots()
+	sync_hotbar()
+	save_game()
+	show_inventory.call_deferred()
+
+func backpack_slot_inline_click(index: int) -> void:
+	if backpack_slots[index].y<=0:
+		return
+	withdraw_from_backpack(index,false)
+	sync_inventory_slots()
+	sync_hotbar()
+	save_game()
+	show_inventory.call_deferred()
+
+func backpack_slot_inline_input(event: InputEvent, index: int) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:
+		get_viewport().set_input_as_handled()
+		if backpack_slots[index].y>0:
+			withdraw_from_backpack(index,true)
+			sync_inventory_slots()
+			sync_hotbar()
+			save_game()
+			show_inventory.call_deferred()
+
 func inventory_drag(_position: Vector2, source: Control, slot_index: int) -> Variant:
 	var item: int = inventory_slots[slot_index]
-	if item<0 or craft_available(item)<=0:
+	if item<0 or craft_available(item)<=0 or (item==BACKPACK_ITEM and backpack_equipped and craft_available(item)<=1):
 		return null
 	var preview := TextureRect.new()
 	preview.texture = ITEM_ICONS[item]
@@ -2731,6 +2857,9 @@ func inventory_drag(_position: Vector2, source: Control, slot_index: int) -> Var
 func can_drop_inventory(_position: Vector2, data: Variant, target_index: int) -> bool:
 	if not data is Dictionary or not data.has("item"):
 		return false
+	if int(data.get("backpack_slot",-1))>=0:
+		var from_bag := int(data["backpack_slot"])
+		return backpack_equipped and from_bag<BACKPACK_SIZE and (inventory_slots[target_index]<0 or inventory_slots[target_index]==backpack_slots[from_bag].x)
 	if inventory_slots[target_index]>=0:
 		return false
 	return int(data.get("inventory_slot",-1))>=0 or int(data.get("hotbar_slot",-1))>=0 or int(data.get("origin",-1))>=0
@@ -2739,6 +2868,14 @@ func drop_inventory(position: Vector2, data: Variant, target_index: int) -> void
 	if not can_drop_inventory(position,data,target_index):
 		return
 	var item := int(data["item"])
+	var from_bag := int(data.get("backpack_slot",-1))
+	if from_bag>=0:
+		withdraw_from_backpack(from_bag,bool(data.get("single",false)))
+		inventory_slots[target_index] = item
+		sync_hotbar()
+		save_game()
+		show_inventory.call_deferred()
+		return
 	var source_index := int(data.get("inventory_slot",-1))
 	var origin_index := int(data.get("origin",-1))
 	if origin_index>=0:
@@ -3153,7 +3290,7 @@ func unequip_backpack() -> void:
 	for entry in backpack_slots:
 		if entry.y>0:
 			notice("Esvazie a mochila antes de retirar.")
-			show_backpack()
+			show_inventory()
 			return
 	backpack_equipped = false
 	backpack_visual.visible = false
