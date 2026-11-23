@@ -1033,6 +1033,10 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 		"meat","meat_wolf","meat_rabbit":
 			preload("res://raw_meat_model.gd").build(o,kind=="meat_rabbit")
 			collider(o,Vector3(.52,.22,.43),Vector3.UP*.11)
+		"hide":
+			# Pele de coelho estendida no chao; antes usava a esfera generica.
+			preload("res://rabbit_pelt_model.gd").new().build(o)
+			collider(o,Vector3(1.15,.16,1.12),Vector3.UP*.08)
 		_:
 			var item_colors := {"meat":Color("#a95842"),"hide":Color("#ad7c59"),"foot":Color("#eadcc1"),"spear":Color("#8e744d")}
 			ball(o,Vector3.UP*.14,Vector3(.42,.27,.33),kind,item_colors.get(kind,Color.WHITE))
