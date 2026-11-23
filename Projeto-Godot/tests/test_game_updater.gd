@@ -7,8 +7,31 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var updater = UPDATER.new()
+	# O teste nao deve fazer requisicoes reais ao GitHub.
+	updater.auto_check_enabled = false
 	root.add_child(updater)
 	await process_frame
+	if updater.AUTO_CHECK_SECONDS!=300.0:
+		_fail("verificador automatico nao esta programado para cinco minutos")
+		return
+	updater._set_phase("ready","Nova versao disponivel")
+	if not bool(updater.get_state().get("update_available",false)):
+		_fail("nova versao nao ativou o marcador discreto")
+		return
+	updater._set_phase("checking","Verificacao em segundo plano")
+	if not bool(updater.get_state().get("update_available",false)):
+		_fail("consulta periodica apagou o marcador antes da verificacao")
+		return
+	updater._set_phase("current","Versao atual")
+	if bool(updater.get_state().get("update_available",false)):
+		_fail("marcador continuou aceso mesmo com jogo atualizado")
+		return
+	updater._set_phase("downloading","Transferencia em curso")
+	updater._on_periodic_update_check()
+	if str(updater.get_state().get("phase",""))!="downloading":
+		_fail("verificador interferiu em um download ativo")
+		return
+	updater._set_phase("idle","Aguardando")
 	var sha := "abcdef0123456789abcdef0123456789abcdef01"
 	var digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	var manifest := {

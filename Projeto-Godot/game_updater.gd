@@ -96,6 +96,7 @@ try {
 }
 """
 const MAX_ZIP_SIZE := 300 * 1024 * 1024
+const AUTO_CHECK_SECONDS := 300.0 # Cinco minutos.
 
 var state: Dictionary = {"phase":"idle","message":"Confira se há uma nova versão do jogo.","percent":0}
 var asset_size := 0
@@ -108,6 +109,10 @@ var last_percent := -1
 var download_method := "http"
 var gh_cli_path := ""
 var gh_download_pid := 0
+var auto_check_enabled := true
+var update_available := false
+var _checking_silently := false
+var _periodic_timer: Timer
 
 func _ready() -> void:
 	api_request = HTTPRequest.new()
@@ -121,18 +126,41 @@ func _ready() -> void:
 	add_child(zip_request)
 	zip_request.request_completed.connect(_on_zip_finished)
 	local_commit = _local_version()
+	if auto_check_enabled:
+		_periodic_timer = Timer.new()
+		_periodic_timer.name = "VerificadorAtualizacoes"
+		_periodic_timer.wait_time = AUTO_CHECK_SECONDS
+		_periodic_timer.one_shot = false
+		_periodic_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(_periodic_timer)
+		_periodic_timer.timeout.connect(_on_periodic_update_check)
+		_periodic_timer.start()
+		# A primeira consulta ocorre sem abrir qualquer tela.
+		call_deferred("_on_periodic_update_check")
+
+func _on_periodic_update_check() -> void:
+	if str(state.get("phase","")) in ["checking","downloading","verified","installing"]:
+		return
+	check_updates(true)
 
 func get_state() -> Dictionary:
 	return state.duplicate(true)
 
 func _set_phase(phase_name: String,message: String,percent: int = 0) -> void:
+	# O marcador permanece aceso durante consultas periodicas ou falhas temporarias.
+	if phase_name=="ready":
+		update_available = true
+	elif phase_name in ["current","installing"]:
+		update_available = false
 	state = {"phase":phase_name,"message":message,"percent":percent,
-		"local_commit":local_commit,"release_commit":release_commit,"bytes":asset_size}
+		"local_commit":local_commit,"release_commit":release_commit,
+		"bytes":asset_size,"update_available":update_available}
 	status_changed.emit(get_state())
 
-func check_updates() -> void:
+func check_updates(silent: bool = false) -> void:
 	if str(state.get("phase","")) in ["checking","downloading","verified","installing"]:
 		return
+	_checking_silently = silent
 	if not OS.has_feature("windows"):
 		_set_phase("error","A instalação automática está disponível somente no Windows.")
 		return
@@ -192,6 +220,10 @@ func _on_api_finished(result: int,http_code: int,_headers: PackedStringArray,bod
 		return
 	if result!=HTTPRequest.RESULT_SUCCESS or http_code!=200:
 		if http_code in [401,403,404]:
+			# Em segundo plano, nunca iniciar gh via OS.execute: isso bloquearia o jogo.
+			if _checking_silently:
+				_set_phase("error","Não foi possível consultar a Release (HTTP %d)." % http_code)
+				return
 			# Uma Release privada responde 404 para chamadas anonimas.
 			# O GitHub CLI usa somente as credenciais guardadas no proprio PC.
 			if _try_authenticated_release():

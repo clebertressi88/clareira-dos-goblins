@@ -28,6 +28,22 @@ func _verify() -> void:
 	if ui._stage.scale.x<=0.0 or ui._stage.scale.x>1.0:
 		_fail("Escala responsiva invalida")
 		return
+	if not is_instance_valid(ui._update_marker) or ui._update_marker.visible:
+		_fail("Indicador de atualizacoes nao comecou discreto e desligado")
+		return
+	var previous_page: String = ui._page
+	ui.refresh_update_state({"phase":"ready","update_available":true,"message":"Nova versao"})
+	if not ui._update_marker.visible or ui._page!=previous_page:
+		_fail("Nova atualizacao nao marcou apenas a aba, sem trocar a tela")
+		return
+	ui.refresh_update_state({"phase":"checking","update_available":true,"message":"Verificando..."})
+	if not ui._update_marker.visible or ui._page!=previous_page:
+		_fail("O aviso sumiu durante uma consulta silenciosa")
+		return
+	ui.refresh_update_state({"phase":"current","update_available":false,"message":"Atualizado"})
+	if ui._update_marker.visible or ui._page!=previous_page:
+		_fail("Marcador nao foi removido apos atualizar ou a tela mudou")
+		return
 	ui._activate("new_world")
 	if not is_instance_valid(ui.world_create_input):
 		_fail("Formulario de novo mundo ausente")

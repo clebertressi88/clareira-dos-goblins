@@ -33,6 +33,7 @@ var _page_container: VBoxContainer
 var _panel_art: TextureRect
 var _primary_button: Button
 var _nav_buttons: Dictionary = {}
+var _update_marker: Label
 var _volume_label: Label
 var _update_status_label: Label
 var _update_progress: ProgressBar
@@ -62,6 +63,7 @@ func _recreate() -> void:
 	_update_install_button = null
 	_update_check_button = null
 	_nav_buttons.clear()
+	_update_marker = null
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -106,6 +108,7 @@ func _recreate() -> void:
 	_place(_stage,help,Vector2(394,835),Vector2(816,40))
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_render_page()
+	_refresh_update_indicator()
 	_fit()
 
 func _place(parent: Control,node: Control,pos: Vector2,area: Vector2) -> void:
@@ -142,6 +145,15 @@ func _nav_button(text_value: String,page: String,featured: bool = false) -> void
 	_style_button(button,featured)
 	_navigation.add_child(button)
 	_nav_buttons[page] = button
+	if page=="updates":
+		# Pequeno sinal no proprio botao, sem pop-up nem troca de tela.
+		_update_marker = _text("●",19,Color("#91ed81"))
+		_update_marker.position = Vector2(267,11)
+		_update_marker.size = Vector2(27,35)
+		_update_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_update_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_update_marker.visible = false
+		button.add_child(_update_marker)
 	button.pressed.connect(func(): _activate(page))
 
 func _activate(destination: String) -> void:
@@ -464,8 +476,15 @@ func _render_updates() -> void:
 
 func refresh_update_state(info: Dictionary) -> void:
 	_state["updater"] = info.duplicate(true)
+	_refresh_update_indicator()
 	if _page=="updates":
 		_refresh_update_controls()
+
+func _refresh_update_indicator() -> void:
+	if not is_instance_valid(_update_marker):
+		return
+	var updater_state: Dictionary = _state.get("updater",{})
+	_update_marker.visible = bool(updater_state.get("update_available",false))
 
 func _refresh_update_controls() -> void:
 	if not is_instance_valid(_update_status_label):
