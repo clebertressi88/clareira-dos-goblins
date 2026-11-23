@@ -85,6 +85,13 @@ jobs:
           & $godotExe --version
           if ($LASTEXITCODE -ne 0) { throw 'Godot nao iniciou.' }
 
+      - name: Validar script de atualizacao separadamente
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & $env:GODOT_EXE --headless --path Projeto-Godot --check-only --script res://game_updater.gd 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'clareira-updater-parse.log')
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) { throw 'Erro no script isolado do atualizador.' }
+
       - name: Importar recursos e validar scripts
         run: |
           $ErrorActionPreference = 'Stop'
