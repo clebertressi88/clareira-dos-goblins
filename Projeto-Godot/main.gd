@@ -1,6 +1,7 @@
 extends Node3D
 
-const SAVE := "user://clareira-nativa.json" # Arquivo antigo continua sendo o Mundo original
+const SAVE := "user://clareira-nativa.json"
+const LAN_PREFS_PATH := "user://clareira-multiplayer.cfg" # Arquivo antigo continua sendo o Mundo original
 const WORLD_SLOTS := preload("res://world_slots.gd")
 const CELL := 0.85
 const CHUNK := 16
@@ -149,6 +150,7 @@ var feedback_until := 0.0
 var remotes: Dictionary = {}
 var net_role := "solo" # solo / host / client
 var net_address := ""
+var last_connected_lan_ip := ""
 var net_connected := false
 var net_world_ready := false
 var net_world_backup: Dictionary = {}
@@ -171,6 +173,7 @@ func _ready() -> void:
 	backpack_slots.fill(Vector2i(-1,0))
 	setup_world()
 	configure_movement_inputs()
+	load_last_lan_ip()
 	world_storage.initialize()
 	load_game()
 	make_player()
@@ -2237,6 +2240,7 @@ func show_menu(starting_page: String = "home") -> void:
 		"connected": net_connected,
 		"world_ready": net_world_ready,
 		"ip": net_address,
+		"last_connected_ip": last_connected_lan_ip,
 		"host_ips": ", ".join(ips) if ips.size()>0 else "verifique em ipconfig",
 		"players": multiplayer.get_peers().size()+1,
 		"message": message,
@@ -4191,6 +4195,33 @@ func host_game() -> void:
 	begin()
 
 
+func load_last_lan_ip() -> void:
+	# Preferencia do computador, independente do mundo selecionado.
+	var settings := ConfigFile.new()
+	if settings.load(LAN_PREFS_PATH)!=OK:
+		return
+	var saved_ip := str(settings.get_value("lan","last_connected_ip","")).strip_edges()
+	if saved_ip=="localhost" or saved_ip.is_valid_ip_address():
+		last_connected_lan_ip = saved_ip
+		net_address = saved_ip
+
+func remember_connected_lan_ip() -> void:
+	# Apenas salvar quando o mapa do anfitriao ja foi sincronizado.
+	# Uma tentativa com IP errado nao apaga o ultimo servidor funcional.
+	if net_role!="client" or not net_world_ready:
+		return
+	var current_ip := net_address.strip_edges()
+	if current_ip!="localhost" and not current_ip.is_valid_ip_address():
+		return
+	var settings := ConfigFile.new()
+	settings.set_value("lan","last_connected_ip",current_ip)
+	var save_error := settings.save(LAN_PREFS_PATH)
+	if save_error==OK:
+		last_connected_lan_ip = current_ip
+	else:
+		push_warning("Nao foi possivel salvar o ultimo IP LAN: %d" % save_error)
+
+
 func join_game() -> void:
 	var ip := ""
 	if is_instance_valid(medieval_menu) and is_instance_valid(medieval_menu.ip_input):
@@ -4214,6 +4245,7 @@ func join_at_address(ip: String) -> void:
 	if error!=OK:
 		peer.close()
 		net_world_backup.clear()
+		net_address = last_connected_lan_ip
 		net_session_message = "Falha ao iniciar a conexão. Verifique o IP e a porta UDP %d." % NET_PORT
 		notice(net_session_message)
 		show_menu()
@@ -4240,6 +4272,7 @@ func net_connection_failed() -> void:
 	if net_role!="client":
 		return
 	disconnect_game()
+	net_address = last_connected_lan_ip
 	net_session_message = "Não foi possível conectar. Confira o IPv4 local e o firewall UDP %d." % NET_PORT
 	notice(net_session_message)
 	show_menu()
@@ -4357,6 +4390,7 @@ func net_send_snapshot(snapshot: Dictionary) -> void:
 	apply_net_world(snapshot)
 	net_world_ready = true
 	net_connected = true
+	remember_connected_lan_ip()
 	var host_position: Array = snapshot.get("pos",[0,1,0])
 	var enter_x := float(host_position[0])+2.0
 	var enter_z := float(host_position[2])+2.0

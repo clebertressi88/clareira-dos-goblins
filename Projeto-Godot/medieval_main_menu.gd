@@ -324,6 +324,9 @@ func _render_network() -> void:
 		ip_input.focus_mode = Control.FOCUS_ALL
 		ip_input.text_submitted.connect(func(_value: String): _call_action("join"))
 		_page_container.add_child(ip_input)
+		var previous_ip := String(_state.get("last_connected_ip", ""))
+		if not previous_ip.is_empty():
+			_page_container.add_child(_text("Último servidor conectado: " + previous_ip, 13, MUTED))
 		var connect_button := Button.new()
 		connect_button.text = "➜  CONECTAR PELO IP"
 		connect_button.custom_minimum_size.y = 51
