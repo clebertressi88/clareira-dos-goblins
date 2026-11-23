@@ -20,8 +20,9 @@ func _run() -> void:
 	var game := scene.instantiate() as Node3D
 	get_root().add_child(game)
 	await physics_frame
-	var names: Array = game.get("ITEMS")
-	var kinds: Array = game.get("ITEM_KINDS")
+	var constants: Dictionary = game.get_script().get_script_constant_map()
+	var names: Array = constants["ITEMS"]
+	var kinds: Array = constants["ITEM_KINDS"]
 	if names.size()!=kinds.size() or names[27]!="Tomate" or names[28]!="Sementes de tomate":
 		printerr("GARDEN FAIL: item index mismatch")
 		quit(1)
