@@ -9,7 +9,7 @@ const TERRAIN := preload("res://landscape_terrain.gd")
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
-const VINE_INTERVAL_SECONDS := 1200.0 # Uma vinha a cada 20 min, apenas em arvores adultas.
+const VINE_INTERVAL_SECONDS := 300.0 # Uma vinha a cada 5 min, apenas em arvores adultas.
 var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado pelo anfitriao.
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
@@ -929,9 +929,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			box(o,Vector3(0,.04,0),Vector3(.59,.075,.26),"plank",Color("#ac7749"))
 			collider(o,Vector3(.61,.21,.29),Vector3.UP*.10)
 		"stick":
-			var twig := cylinder(o,Vector3(0,.07,0),.06,.55,"wood",Color("#855b36"))
-			twig.rotation.z = PI/2
-			collider(o,Vector3(.61,.23,.29),Vector3.UP*.10)
+			# Galho caido com casca texturizada, nos e madeira quebrada.
+			preload("res://forest_fallen_stick.gd").build(o,id)
+			collider(o,Vector3(.78,.23,.33),Vector3.UP*.115)
 		"bench","bench2":
 			o.collision_layer |= SOLID
 			for x in [-.39,.39]:
