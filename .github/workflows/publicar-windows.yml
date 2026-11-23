@@ -29,29 +29,53 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = '4.7.2'
           $base = "https://github.com/godotengine/godot/releases/download/$version-stable"
-          $toolsDir = Join-Path $env:RUNNER_TEMP 'clareira-godot'
-          $godotExe = Join-Path $toolsDir "Godot_v$version-stable_win64_console.exe"
-          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
-          if (-not (Test-Path $godotExe)) {
-            $archive = Join-Path $toolsDir 'godot.zip'
-            Invoke-WebRequest -Uri "$base/Godot_v$version-stable_win64.exe.zip" -OutFile $archive
-            Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
-          }
-          if (-not (Test-Path $godotExe)) {
-            $godotExe = (Get-ChildItem $toolsDir -Filter '*console*.exe' -File -Recurse | Select-Object -First 1 -ExpandProperty FullName)
-          }
-          if (-not $godotExe -or -not (Test-Path $godotExe)) { throw 'Executavel do Godot nao encontrado.' }
+          $shared = "C:\ProgramData\ClareiraGodot\$version"
+          $sharedExe = Join-Path $shared "Godot_v$version-stable_win64_console.exe"
+          $sharedTemplates = Join-Path $shared 'templates'
+          $sharedRelease = Join-Path $sharedTemplates 'windows_release_x86_64.exe'
           $templateDir = Join-Path $env:APPDATA "Godot/export_templates/$version.stable"
           $templateExe = Join-Path $templateDir 'windows_release_x86_64.exe'
-          if (-not (Test-Path $templateExe)) {
-            $templateZip = Join-Path $toolsDir 'templates.zip'
-            Invoke-WebRequest -Uri "$base/Godot_v$version-stable_export_templates.tpz" -OutFile $templateZip
-            $extractDir = Join-Path $toolsDir 'template-files'
-            Expand-Archive -Path $templateZip -DestinationPath $extractDir -Force
-            New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
-            $files = Get-ChildItem $extractDir -Filter 'windows_*_x86_64.exe' -File -Recurse
-            foreach ($file in $files) { Copy-Item $file.FullName (Join-Path $templateDir $file.Name) -Force }
+          $toolsDir = Join-Path $env:RUNNER_TEMP 'clareira-godot'
+          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+          if ((Test-Path $sharedExe) -and (Test-Path $sharedRelease)) {
+            Write-Host "Utilizando Godot pre-instalado: $sharedExe"
+            $godotExe = $sharedExe
+            # Runners no mesmo PC podem compartilhar o perfil SYSTEM. Evita copiar ao mesmo tempo.
+            $mutex = New-Object System.Threading.Mutex($false, 'Global\ClareiraGodot472Templates')
+            $locked = $false
+            try {
+              $locked = $mutex.WaitOne(120000)
+              if (-not $locked) { throw 'Tempo limite aguardando preparacao dos templates compartilhados.' }
+              if (-not (Test-Path $templateExe)) {
+                New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+                Copy-Item (Join-Path $sharedTemplates 'windows_*_x86_64.exe') -Destination $templateDir -Force
+              }
+            } finally {
+              if ($locked) { $mutex.ReleaseMutex() }
+              $mutex.Dispose()
+            }
+          } else {
+            Write-Host 'Cache compartilhado ausente. Usando preparacao tradicional.'
+            $godotExe = Join-Path $toolsDir "Godot_v$version-stable_win64_console.exe"
+            if (-not (Test-Path $godotExe)) {
+              $archive = Join-Path $toolsDir 'godot.zip'
+              Invoke-WebRequest -Uri "$base/Godot_v$version-stable_win64.exe.zip" -OutFile $archive
+              Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
+            }
+            if (-not (Test-Path $godotExe)) {
+              $godotExe = (Get-ChildItem $toolsDir -Filter '*console*.exe' -File -Recurse | Select-Object -First 1 -ExpandProperty FullName)
+            }
+            if (-not (Test-Path $templateExe)) {
+              $templateZip = Join-Path $toolsDir 'templates.zip'
+              Invoke-WebRequest -Uri "$base/Godot_v$version-stable_export_templates.tpz" -OutFile $templateZip
+              $extractDir = Join-Path $toolsDir 'template-files'
+              Expand-Archive -Path $templateZip -DestinationPath $extractDir -Force
+              New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+              $files = Get-ChildItem $extractDir -Filter 'windows_*_x86_64.exe' -File -Recurse
+              foreach ($file in $files) { Copy-Item $file.FullName (Join-Path $templateDir $file.Name) -Force }
+            }
           }
+          if (-not $godotExe -or -not (Test-Path $godotExe)) { throw 'Executavel do Godot nao encontrado.' }
           if (-not (Test-Path $templateExe)) { throw 'Template Windows release nao encontrado.' }
           "GODOT_EXE=$godotExe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           & $godotExe --version
