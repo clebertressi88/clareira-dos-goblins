@@ -170,10 +170,8 @@ func _create_npc_identifier() -> void:
 		return
 	var info: Dictionary = NPC_INFO[variant]
 	var colored: Color = info["color"]
-	# Faixa de tecido nas duas faces, visivel independente da orientacao.
-	_add_box(self, "FaixaIdentificacaoFrente", Vector3(0.02, 1.02, -0.222), Vector3(0.40, 0.080, 0.035), colored, 0.52)
-	_add_box(self, "FaixaIdentificacaoCostas", Vector3(0.02, 1.02, 0.222), Vector3(0.40, 0.080, 0.035), colored, 0.52)
-	_add_box(self, "OmbreiraNPC", Vector3(-0.245, 1.13, 0), Vector3(0.135, 0.095, 0.27), colored.darkened(0.27))
+	# Diferenciacao discreta: apenas o nome acima da cabeca, sem faixas
+	# cruzadas ou ombreira retangular flutuante sobre as animacoes.
 	var name_label := Label3D.new()
 	name_label.name = "NomeNPC"
 	name_label.text = str(info["name"])

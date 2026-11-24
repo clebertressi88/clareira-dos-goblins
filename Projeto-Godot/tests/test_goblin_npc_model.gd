@@ -41,8 +41,11 @@ func _test_character(visual: Node3D, title: String, role: String) -> bool:
 		if label == null or label.text.is_empty():
 			fail(title + ": NPC sem nome visivel")
 			return false
-		if controller.get_node_or_null("FaixaIdentificacaoFrente") == null:
-			fail(title + ": NPC sem roupa diferenciada")
+		if controller.get_node_or_null("FaixaIdentificacaoFrente") != null or controller.get_node_or_null("FaixaIdentificacaoCostas") != null:
+			fail(title + ": faixas antigas ainda aparecem")
+			return false
+		if controller.get_node_or_null("OmbreiraNPC") != null:
+			fail(title + ": ombreira retangular antiga ainda aparece")
 			return false
 	var swords: Array = controller.get("sword_parts")
 	var shields: Array = controller.get("shield_parts")
