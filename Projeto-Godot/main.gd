@@ -1390,9 +1390,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			update_tomato_fruits(o)
 		"tomato_seed":
 			var seed := SphereMesh.new()
-			seed.radius = .042
-			seed.height = .038
-			mesh_part(o,seed,Vector3.UP*.035,Vector3.ONE,material("tomato_seed",Color("#d1bd83")))
+			seed.radius = .075
+			seed.height = .060
+			mesh_part(o,seed,Vector3.UP*.048,Vector3.ONE,material("tomato_seed",Color("#d1bd83")))
 			collider(o,Vector3(.20,.12,.20),Vector3.UP*.06)
 		"tomato":
 			preload("res://forest_tomato_plant.gd").build(o,id,true)
@@ -5568,7 +5568,8 @@ func uproot_tomato(plant: Node3D) -> void:
 	var id := str(plant.get_meta("id",""))
 	if net_role=="client":
 		if net_world_ready:
-			net_request_uproot_tomato.rpc_id(1,id)
+			use_tool(SHOVEL_ITEM)
+			net_request_uproot_tomato.rpc_id(1,id,SHOVEL_ITEM)
 		return
 	use_tool(SHOVEL_ITEM)
 	tomato_fruits.erase(id)
@@ -5577,8 +5578,8 @@ func uproot_tomato(plant: Node3D) -> void:
 	notice("Pe de tomate retirado com a pa.")
 
 @rpc("any_peer","call_remote","reliable")
-func net_request_uproot_tomato(id: String) -> void:
-	if net_role!="host" or not objects.has(id):
+func net_request_uproot_tomato(id: String, tool: int) -> void:
+	if net_role!="host" or tool!=SHOVEL_ITEM or not objects.has(id):
 		return
 	var peer := multiplayer.get_remote_sender_id()
 	var plant: Node3D = objects[id]
