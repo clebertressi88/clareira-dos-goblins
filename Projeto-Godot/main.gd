@@ -1954,30 +1954,65 @@ func stair_board(parent: StaticBody3D, at: Vector3, size: Vector3, solid: bool =
 	if solid:
 		collider(parent,size,at)
 
+# Uma superficie fisica continua evita prender a capsula em cada espelho.
+# Os degraus visuais continuam separados; nenhuma rampa fica visivel.
+func stair_slope(parent: StaticBody3D, start: Vector3, finish: Vector3) -> void:
+	var along := (finish-start).normalized()
+	var across := along.cross(Vector3.UP).normalized()
+	var up := across.cross(along).normalized()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.0,.12,start.distance_to(finish))
+	var collision := CollisionShape3D.new()
+	collision.name = "SubidaContinua"
+	collision.shape = shape
+	parent.add_child(collision)
+	collision.transform = Transform3D(Basis(across,up,-along),(start+finish)*.5-up*.06)
+
+func stair_path(kind: String) -> Array[Vector3]:
+	var path: Array[Vector3] = []
+	if kind=="stairs_straight":
+		path = [Vector3(0,0,.13),Vector3(0,WALL_SIZE,-2.93)]
+	else:
+		path = [Vector3(0,0,.13),Vector3(0,WALL_SIZE*.5,-1.52),Vector3(0,WALL_SIZE*.5,-2.02),Vector3(.50,WALL_SIZE*.5,-2.02),Vector3(2.15,WALL_SIZE,-2.02)]
+	return path
+
+func stair_exit(kind: String) -> Vector3:
+	var path := stair_path(kind)
+	return path[path.size()-1]
+
 func build_stairs(parent: StaticBody3D, kind: String) -> void:
-	var rise := WALL_SIZE/12.0
 	if kind=="ladder":
 		for x in [-.38,.38]:
 			stair_board(parent,Vector3(float(x),WALL_SIZE*.5,0),Vector3(.10,WALL_SIZE+.15,.12),false)
 		for i in range(11):
 			stair_board(parent,Vector3(0,.15+float(i)*.23,0),Vector3(.83,.065,.12),false)
-		# A escada vertical e detectada por proximidade, sem bloquear o corpo.
 		collider(parent,Vector3(.86,WALL_SIZE,.08),Vector3(0,WALL_SIZE*.5,-.08))
 		parent.collision_layer = TARGET
 		return
-	for i in range(12):
-		var height := float(i+1)*rise
-		var at := Vector3(0,height-.055,-float(i)*.255)
-		var size := Vector3(1.0,.11,.26)
-		if kind=="stairs_l" and i>=6:
-			at = Vector3(float(i-5)*.255,height-.055,-1.275)
-			size = Vector3(.26,.11,1.0)
-		if kind=="stairs_l" and i==5:
-			size = Vector3(1.0,.11,1.0)
-		stair_board(parent,at,size)
-		for side in [-1.0,1.0]:
-			var offset := Vector3(float(side)*.43,0,0) if kind=="stairs_straight" or i<6 else Vector3(0,0,float(side)*.43)
-			stair_board(parent,at+offset+Vector3.DOWN*.13,Vector3(.12,.25,.26),false)
+	var path := stair_path(kind)
+	var flights := [0] if kind=="stairs_straight" else [0,3]
+	for index: int in flights:
+		var start := path[index]
+		var finish := path[index+1]
+		stair_slope(parent,start,finish)
+		var count := 12 if kind=="stairs_straight" else 6
+		var horizontal := Vector3(finish.x-start.x,0,finish.z-start.z)
+		var depth := horizontal.length()/float(count)
+		for i in range(count):
+			var at := start.lerp(finish,(float(i)+.5)/float(count))
+			at.y -= .055
+			var size := Vector3(1.0,.11,depth+.008) if absf(horizontal.z)>.1 else Vector3(depth+.008,.11,1.0)
+			stair_board(parent,at,size,false)
+			for side in [-1.0,1.0]:
+				var offset := Vector3(float(side)*.43,0,0) if absf(horizontal.z)>.1 else Vector3(0,0,float(side)*.43)
+				stair_board(parent,at+offset+Vector3.DOWN*.13,Vector3(.12,.25,.26),false)
+	if kind=="stairs_l":
+		stair_board(parent,Vector3(0,WALL_SIZE*.5-.055,-2.02),Vector3(1.0,.11,1.0))
+	# Patamar final curto: o topo coincide com a superficie do pavimento.
+	var end := stair_exit(kind)
+	var direction := Vector3.FORWARD if kind=="stairs_straight" else Vector3.RIGHT
+	var end_size := Vector3(1.0,.10,.12) if kind=="stairs_straight" else Vector3(.12,.10,1.0)
+	stair_board(parent,end-direction*.06-Vector3.UP*.05,end_size)
 
 func build_wood_floor(parent: StaticBody3D) -> void:
 	# Base continua impede que apareca grama entre placas e sob as juntas.
@@ -4691,6 +4726,65 @@ func construction_surface(point: Vector3, ceiling: float) -> float:
 			height = maxf(height,top)
 	return height
 
+# Procura o piso superior real e alinha a saida da escada com sua borda.
+# A orientacao escolhida com R e preservada.
+func stair_candidate(kind: String, aimed: Vector3, yaw: float, support: CollisionObject3D, has_hit: bool) -> Dictionary:
+	var basis := Basis(Vector3.UP,yaw)
+	var exit_offset := basis*stair_exit(kind)
+	var direction := basis*(Vector3.FORWARD if kind=="stairs_straight" else Vector3.RIGHT)
+	var side := direction.cross(Vector3.UP)
+	var point := aimed
+	point.y = construction_surface(point,aimed.y+.25)
+	var expected := point+exit_offset
+	var aimed_upper := support!=null and str(support.get_meta("kind",""))=="wood_floor" and aimed.y>player.global_position.y+.65
+	var nearest := INF
+	var snapped := false
+	for entry in placed:
+		if str(entry.get("kind",""))!="wood_floor":
+			continue
+		var p: Array = entry["p"]
+		var center := Vector3(float(p[0]),float(p[1])+.115,float(p[2]))
+		var direct := aimed_upper and str(entry.get("id",""))==str(support.get_meta("id",""))
+		if not direct and absf(center.y-expected.y)>.28:
+			continue
+		var edge := center-direction*(WALL_SIZE*.5+.005)
+		var reference := aimed if direct else expected
+		var delta := reference-edge
+		edge += side*clampf(delta.dot(side),-WALL_SIZE*.5+.51,WALL_SIZE*.5-.51)
+		var candidate := edge-exit_offset
+		var bottom := construction_surface(candidate,candidate.y+.18)
+		if absf(bottom-candidate.y)>.12:
+			continue
+		var distance := Vector2(edge.x-reference.x,edge.z-reference.z).length()
+		if not direct and distance>1.15:
+			continue
+		var score := distance-10.0 if direct else distance
+		if score<nearest:
+			nearest = score
+			point = candidate
+			snapped = true
+	# Testa a passagem do corpo ao longo da escada, nao apenas no primeiro degrau.
+	var valid := has_hit and (not aimed_upper or snapped)
+	var path := stair_path(kind)
+	var query := PhysicsShapeQueryParameters3D.new()
+	var clearance := BoxShape3D.new()
+	clearance.size = Vector3(.82,1.40,.26)
+	query.shape = clearance
+	query.collision_mask = SOLID|TARGET
+	for i in range(path.size()-1):
+		var start := path[i]
+		var finish := path[i+1]
+		for n in range(5):
+			var local := start.lerp(finish,float(n)/5.0)
+			var pos := point+basis*local
+			query.transform = Transform3D(basis,pos+Vector3.UP*.82)
+			if not get_world_3d().direct_space_state.intersect_shape(query,1).is_empty():
+				valid = false
+				break
+		if not valid:
+			break
+	return {"kind":kind,"point":point,"yaw":yaw,"level":0,"valid":valid}
+
 func construction_candidate(kind: String) -> Dictionary:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
 	var is_floor := kind=="wood_floor"
@@ -4707,6 +4801,8 @@ func construction_candidate(kind: String) -> Dictionary:
 	if not hit.is_empty():
 		point = hit["position"]
 		support = hit["collider"] as CollisionObject3D
+	if kind in ["stairs_straight","stairs_l"]:
+		return stair_candidate(kind,point,yaw,support,not hit.is_empty())
 	var support_kind := str(support.get_meta("kind","")) if support!=null else ""
 	var support_level := 0
 	if support!=null:
@@ -4837,7 +4933,7 @@ func place_craft(kind: String) -> bool:
 		return false
 	var candidate := construction_preview if construction_preview.get("kind","")==kind else construction_candidate(kind)
 	if not candidate.get("valid",false):
-		notice("Escolha uma superfície livre e com apoio.")
+		notice("Encaixe a escada na borda do piso e deixe a passagem livre." if kind in ["stairs_straight","stairs_l"] else "Escolha uma superfície livre e com apoio.")
 		return false
 	build_level = int(candidate["level"])
 	store_object(kind,candidate["point"],candidate["yaw"],build_level)
