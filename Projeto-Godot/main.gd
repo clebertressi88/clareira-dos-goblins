@@ -2000,8 +2000,14 @@ func build_carpentry_bench(parent: StaticBody3D) -> void:
 		box(parent,Vector3(.15,.37+float(i)*.05,-.03),Vector3(.86,.045,.24),"carpentry_stock",Color("#ba9261"))
 	collider(parent,Vector3(1.58,1.07,.86),Vector3.UP*.535)
 
-func stair_board(parent: StaticBody3D, at: Vector3, size: Vector3, solid: bool = true) -> void:
-	box(parent,at,size,"stair_rustic_wood",Color("#9d7045"))
+func stair_board(parent: StaticBody3D, at: Vector3, size: Vector3, solid: bool = true, beam: bool = false) -> void:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	surface.set_material(floor_surface_material(beam))
+	wall_surface_box(surface,at,size,beam)
+	var visual := MeshInstance3D.new()
+	visual.mesh = surface.commit()
+	parent.add_child(visual)
 	if solid:
 		collider(parent,size,at)
 
@@ -2034,13 +2040,19 @@ func stair_exit(kind: String) -> Vector3:
 func build_stairs(parent: StaticBody3D, kind: String) -> void:
 	if kind=="ladder":
 		for x in [-.38,.38]:
-			stair_board(parent,Vector3(float(x),WALL_SIZE*.5,0),Vector3(.10,WALL_SIZE+.15,.12),false)
+			stair_board(parent,Vector3(float(x),WALL_SIZE*.5,0),Vector3(.10,WALL_SIZE+.15,.12),false,true)
 		for i in range(11):
-			stair_board(parent,Vector3(0,.15+float(i)*.23,0),Vector3(.83,.065,.12),false)
+			stair_board(parent,Vector3(0,.15+float(i)*.23,0),Vector3(.83,.065,.12),false,true)
 		collider(parent,Vector3(.86,WALL_SIZE,.08),Vector3(0,WALL_SIZE*.5,-.08))
 		parent.collision_layer = TARGET
 		return
 	var path := stair_path(kind)
+	var end := stair_exit(kind)
+	var direction := Vector3.FORWARD if kind=="stairs_straight" else Vector3.RIGHT
+	# A capsula precisa chegar na altura do piso antes de tocar a borda.
+	# Preserva o ponto de encaixe antigo, inclusive em escadas salvas.
+	var landing_start := end-direction*.32
+	path[path.size()-1] = landing_start
 	var flights := [0] if kind=="stairs_straight" else [0,3]
 	for index: int in flights:
 		var start := path[index]
@@ -2056,14 +2068,16 @@ func build_stairs(parent: StaticBody3D, kind: String) -> void:
 			stair_board(parent,at,size,false)
 			for side in [-1.0,1.0]:
 				var offset := Vector3(float(side)*.43,0,0) if absf(horizontal.z)>.1 else Vector3(0,0,float(side)*.43)
-				stair_board(parent,at+offset+Vector3.DOWN*.13,Vector3(.12,.25,.26),false)
+				stair_board(parent,at+offset+Vector3.DOWN*.13,Vector3(.12,.25,.26),false,true)
 	if kind=="stairs_l":
 		stair_board(parent,Vector3(0,WALL_SIZE*.5-.055,-2.02),Vector3(1.0,.11,1.0))
-	# Patamar final curto: o topo coincide com a superficie do pavimento.
-	var end := stair_exit(kind)
-	var direction := Vector3.FORWARD if kind=="stairs_straight" else Vector3.RIGHT
-	var end_size := Vector3(1.0,.10,.12) if kind=="stairs_straight" else Vector3(.12,.10,1.0)
-	stair_board(parent,end-direction*.06-Vector3.UP*.05,end_size)
+	# Patamar horizontal de 46 cm, incluindo 14 cm de sobreposicao
+	# fisica com a borda do piso: nao deixa uma quina vertical entre ambos.
+	var landing_size := Vector3(1.0,.10,.46) if kind=="stairs_straight" else Vector3(.46,.10,1.0)
+	var landing_center := end-direction*.09-Vector3.UP*.05
+	stair_board(parent,landing_center,landing_size,false)
+	# A malha do piso cobre a parte sobreposta; a colisao continua por baixo.
+	collider(parent,landing_size,landing_center)
 
 func floor_surface_material(beam: bool) -> StandardMaterial3D:
 	var key := "floor_dark_joist" if beam else "floor_dark_planks"
@@ -5079,7 +5093,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # Sobe apenas pequenos degraus de piso, sem impulso de salto.
 func try_character_step(character: CharacterBody3D, dt: float) -> void:
-	if not character.is_on_floor() or character.velocity.y>0.0:
+	if not character.is_on_floor():
 		return
 	var motion := Vector3(character.velocity.x,0,character.velocity.z)*dt
 	if motion.length()<.001:
@@ -5110,8 +5124,9 @@ func try_character_step(character: CharacterBody3D, dt: float) -> void:
 	var step_height := rise.y+landing.get_travel().y
 	if step_height<=.008 or step_height>.32:
 		return
-	# Apenas a altura muda: move_and_slide executa o movimento horizontal normal.
-	character.global_position += Vector3.UP*(step_height+.003)
+	# A pequena folga evita prender a capsula na aresta de dois colisores.
+	# O deslocamento horizontal continua a cargo de move_and_slide.
+	character.global_position += Vector3.UP*(step_height+.012)
 	character.velocity.y = 0.0
 
 func nearby_ladder() -> Node3D:
