@@ -84,7 +84,7 @@ func _ready() -> void:
 	# Alcas traseiras seguem a silhueta dos ombros ate embaixo.
 	# A fita na face +Z torna visivel que o peso esta apoiado no corpo.
 	for side in [-1.0,1.0]:
-		var x := side*0.145
+		var x: float = float(side) * 0.145
 		_ribbon([
 			Vector3(x,0.196,-0.105),
 			Vector3(side*0.190,0.205,-0.020),
