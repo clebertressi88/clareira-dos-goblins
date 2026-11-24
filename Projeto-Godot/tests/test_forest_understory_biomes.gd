@@ -24,6 +24,21 @@ func _test() -> void:
 		printerr("UNDERSTORY FAIL: bioma de floresta densa nao gerado")
 		quit(1)
 		return
+	# Regressao visual: o capim deve ter varias folhas, nunca um so triangulo.
+	var grass_mesh: Mesh = UNDERSTORY._mesh("grass")
+	var grass_surface := grass_mesh.surface_get_arrays(0)
+	var grass_vertices: PackedVector3Array = grass_surface[Mesh.ARRAY_VERTEX]
+	if grass_vertices.size()<40:
+		printerr("UNDERSTORY FAIL: capim ainda e um triangulo isolado")
+		quit(1)
+		return
+	var max_height := 0.0
+	for point in grass_vertices:
+		max_height = maxf(max_height,point.y)
+	if max_height>0.23:
+		printerr("UNDERSTORY FAIL: capim muito alto")
+		quit(1)
+		return
 	UNDERSTORY.populate_chunk(root_3d,Vector2i(3,3))
 	var batches := 0
 	for child in root_3d.get_children():
