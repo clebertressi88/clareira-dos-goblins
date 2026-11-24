@@ -60,6 +60,8 @@ const STAIR_KINDS := ["stairs_straight","stairs_l","ladder"]
 const CHEST_SIZE := 16
 const CHEST_STACK_LIMIT := 64
 var chest_storage: Dictionary = {}
+var npc_saved_resources: Dictionary = {}
+const NPC_RESOURCE_KEYS := ["carried_wood","carried_tomatoes","carried_meat","carried_teeth","carried_seeds","axe_item","axe_uses"]
 var open_chest_id := ""
 var chest_selected_item := -1
 var chest_pending := false
@@ -806,6 +808,9 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	npc.set_meta("next_react",elapsed+randf_range(5.0,12.0))
 	npc.set_meta("talk_count",0)
 	npc.set_meta("next_work",elapsed+randf_range(15.0,35.0))
+	var saved: Dictionary = npc_saved_resources.get(kind,{})
+	for key in NPC_RESOURCE_KEYS:
+		npc.set_meta(key,int(saved.get(key,-1 if key=="axe_item" else 0)))
 	var visual := Node3D.new()
 	visual.name = "Visual"
 	npc.add_child(visual)
@@ -911,7 +916,7 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		elif kind=="tomato_plant":
 			if tomato_available(obj)<=0:
 				continue
-		elif kind!="tree":
+		elif kind!="tree" or int(npc.get_meta("axe_uses",0))<=0:
 			continue
 		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or TERRAIN.is_river(obj.global_position.x,obj.global_position.z):
 			continue
@@ -940,17 +945,25 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 	var id := str(obj.get_meta("id",""))
 	var pos := obj.global_position
 	if kind=="tree":
+		var tool := int(npc.get_meta("axe_item",-1))
+		var uses := int(npc.get_meta("axe_uses",0))
+		if tool not in [WOOD_AXE,STONE_AXE] or uses<=0:
+			return
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
 			rig.call("play_action","attack")
 		obj.set_meta("fall_from",npc.global_position)
 		var cuts := int(obj.get_meta("cuts",0))+1
 		obj.set_meta("cuts",cuts)
-		play_tree_chop_sound(pos+Vector3.UP*.85,WOOD_AXE)
-		timber(obj,cuts>=5)
+		var required := 4 if tool==STONE_AXE else 5
+		npc.set_meta("axe_uses",uses-1)
+		if uses==1:
+			npc.set_meta("axe_item",-1)
+		play_tree_chop_sound(pos+Vector3.UP*.85,tool)
+		timber(obj,cuts>=required)
 		if net_role=="host":
-			net_tree_chopped.rpc(id,cuts,cuts>=5,float(tree_regrowth.get(id,0.0)),npc.global_position)
-		if cuts>=5:
+			net_tree_chopped.rpc(id,cuts,cuts>=required,float(tree_regrowth.get(id,0.0)),npc.global_position)
+		if cuts>=required:
 			for i in range(3):
 				var drop := pos+Vector3((i-1)*.65,0,.39)
 				drop.y = ground(drop.x,drop.z)
@@ -959,7 +972,7 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 				var log_id := str(entry["id"])
 				if objects.has(log_id):
 					objects[log_id].set_meta("npc_owner",str(npc.get_meta("id","")))
-			save_game()
+		save_game()
 		return
 	if kind=="log" and str(obj.get_meta("npc_owner",""))==str(npc.get_meta("id","")):
 		remove_object(obj)
@@ -1061,6 +1074,76 @@ func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vecto
 			save_game()
 	return Vector3.ZERO
 
+# Recursos reais: retirar uma unidade do bau antes de usar.
+func npc_supply_item(id: String) -> int:
+	for item in [STONE_AXE,WOOD_AXE]:
+		for cell in normalized_chest_slots(id):
+			if int(cell[0])==item and int(cell[1])>0:
+				return item
+	return -1
+
+func npc_supply_chest(npc: CharacterBody3D,camp: Vector3) -> Node3D:
+	var best: Node3D
+	var nearest := INF
+	for obj in objects.values():
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion() or obj.get_meta("kind","")!="chest":
+			continue
+		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or absf(obj.global_position.y-ground(obj.global_position.x,obj.global_position.z))>0.8:
+			continue
+		if npc_supply_item(str(obj.get_meta("id","")))<0:
+			continue
+		var d: float = npc.global_position.distance_to(obj.global_position)
+		if d<nearest:
+			nearest = d
+			best = obj
+	return best
+
+func npc_take_axe(npc: CharacterBody3D,id: String) -> bool:
+	if int(npc.get_meta("axe_uses",0))>0:
+		return false
+	var item := npc_supply_item(id)
+	if item<0:
+		return false
+	var slots := normalized_chest_slots(id)
+	for i in range(slots.size()):
+		var cell: Array = slots[i]
+		if int(cell[0])!=item or int(cell[1])<=0:
+			continue
+		var amount := int(cell[1])-1
+		slots[i] = [item,amount] if amount>0 else [-1,0]
+		chest_storage[id] = slots
+		npc.set_meta("axe_item",item)
+		npc.set_meta("axe_uses",int(TOOL_MAX_DURABILITY[item]))
+		if net_role=="host":
+			net_chest_snapshot.rpc(id,slots)
+		if open_chest_id==id and not chest_pending:
+			show_chest()
+		save_game()
+		return true
+	return false
+
+func npc_planting_spot(npc: CharacterBody3D,camp: Vector3) -> Vector3:
+	var gardens := 0
+	for obj in objects.values():
+		if is_instance_valid(obj) and obj.get_meta("kind","")=="tomato_crop" and obj.global_position.distance_to(camp)<NPC_PATROL_RADIUS:
+			gardens += 1
+	if gardens>=6:
+		return Vector3.INF
+	for attempt in range(12):
+		var angle := randf()*TAU
+		var pos := camp+Vector3(cos(angle),0,sin(angle))*randf_range(2.8,5.8)
+		pos.y = ground(pos.x,pos.z)
+		if TERRAIN.is_river(pos.x,pos.z) or absf(ground(pos.x+.5,pos.z)-pos.y)>.3 or absf(ground(pos.x,pos.z+.5)-pos.y)>.3:
+			continue
+		var blocked := false
+		for obj in objects.values():
+			if is_instance_valid(obj) and not obj.is_queued_for_deletion() and obj.global_position.distance_to(pos)<1.25:
+				blocked = true
+				break
+		if not blocked:
+			return pos
+	return Vector3.INF
+
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
 	var task := str(npc.get_meta("work_mode",""))
@@ -1086,6 +1169,36 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	elif not night and task=="warm":
 		npc.set_meta("work_mode","")
 		task = ""
+	if task=="supply":
+		var chest := npc_supply_chest(npc,camp)
+		if is_instance_valid(chest):
+			var toward := chest.global_position-npc.global_position
+			toward.y = 0.0
+			if toward.length()>1.25 and not npc.is_on_wall():
+				return toward.normalized()
+			if toward.length()<=1.25:
+				npc_take_axe(npc,str(chest.get_meta("id","")))
+		npc.set_meta("work_mode","")
+		npc.set_meta("next_work",elapsed+8.0)
+		return Vector3.ZERO
+	if task=="plant":
+		var spot: Vector3 = npc.get_meta("plant_spot",Vector3.INF)
+		if spot.is_finite() and int(npc.get_meta("carried_seeds",0))>0 and not npc.is_on_wall() and elapsed<float(npc.get_meta("work_deadline",0.0)):
+			var toward := spot-npc.global_position
+			toward.y = 0.0
+			if toward.length()>.7:
+				return toward.normalized()
+			var blocked := false
+			for obj in objects.values():
+				if is_instance_valid(obj) and obj!=npc and obj.global_position.distance_to(spot)<1.15:
+					blocked = true
+					break
+			if not blocked:
+				npc.set_meta("carried_seeds",int(npc.get_meta("carried_seeds",0))-1)
+				plant_tomato_at(spot)
+		npc.set_meta("work_mode","")
+		npc.set_meta("next_work",elapsed+15.0)
+		return Vector3.ZERO
 	if task=="deliver":
 		var chest := npc_nearest_chest(npc,camp)
 		if chest==null:
@@ -1120,8 +1233,23 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(face.x,face.z),minf(dt*5.0,1.0))
 		return Vector3.ZERO
 	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
+		if not night and (int(npc.get_meta("carried_seeds",0))>0 or int(npc.get_meta("carried_tomatoes",0))>=1):
+			var spot := npc_planting_spot(npc,camp)
+			if spot.is_finite():
+				if int(npc.get_meta("carried_seeds",0))==0:
+					# Mesma receita do jogador: consome um tomate para criar tres sementes.
+					npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))-1)
+					npc.set_meta("carried_seeds",3)
+				npc.set_meta("plant_spot",spot)
+				npc.set_meta("work_mode","plant")
+				npc.set_meta("work_deadline",elapsed+20.0)
+				save_game()
+				return Vector3.ZERO
 		if int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))+int(npc.get_meta("carried_meat",0))+int(npc.get_meta("carried_teeth",0))>0:
 			npc.set_meta("work_mode","deliver")
+			return Vector3.ZERO
+		if not night and int(npc.get_meta("axe_uses",0))<=0 and npc_supply_chest(npc,camp)!=null:
+			npc.set_meta("work_mode","supply")
 			return Vector3.ZERO
 		var target := npc_work_target(npc,camp)
 		if target==null:
@@ -1148,7 +1276,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		npc.set_meta("work_hit_at",elapsed+1.4)
 		var kind := str(obj.get_meta("kind",""))
 		npc_finish_work(npc,obj)
-		if kind!="tree" or not is_instance_valid(obj) or obj.get_meta("kind","")!="tree":
+		if kind!="tree" or int(npc.get_meta("axe_uses",0))<=0 or not is_instance_valid(obj) or obj.get_meta("kind","")!="tree":
 			npc.set_meta("work_mode","")
 			npc.set_meta("work_id","")
 			npc.set_meta("next_work",elapsed+1.5)
@@ -5807,6 +5935,7 @@ func load_game() -> void:
 	tomato_crop_times = data.get("tomato_crop_times",{})
 	tomato_fruits = data.get("tomato_fruits",{})
 	chest_storage = data.get("chest_storage",{})
+	npc_saved_resources = data.get("npc_resources",{})
 	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -5827,8 +5956,14 @@ func save_game() -> bool:
 	var file := FileAccess.open(file_path+".tmp",FileAccess.WRITE)
 	if file:
 		var p := player.position
+		for npc in villagers:
+			if is_instance_valid(npc):
+				var resources: Dictionary = {}
+				for key in NPC_RESOURCE_KEYS:
+					resources[key] = int(npc.get_meta(key,-1 if key=="axe_item" else 0))
+				npc_saved_resources[str(npc.get_meta("id",""))] = resources
 		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.flush()
