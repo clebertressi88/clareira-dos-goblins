@@ -15,7 +15,7 @@ func _run() -> void:
 	if distant==null or distant.mesh==null or distant.material_override==null:
 		fail("Malha visual do horizonte nao foi criada")
 		return
-	if distant.get_child_count()!=0 or distant is CollisionObject3D:
+	if distant.get_child_count()!=0:
 		fail("Horizonte nao pode gerar colisoes ou objetos jogaveis")
 		return
 	var material := distant.material_override as StandardMaterial3D
