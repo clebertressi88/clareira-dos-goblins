@@ -895,7 +895,7 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
 			continue
 		var kind := str(obj.get_meta("kind",""))
-		if kind=="log":
+		if kind in ["log","meat_wolf","wolf_tooth"]:
 			if str(obj.get_meta("npc_owner",""))!=str(npc.get_meta("id","")):
 				continue
 		elif kind=="tomato_crop":
@@ -912,7 +912,7 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if reserved:
 			continue
 		var d: float = npc.global_position.distance_to(obj.global_position)
-		if kind=="log":
+		if kind in ["log","meat_wolf","wolf_tooth"]:
 			d -= 100.0
 		elif kind=="tree" and str(npc.get_meta("id",""))=="Talo":
 			d -= 2.0
@@ -955,6 +955,11 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		remove_object(obj)
 		npc.set_meta("carried_wood",int(npc.get_meta("carried_wood",0))+1)
 		save_game()
+	elif kind in ["meat_wolf","wolf_tooth"] and str(obj.get_meta("npc_owner",""))==str(npc.get_meta("id","")):
+		var key := "carried_meat" if kind=="meat_wolf" else "carried_teeth"
+		remove_object(obj)
+		npc.set_meta(key,int(npc.get_meta(key,0))+1)
+		save_game()
 	elif kind=="tomato_plant" or (kind=="tomato_crop" and bool(obj.get_meta("ready",false))):
 		remove_object(obj)
 		# Replantio no mesmo canteiro, sem debitar sementes do jogador.
@@ -978,7 +983,7 @@ func npc_nearest_chest(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or absf(obj.global_position.y-ground(obj.global_position.x,obj.global_position.z))>0.8:
 			continue
 		var id := str(obj.get_meta("id",""))
-		if not ((int(npc.get_meta("carried_wood",0))>0 and npc_chest_capacity(id,6)>0) or (int(npc.get_meta("carried_tomatoes",0))>0 and npc_chest_capacity(id,TOMATO_ITEM)>0)):
+		if not ((int(npc.get_meta("carried_wood",0))>0 and npc_chest_capacity(id,6)>0) or (int(npc.get_meta("carried_tomatoes",0))>0 and npc_chest_capacity(id,TOMATO_ITEM)>0) or (int(npc.get_meta("carried_meat",0))>0 and npc_chest_capacity(id,3)>0) or (int(npc.get_meta("carried_teeth",0))>0 and npc_chest_capacity(id,WOLF_TOOTH)>0)):
 			continue
 		var distance: float = npc.global_position.distance_to(obj.global_position)
 		if distance<nearest:
@@ -1034,8 +1039,15 @@ func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vecto
 			var pos := wolf.global_position
 			remove_object(wolf)
 			store_object("meat_wolf",pos)
+			var meat_entry: Dictionary = placed.back()
+			objects[str(meat_entry["id"])].set_meta("npc_owner",str(npc.get_meta("id","")))
 			if randf()<.5:
 				store_object("wolf_tooth",pos+Vector3(.36,0,0))
+				var tooth_entry: Dictionary = placed.back()
+				objects[str(tooth_entry["id"])].set_meta("npc_owner",str(npc.get_meta("id","")))
+			npc.set_meta("work_mode","")
+			npc.set_meta("work_id","")
+			npc.set_meta("next_work",elapsed)
 			npc.set_meta("attacker_id","")
 			save_game()
 	return Vector3.ZERO
@@ -1043,6 +1055,21 @@ func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vecto
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
 	var task := str(npc.get_meta("work_mode",""))
+	var loot := npc_work_target(npc,camp) if task=="" or task=="warm" else null
+	if is_instance_valid(loot) and str(loot.get_meta("kind","")) in ["meat_wolf","wolf_tooth","log"]:
+		npc.set_meta("work_id",str(loot.get_meta("id","")))
+		npc.set_meta("work_mode","work")
+		npc.set_meta("work_deadline",elapsed+20.0)
+		task = "work"
+	if task=="work":
+		var active: Node3D = objects.get(str(npc.get_meta("work_id","")),null)
+		if is_instance_valid(active) and str(active.get_meta("kind","")) in ["meat_wolf","wolf_tooth","log"]:
+			night = false
+	if int(npc.get_meta("carried_meat",0))+int(npc.get_meta("carried_teeth",0))>0:
+		night = false
+		if task=="warm":
+			npc.set_meta("work_mode","")
+			task = ""
 	if night and task!="warm":
 		npc.set_meta("work_id","")
 		npc.set_meta("work_mode","warm")
@@ -1067,6 +1094,8 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		var id := str(chest.get_meta("id",""))
 		npc.set_meta("carried_wood",npc_deposit(id,6,int(npc.get_meta("carried_wood",0))))
 		npc.set_meta("carried_tomatoes",npc_deposit(id,TOMATO_ITEM,int(npc.get_meta("carried_tomatoes",0))))
+		npc.set_meta("carried_meat",npc_deposit(id,3,int(npc.get_meta("carried_meat",0))))
+		npc.set_meta("carried_teeth",npc_deposit(id,WOLF_TOOTH,int(npc.get_meta("carried_teeth",0))))
 		npc.set_meta("work_mode","")
 		npc.set_meta("next_work",elapsed+randf_range(25.0,45.0))
 		save_game()
@@ -1082,7 +1111,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(face.x,face.z),minf(dt*5.0,1.0))
 		return Vector3.ZERO
 	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
-		if int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))>0:
+		if int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))+int(npc.get_meta("carried_meat",0))+int(npc.get_meta("carried_teeth",0))>0:
 			npc.set_meta("work_mode","deliver")
 			return Vector3.ZERO
 		var target := npc_work_target(npc,camp)
