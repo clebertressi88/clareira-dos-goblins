@@ -31,6 +31,9 @@ var _shield: Node3D
 var _grip_meshes: Array[MeshInstance3D] = []
 var _state := ""
 var _action_locked := false
+var _quiet_idle_time := 0.0
+var _quiet_idle_bone := -1
+var _quiet_idle_base := Vector3.ONE
 
 func set_variant(role: String) -> void:
 	var clean := role.to_lower()
@@ -220,15 +223,37 @@ func _create_npc_identifier() -> void:
 	name_label.modulate = colored.lightened(0.32)
 	add_child(name_label)
 
+func _update_quiet_idle(dt: float) -> void:
+	if _quiet_idle_bone < 0:
+		for i in range(_skeleton.get_bone_count()):
+			var n := _skeleton.get_bone_name(i).to_lower()
+			if n.contains("chest") or n.contains("spine"):
+				_quiet_idle_bone = i
+				_quiet_idle_base = _skeleton.get_bone_pose_scale(i)
+				if n.contains("chest"):
+					break
+	if _quiet_idle_bone >= 0:
+		_quiet_idle_time += dt
+		var breath := 1.0 + sin(_quiet_idle_time * TAU / 3.6) * 0.008
+		_skeleton.set_bone_pose_scale(_quiet_idle_bone, _quiet_idle_base * breath)
+
 func _switch_motion(new_state: String, rate: float) -> void:
 	if _animation_player == null or not CLIPS.has(new_state):
 		return
 	var clip: String = CLIPS[new_state]
 	if not _animation_player.has_animation(clip):
 		return
-	if _state != new_state or _animation_player.current_animation != clip:
+	if _state != new_state or (_animation_player.current_animation != clip and not (new_state == "idle" and variant != "player")):
+		if _state == "idle" and _quiet_idle_bone >= 0:
+			_skeleton.set_bone_pose_scale(_quiet_idle_bone, _quiet_idle_base)
+		_quiet_idle_bone = -1
 		_state = new_state
+		_animation_player.speed_scale = 1.0
 		_animation_player.play(clip, 0.14, rate)
+		if new_state == "idle" and variant != "player":
+			_animation_player.seek(0.0, true)
+			_animation_player.pause()
+			_quiet_idle_time = 0.0
 	else:
 		_animation_player.speed_scale = rate
 
@@ -245,6 +270,8 @@ func animate(velocity: Vector3, _dt: float, grounded: bool = true) -> void:
 		target = "walk"
 		rate = clampf(speed / 1.65, 0.7, 1.55)
 	_switch_motion(target, rate)
+	if target == "idle" and variant != "player":
+		_update_quiet_idle(_dt)
 
 func play_action(action: String) -> void:
 	if _animation_player == null or action not in ["attack", "hit", "death"]:
@@ -258,7 +285,7 @@ func _on_animation_finished(_name: StringName) -> void:
 			return
 		_action_locked = false
 		_switch_motion("idle", 1.0)
-	elif _state in ["idle", "walk", "run"] and _animation_player != null:
+	elif _state in ["idle", "walk", "run"] and _animation_player != null and not (_state == "idle" and variant != "player"):
 		_animation_player.play(CLIPS[_state])
 
 func get_animation_player() -> AnimationPlayer:
