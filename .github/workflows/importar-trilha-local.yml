@@ -1,0 +1,48 @@
+name: Importar trilha local
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/importar-trilha-local.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+jobs:
+  importar:
+    runs-on: [self-hosted, Windows, clareira-goblins]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = 'D:\Jogo Goblin\jogo 4\Clareira_Pacote_Musicas'
+          $tracks = @('clareira_exploracao.ogg','amanhecer.ogg','floresta_noturna.ogg','combate_goblin.ogg')
+          foreach ($track in $tracks) {
+            if (!(Test-Path (Join-Path $source "music/$track"))) { throw "Faixa ausente: $track" }
+          }
+          New-Item -ItemType Directory -Force Projeto-Godot/music | Out-Null
+          foreach ($track in $tracks) { Copy-Item (Join-Path $source "music/$track") Projeto-Godot/music/ }
+          Copy-Item (Join-Path $source 'music_manager.gd') Projeto-Godot/music_manager.gd
+          $config = Join-Path $PWD 'Projeto-Godot/project.godot'
+          $data = [IO.File]::ReadAllText($config)
+          if ($data -notmatch '(?m)^MusicManager=') {
+            if ($data -match '(?m)^\[autoload\]') { $data = $data.Replace('[autoload]', "[autoload]`nMusicManager=`"*res://music_manager.gd`"") }
+            else { $data += "`n[autoload]`nMusicManager=`"*res://music_manager.gd`"`n" }
+            [IO.File]::WriteAllText($config,$data,[Text.UTF8Encoding]::new($false))
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- Projeto-Godot/music Projeto-Godot/music_manager.gd Projeto-Godot/project.godot
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m 'Integrar trilha sonora original'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit falhou' }
+          git push origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Push falhou' }
+          gh workflow run publicar-windows.yml --ref main
+          if ($LASTEXITCODE -ne 0) { throw 'Disparo da compilacao falhou' }
+        env:
+          GH_TOKEN: ${{ github.token }}
