@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/publicar-skirmisher-selfhosted.yml'
+      - 'Projeto-Godot/npc_goblin_skirmisher.gd'
+      - 'Projeto-Godot/tests/test_goblin_npc_model.gd'
   workflow_dispatch:
 
 permissions:
