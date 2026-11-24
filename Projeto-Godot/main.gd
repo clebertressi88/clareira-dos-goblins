@@ -56,6 +56,7 @@ var chest_storage: Dictionary = {}
 var open_chest_id := ""
 var chest_selected_item := -1
 var chest_pending := false
+var pending_chest_id := ""
 const BUILD_MAX_LEVEL := 3
 const STARTER_CABIN_ID := "starter-cabin"
 const STARTER_CABIN_CENTER := Vector2(0.0,-15.0)
@@ -3483,7 +3484,7 @@ func close_chest_visual() -> void:
 			lid.create_tween().tween_property(lid,"rotation:x",0.0,0.23)
 	open_chest_id = ""
 	chest_selected_item = -1
-	chest_pending = false
+	# A resposta do anfitriao ainda pode estar a caminho.
 
 func open_chest(o: Node3D) -> void:
 	if not is_instance_valid(o) or str(o.get_meta("kind",""))!="chest":
@@ -3590,6 +3591,7 @@ func chest_slot_clicked(index: int, single: bool) -> void:
 		if not net_world_ready:
 			return
 		chest_pending = true
+		pending_chest_id = open_chest_id
 		net_chest_action.rpc_id(1,open_chest_id,index,item,count,deposit)
 		show_chest()
 		return
@@ -3668,9 +3670,10 @@ func net_chest_snapshot(id: String,slots: Array) -> void:
 
 @rpc("authority","call_remote","reliable")
 func net_chest_confirm(id: String,item: int,moved: int,deposit: bool,slots: Array) -> void:
-	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or open_chest_id!=id:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or pending_chest_id!=id:
 		return
 	chest_pending = false
+	pending_chest_id = ""
 	if item>=0 and item<ITEMS.size() and moved>0 and slots.size()==CHEST_SIZE:
 		if deposit:
 			stock[item] = maxi(0,stock[item]-moved)
@@ -3680,7 +3683,8 @@ func net_chest_confirm(id: String,item: int,moved: int,deposit: bool,slots: Arra
 		chest_storage[id] = slots
 		sync_hotbar()
 		save_game()
-	show_chest()
+	if open_chest_id==id:
+		show_chest()
 
 func open_backpack() -> void:
 	if not backpack_equipped:
@@ -4562,7 +4566,7 @@ func primary() -> void:
 				bench = true
 			sync_hotbar()
 			save_game()
-			notice(("Painel colocado: %s." % construction_level_name()) if held==FLOOR_ITEM else ("Parede no pavimento %d." % (build_level+1)))
+			notice("Baú colocado." if held==CHEST_ITEM else (("Painel colocado: %s." % construction_level_name()) if held==FLOOR_ITEM else ("Estrutura colocada no pavimento %d." % (build_level+1))))
 		return
 	var hit := ray()
 	if hit.is_empty():
