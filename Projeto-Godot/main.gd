@@ -345,6 +345,9 @@ func setup_world() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 38
 	add_child(sun)
+	npc_sun = sun
+	npc_environment = environment
+	npc_sky = sky_material
 	var grass := material("grass", Color("#f5f5ee"))
 	grass.albedo_texture = preload("res://grass.png")
 	# Renderizar ambas as faces: evita o terreno desaparecer quando a camera
@@ -766,6 +769,7 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	npc.set_meta("ai_until",elapsed+randf_range(.35,1.0))
 	npc.set_meta("next_react",elapsed+randf_range(5.0,12.0))
 	npc.set_meta("talk_count",0)
+	npc.set_meta("next_work",elapsed+randf_range(15.0,35.0))
 	var visual := Node3D.new()
 	visual.name = "Visual"
 	npc.add_child(visual)
@@ -821,6 +825,173 @@ func choose_goblin_destination(npc: CharacterBody3D) -> void:
 	npc.set_meta("ai_state","idle")
 	npc.set_meta("ai_until",elapsed+randf_range(.7,1.8))
 
+# Rotina de trabalho dos moradores, executada somente pela autoridade do mundo.
+var npc_sun: DirectionalLight3D
+var npc_environment: Environment
+var npc_sky: ProceduralSkyMaterial
+var npc_world_clock := 0.0
+const NPC_DAY_SECONDS := 1200.0
+const NPC_NIGHT_SECONDS := 300.0
+
+func npc_is_night() -> bool:
+	return fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS)>=NPC_DAY_SECONDS
+
+func update_npc_daylight(dt: float) -> void:
+	npc_world_clock += dt
+	if npc_sun==null or npc_environment==null or npc_sky==null:
+		return
+	var phase := fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS)
+	var dark := smoothstep(NPC_DAY_SECONDS-25.0,NPC_DAY_SECONDS,phase)*(1.0-smoothstep(NPC_DAY_SECONDS+NPC_NIGHT_SECONDS-25.0,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS,phase))
+	npc_sun.light_energy = lerpf(.81,.035,dark)
+	npc_environment.ambient_light_energy = lerpf(.52,.23,dark)
+	npc_environment.fog_light_color = Color("#98ada0").lerp(Color("#172539"),dark)
+	npc_sky.sky_top_color = Color("#43738a").lerp(Color("#071326"),dark)
+	npc_sky.sky_horizon_color = Color("#c3c9a1").lerp(Color("#26354b"),dark)
+
+func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
+	var best: Node3D
+	var best_distance := INF
+	for obj in objects.values():
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+			continue
+		var kind := str(obj.get_meta("kind",""))
+		if kind=="log":
+			if str(obj.get_meta("npc_owner",""))!=str(npc.get_meta("id","")):
+				continue
+		elif kind=="tomato_crop":
+			if not bool(obj.get_meta("ready",false)):
+				continue
+		elif kind not in ["tree","tomato_plant"]:
+			continue
+		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or TERRAIN.is_river(obj.global_position.x,obj.global_position.z):
+			continue
+		var reserved := false
+		for other in villagers:
+			if is_instance_valid(other) and other!=npc and str(other.get_meta("work_id",""))==str(obj.get_meta("id","")):
+				reserved = true
+		if reserved:
+			continue
+		var d: float = npc.global_position.distance_to(obj.global_position)
+		if kind=="log":
+			d -= 100.0
+		elif kind=="tree" and str(npc.get_meta("id",""))=="Talo":
+			d -= 2.0
+		elif kind.begins_with("tomato") and str(npc.get_meta("id",""))=="Bruma":
+			d -= 2.0
+		if d<best_distance:
+			best_distance = d
+			best = obj
+	return best
+
+func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
+	if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+		return
+	var kind := str(obj.get_meta("kind",""))
+	var id := str(obj.get_meta("id",""))
+	var pos := obj.global_position
+	if kind=="tree":
+		var rig := npc.get_node_or_null("Visual/GoblinRig")
+		if rig!=null:
+			rig.call("play_action","attack")
+		obj.set_meta("fall_from",npc.global_position)
+		var cuts := int(obj.get_meta("cuts",0))+1
+		obj.set_meta("cuts",cuts)
+		play_tree_chop_sound(pos+Vector3.UP*.85,WOOD_AXE)
+		timber(obj,cuts>=5)
+		if net_role=="host":
+			net_tree_chopped.rpc(id,cuts,cuts>=5,float(tree_regrowth.get(id,0.0)),npc.global_position)
+		if cuts>=5:
+			for i in range(3):
+				var drop := pos+Vector3((i-1)*.65,0,.39)
+				drop.y = ground(drop.x,drop.z)
+				store_object("log",drop)
+				var entry: Dictionary = placed.back()
+				var log_id := str(entry["id"])
+				if objects.has(log_id):
+					objects[log_id].set_meta("npc_owner",str(npc.get_meta("id","")))
+			save_game()
+		return
+	if kind=="log" and str(obj.get_meta("npc_owner",""))==str(npc.get_meta("id","")):
+		remove_object(obj)
+		npc.set_meta("carried_wood",int(npc.get_meta("carried_wood",0))+1)
+		save_game()
+	elif kind=="tomato_plant" or (kind=="tomato_crop" and bool(obj.get_meta("ready",false))):
+		remove_object(obj)
+		# Replantio no mesmo canteiro, sem debitar sementes do jogador.
+		plant_tomato_at(pos)
+		npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+3)
+
+func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
+	var night := npc_is_night()
+	var task := str(npc.get_meta("work_mode",""))
+	if night and task!="warm":
+		npc.set_meta("work_id","")
+		npc.set_meta("work_mode","warm")
+		task = "warm"
+	elif not night and task=="warm":
+		npc.set_meta("work_mode","")
+		task = ""
+	if task=="warm" or task=="deliver":
+		var side := -1.0 if str(npc.get_meta("id",""))=="Bruma" else 1.0
+		var spot := camp+Vector3(side*1.9,0,.8)
+		var direction := spot-npc.global_position
+		direction.y = 0.0
+		if direction.length()>.45:
+			if npc.is_on_wall():
+				npc.set_meta("work_mode","")
+				npc.set_meta("next_work",elapsed+12.0)
+				return Vector3.ZERO
+			return direction.normalized()
+		var face := camp-npc.global_position
+		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(face.x,face.z),minf(dt*5.0,1.0))
+		if task=="deliver":
+			var wood := int(npc.get_meta("carried_wood",0))
+			var tomatoes := int(npc.get_meta("carried_tomatoes",0))
+			for i in range(wood+tomatoes):
+				var drop := camp+Vector3(side*(2.6+float(i%3)*.38),0,1.2+float(i/3)*.35)
+				drop.y = ground(drop.x,drop.z)
+				store_object("log" if i<wood else "tomato",drop)
+			npc.set_meta("carried_wood",0)
+			npc.set_meta("carried_tomatoes",0)
+			npc.set_meta("work_mode","")
+			npc.set_meta("next_work",elapsed+randf_range(35.0,65.0))
+			save_game()
+		return Vector3.ZERO
+	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
+		if int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))>0:
+			npc.set_meta("work_mode","deliver")
+			return Vector3.ZERO
+		var target := npc_work_target(npc,camp)
+		if target==null:
+			npc.set_meta("next_work",elapsed+15.0)
+			return Vector3.ZERO
+		npc.set_meta("work_id",str(target.get_meta("id","")))
+		npc.set_meta("work_mode","work")
+		npc.set_meta("work_deadline",elapsed+20.0)
+		task = "work"
+	if task!="work":
+		return Vector3.ZERO
+	var obj: Node3D = objects.get(str(npc.get_meta("work_id","")),null)
+	if not is_instance_valid(obj) or obj.is_queued_for_deletion() or elapsed>float(npc.get_meta("work_deadline",0.0)) or npc.is_on_wall():
+		npc.set_meta("work_mode","")
+		npc.set_meta("work_id","")
+		npc.set_meta("next_work",elapsed+8.0)
+		return Vector3.ZERO
+	var direction := obj.global_position-npc.global_position
+	direction.y = 0.0
+	if direction.length()>1.15:
+		return direction.normalized()
+	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(direction.x,direction.z),minf(dt*5.0,1.0))
+	if elapsed>=float(npc.get_meta("work_hit_at",0.0)):
+		npc.set_meta("work_hit_at",elapsed+1.4)
+		var kind := str(obj.get_meta("kind",""))
+		npc_finish_work(npc,obj)
+		if kind!="tree" or not is_instance_valid(obj) or obj.get_meta("kind","")!="tree":
+			npc.set_meta("work_mode","")
+			npc.set_meta("work_id","")
+			npc.set_meta("next_work",elapsed+1.5)
+	return Vector3.ZERO
+
 func update_villagers(dt: float) -> void:
 	var campfire := get_campfire_center()
 	for npc in villagers:
@@ -844,6 +1015,9 @@ func update_villagers(dt: float) -> void:
 			walking = true
 			npc.set_meta("ai_state","idle")
 			npc.set_meta("ai_until",elapsed+1.0)
+		elif npc_is_night() or str(npc.get_meta("work_mode",""))!="" or elapsed>=float(npc.get_meta("next_work",0.0)):
+			heading = npc_routine(npc,campfire,dt)
+			walking = not heading.is_zero_approx()
 		elif attentive:
 			if distance>.15:
 				# Rosto dos goblins aponta para +Z no modelo local.
@@ -3716,6 +3890,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(dt: float) -> void:
 	elapsed += dt
+	update_npc_daylight(dt)
 	if moving:
 		var input_axis := movement_axis()
 		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X))
@@ -5283,7 +5458,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"clock":npc_world_clock})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -5321,6 +5496,8 @@ func net_apply_entities(states: Array) -> void:
 			obj.set_meta("net_animation_velocity",delta*7.0)
 			obj.global_position = obj.global_position.lerp(pos,.65) if delta.length()<10.0 else pos
 		obj.rotation.y = angle
+		if kind in ["Bruma","Talo"] and data.has("clock"):
+			npc_world_clock = float(data["clock"])
 		if int(data.get("hp",-1))>=0:
 			obj.set_meta("hp",int(data["hp"]))
 	for mob in mobs:
