@@ -2353,6 +2353,10 @@ func sync_tool_durability() -> void:
 		for slot in backpack_slots:
 			if slot.x==item:
 				count += slot.y
+		for chest_id in chest_storage:
+			for stored in normalized_chest_slots(str(chest_id)):
+				if int(stored[0])==item:
+					count += int(stored[1])
 		var values: Array = tool_durability.get(str(item),[])
 		while values.size()<count:
 			values.append(int(TOOL_MAX_DURABILITY[item]))
@@ -3446,6 +3450,232 @@ func serialize_backpack() -> Array:
 	for slot in backpack_slots:
 		data.append([slot.x,slot.y])
 	return data
+
+func normalized_chest_slots(id: String) -> Array:
+	var old: Array = chest_storage.get(id,[])
+	var slots: Array = []
+	for i in range(CHEST_SIZE):
+		var cell: Variant = old[i] if i<old.size() else [-1,0]
+		var item := -1
+		var amount := 0
+		if cell is Array and cell.size()>=2:
+			item = int(cell[0])
+			amount = int(cell[1])
+		if item<0 or item>=ITEMS.size() or amount<=0:
+			slots.append([-1,0])
+		else:
+			slots.append([item,mini(amount,CHEST_STACK_LIMIT)])
+	return slots
+
+func chest_has_items(id: String) -> bool:
+	for cell in normalized_chest_slots(id):
+		if int(cell[1])>0:
+			return true
+	return false
+
+func close_chest_visual() -> void:
+	if open_chest_id.is_empty():
+		return
+	var old: Node3D = objects.get(open_chest_id,null)
+	if is_instance_valid(old):
+		var lid := old.get_node_or_null("Tampa") as Node3D
+		if lid!=null:
+			lid.create_tween().tween_property(lid,"rotation:x",0.0,0.23)
+	open_chest_id = ""
+	chest_selected_item = -1
+	chest_pending = false
+
+func open_chest(o: Node3D) -> void:
+	if not is_instance_valid(o) or str(o.get_meta("kind",""))!="chest":
+		return
+	close_chest_visual()
+	open_chest_id = str(o.get_meta("id",""))
+	chest_storage[open_chest_id] = normalized_chest_slots(open_chest_id)
+	var lid := o.get_node_or_null("Tampa") as Node3D
+	if lid!=null:
+		lid.create_tween().tween_property(lid,"rotation:x",-1.15,0.28)
+	show_chest()
+
+func show_chest() -> void:
+	if open_chest_id.is_empty():
+		return
+	if not objects.has(open_chest_id):
+		close_chest_visual()
+		begin()
+		return
+	if is_instance_valid(medieval_menu):
+		medieval_menu.hide()
+	set_gameplay_overlays_visible(true)
+	inventory = true
+	moving = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	panel.show()
+	panel.add_theme_stylebox_override("panel",craft_relief(Color("#30291f"),Color("#b18a51"),true))
+	clear_menu()
+	label("Baú de madeira · 16 espaços · pilhas de até 64")
+	label("Selecione um item abaixo e clique no espaço do baú para guardar.")
+	label("Sem seleção: clique para retirar tudo · botão direito retira/guarda 1.")
+	var chest_grid := GridContainer.new()
+	chest_grid.columns = 4
+	menu.add_child(chest_grid)
+	var slots := normalized_chest_slots(open_chest_id)
+	for index in range(CHEST_SIZE):
+		var slot: Array = slots[index]
+		var button_slot := Button.new()
+		button_slot.custom_minimum_size = Vector2(94,60)
+		button_slot.text = "×%d" % int(slot[1]) if int(slot[1])>0 else ""
+		button_slot.tooltip_text = ITEMS[int(slot[0])] if int(slot[0])>=0 else "Espaço vazio"
+		if int(slot[0])>=0:
+			button_slot.icon = ITEM_ICONS[int(slot[0])]
+		button_slot.disabled = chest_pending
+		button_slot.pressed.connect(chest_slot_clicked.bind(index,false))
+		button_slot.gui_input.connect(chest_slot_input.bind(index))
+		style_craft_button(button_slot)
+		chest_grid.add_child(button_slot)
+	menu.add_child(HSeparator.new())
+	label("Inventário · selecione o item para depositar")
+	var item_grid := GridContainer.new()
+	item_grid.columns = 6
+	menu.add_child(item_grid)
+	for i in range(ITEMS.size()):
+		if stock[i]<=0 or i==CHEST_ITEM:
+			continue
+		var item_button := Button.new()
+		item_button.custom_minimum_size = Vector2(67,49)
+		item_button.text = "×%d" % stock[i]
+		item_button.tooltip_text = ITEMS[i]
+		item_button.icon = ITEM_ICONS[i]
+		item_button.toggle_mode = true
+		item_button.set_pressed_no_signal(chest_selected_item==i)
+		item_button.disabled = chest_pending
+		item_button.pressed.connect(chest_select_item.bind(i))
+		style_craft_button(item_button)
+		item_grid.add_child(item_button)
+	button("Fechar baú",begin,true)
+
+func chest_select_item(item: int) -> void:
+	chest_selected_item = -1 if chest_selected_item==item else item
+	show_chest()
+
+func chest_slot_input(event: InputEvent, index: int) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:
+		get_viewport().set_input_as_handled()
+		chest_slot_clicked(index,true)
+
+func chest_slot_clicked(index: int, single: bool) -> void:
+	if open_chest_id.is_empty() or chest_pending or index<0 or index>=CHEST_SIZE:
+		return
+	var chest: Node3D = objects.get(open_chest_id,null)
+	if not is_instance_valid(chest) or player.global_position.distance_to(chest.global_position)>6.0:
+		notice("Aproxime-se do baú.")
+		return
+	var slots := normalized_chest_slots(open_chest_id)
+	var cell: Array = slots[index]
+	var deposit := chest_selected_item>=0
+	var item := chest_selected_item if deposit else int(cell[0])
+	if item<0 or item>=ITEMS.size():
+		return
+	if deposit and item==CHEST_ITEM:
+		notice("Não é permitido guardar baús dentro de baús.")
+		return
+	var count := 1 if single else (mini(stock[item],CHEST_STACK_LIMIT-int(cell[1])) if deposit else int(cell[1]))
+	if deposit:
+		if stock[item]<=0 or (int(cell[0])>=0 and int(cell[0])!=item):
+			notice("Selecione um espaço vazio ou com o mesmo item.")
+			return
+		count = mini(count,stock[item])
+	if count<=0:
+		return
+	if net_role=="client":
+		if not net_world_ready:
+			return
+		chest_pending = true
+		net_chest_action.rpc_id(1,open_chest_id,index,item,count,deposit)
+		show_chest()
+		return
+	chest_apply_transfer(open_chest_id,index,item,count,deposit)
+	save_game()
+	show_chest()
+
+func chest_apply_transfer(id: String,index: int,item: int,count: int,deposit: bool) -> int:
+	if index<0 or index>=CHEST_SIZE or count<=0:
+		return 0
+	var slots := normalized_chest_slots(id)
+	var cell: Array = slots[index]
+	var amount := 0
+	if deposit:
+		if stock[item]<=0 or (int(cell[0])>=0 and int(cell[0])!=item):
+			return 0
+		amount = mini(count,mini(stock[item],CHEST_STACK_LIMIT-int(cell[1])))
+		if amount<=0:
+			return 0
+		stock[item] -= amount
+		slots[index] = [item,int(cell[1])+amount]
+	else:
+		if int(cell[0])!=item:
+			return 0
+		amount = mini(count,int(cell[1]))
+		stock[item] += amount
+		slots[index] = [item,int(cell[1])-amount] if int(cell[1])>amount else [-1,0]
+		item_received(item)
+	chest_storage[id] = slots
+	sync_hotbar()
+	if net_role=="host":
+		net_chest_snapshot.rpc(id,slots)
+	return amount
+
+@rpc("any_peer","call_remote","reliable")
+func net_chest_action(id: String,index: int,item: int,count: int,deposit: bool) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var chest: Node3D = objects[id]
+	if not is_instance_valid(chest) or str(chest.get_meta("kind",""))!="chest" or not remote_can_interact(peer_id,chest.global_position,5.5):
+		return
+	if index<0 or index>=CHEST_SIZE or item<0 or item>=ITEMS.size() or count<=0 or count>CHEST_STACK_LIMIT or (deposit and item==CHEST_ITEM):
+		return
+	var slots := normalized_chest_slots(id)
+	var cell: Array = slots[index]
+	var moved := 0
+	if deposit:
+		if int(cell[0])<0 or int(cell[0])==item:
+			moved = mini(count,CHEST_STACK_LIMIT-int(cell[1]))
+			if moved>0:
+				slots[index] = [item,int(cell[1])+moved]
+	else:
+		if int(cell[0])==item:
+			moved = mini(count,int(cell[1]))
+			if moved>0:
+				slots[index] = [item,int(cell[1])-moved] if int(cell[1])>moved else [-1,0]
+	if moved>0:
+		chest_storage[id] = slots
+		net_chest_snapshot.rpc(id,slots)
+		save_game()
+	net_chest_confirm.rpc_id(peer_id,id,item,moved,deposit,slots)
+
+@rpc("authority","call_remote","reliable")
+func net_chest_snapshot(id: String,slots: Array) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or slots.size()!=CHEST_SIZE:
+		return
+	chest_storage[id] = slots
+	if open_chest_id==id and not chest_pending:
+		show_chest()
+
+@rpc("authority","call_remote","reliable")
+func net_chest_confirm(id: String,item: int,moved: int,deposit: bool,slots: Array) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or open_chest_id!=id:
+		return
+	chest_pending = false
+	if item>=0 and item<ITEMS.size() and moved>0 and slots.size()==CHEST_SIZE:
+		if deposit:
+			stock[item] = maxi(0,stock[item]-moved)
+		else:
+			stock[item] += moved
+			item_received(item)
+		chest_storage[id] = slots
+		sync_hotbar()
+		save_game()
+	show_chest()
 
 func open_backpack() -> void:
 	if not backpack_equipped:
