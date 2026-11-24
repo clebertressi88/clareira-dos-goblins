@@ -1877,49 +1877,100 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 # Cada segmento de parede tem a largura e a altura de 3 blocos de pedra (CELL).
 # Abertura de porta: posições 2 e 5 vazias (base e centro da coluna central).
 # Abertura de janela: posição 5 vazia (centro da grade).
+# Texturas de referencia: tabuas envelhecidas e caibros serrados.
+# UVs em coordenadas locais da parede, sem repetir a foto em cada bloco.
+func wall_surface_material(beam: bool) -> StandardMaterial3D:
+	var key := "wall_sawn_beam_texture" if beam else "wall_weathered_plank_texture"
+	if not materials.has(key):
+		var mat := StandardMaterial3D.new()
+		mat.albedo_texture = preload("res://texturas/caibro_madeira.webp") if beam else preload("res://texturas/parede_madeira.webp")
+		mat.roughness = .94
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		materials[key] = mat
+	return materials[key] as StandardMaterial3D
+
+func wall_surface_box(surface: SurfaceTool, center: Vector3, size: Vector3, beam: bool) -> void:
+	var half := size*.5
+	var faces := [
+		[Vector3.BACK,Vector3.RIGHT,Vector3.UP],
+		[Vector3.FORWARD,Vector3.LEFT,Vector3.UP],
+		[Vector3.RIGHT,Vector3.FORWARD,Vector3.UP],
+		[Vector3.LEFT,Vector3.BACK,Vector3.UP],
+		[Vector3.UP,Vector3.RIGHT,Vector3.FORWARD],
+		[Vector3.DOWN,Vector3.RIGHT,Vector3.BACK]
+	]
+	var long_axis := Vector3.UP if size.y>size.x and size.y>size.z else (Vector3.RIGHT if size.x>=size.z else Vector3.BACK)
+	for face: Array in faces:
+		var normal: Vector3 = face[0]
+		var u: Vector3 = face[1]
+		var v: Vector3 = face[2]
+		var base := center+normal*half
+		var corners: Array[Vector3] = [base-u*half-v*half,base+u*half-v*half,base+u*half+v*half,base-u*half+v*half]
+		for idx in [0,2,1,0,3,2]:
+			var point: Vector3 = corners[idx]
+			var uv := Vector2((point.x+WALL_SIZE*.5)/WALL_SIZE,1.0-point.y/WALL_SIZE)
+			if beam:
+				# O comprimento do caibro acompanha os veios horizontais da imagem.
+				var across := v if absf(u.dot(long_axis))>.5 else u
+				if absf(normal.dot(long_axis))>.5:
+					uv = Vector2(point.dot(u),point.dot(v))/.24
+				else:
+					uv = Vector2(point.dot(long_axis)/1.35,point.dot(across)/.24)
+			elif absf(normal.x)>.5:
+				uv = Vector2((point.z+.075)/WALL_SIZE,1.0-point.y/WALL_SIZE)
+			elif absf(normal.y)>.5:
+				uv = Vector2((point.x+WALL_SIZE*.5)/WALL_SIZE,(point.z+.075)/WALL_SIZE)
+			surface.set_normal(normal)
+			surface.set_uv(uv)
+			surface.add_vertex(point)
+
 func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
-	var plank_tone := Color("#a47a50")
+	var boards := SurfaceTool.new()
+	boards.begin(Mesh.PRIMITIVE_TRIANGLES)
+	boards.set_material(wall_surface_material(false))
+	var beams := SurfaceTool.new()
+	beams.begin(Mesh.PRIMITIVE_TRIANGLES)
+	beams.set_material(wall_surface_material(true))
+	# Uma malha continua de tabuas nas duas faces; aberturas e colisao originais.
 	for row in range(3):
 		for column in range(3):
 			var opening := column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
 			if opening:
 				continue
 			if kind=="wood_doorway" and row==2 and column==1:
-				# Porta com 2,15 m livres: o antigo cabecalho comecava em
-				# 1,70 m e prendia a cabeca do jogador em pisos elevados.
-				box(parent,Vector3(0,WALL_SIZE-.20,0),Vector3(CELL*1.015,.40,.15),
-					"door_top_board",Color("#a47a50"))
+				wall_surface_box(boards,Vector3(0,WALL_SIZE-.20,0),Vector3(CELL,.40,.15),false)
 				collider(parent,Vector3(CELL*.99,.40,.18),Vector3(0,WALL_SIZE-.20,0))
 				continue
 			var x := (float(column)-1.0)*CELL
-			var y := (float(row)+0.5)*CELL
-			var tone := plank_tone.darkened(.055 if (row+column)%2==0 else .0)
-			# Duas tábuas horizontais por bloco, com junta de madeira antiga.
-			for slat in range(2):
-				var dy := (-.25 if slat==0 else .25)*CELL
-				box(parent,Vector3(x,y+dy,0),Vector3(CELL*1.015,CELL*.51,.15),
-					"wall_board_%d_%d" % [row,column],tone)
-			box(parent,Vector3(x+CELL*.33,y,.083),Vector3(.025,CELL*.92,.018),
-				"wall_grain",Color("#6f4a2f"))
+			var y := (float(row)+.5)*CELL
+			wall_surface_box(boards,Vector3(x,y,0),Vector3(CELL,CELL,.15),false)
 			collider(parent,Vector3(CELL*.99,CELL*.99,.18),Vector3(x,y,0))
-	# Caixilho da abertura: madeira visível, sem fechar o buraco.
-	if kind!="wood_wall":
+	# Estrutura decorativa na face interna (+Z local), sem colisao extra.
+	for x in [-WALL_SIZE*.5+.06,WALL_SIZE*.5-.06]:
+		wall_surface_box(beams,Vector3(float(x),WALL_SIZE*.5,.105),Vector3(.12,WALL_SIZE,.10),true)
+	wall_surface_box(beams,Vector3(0,WALL_SIZE-.06,.105),Vector3(WALL_SIZE,.12,.10),true)
+	if kind!="wood_doorway":
+		wall_surface_box(beams,Vector3(0,.06,.105),Vector3(WALL_SIZE,.12,.10),true)
+	if kind=="wood_wall":
+		wall_surface_box(beams,Vector3(0,WALL_SIZE*.5,.105),Vector3(.12,WALL_SIZE-.24,.10),true)
+	else:
 		var window := kind=="wood_window"
 		var low := CELL if window else 0.0
-		var high := WALL_SIZE-.40 if kind=="wood_doorway" else CELL*2.0
+		var high := CELL*2.0 if window else WALL_SIZE-.40
 		var jamb_height := high-low
 		for side in [-1.0,1.0]:
-			box(parent,Vector3(side*CELL*.5,low+jamb_height*.5,.105),
-				Vector3(.075,jamb_height,.065),"wall_frame",Color("#60402a"))
+			wall_surface_box(beams,Vector3(float(side)*CELL*.5,low+jamb_height*.5,.105),Vector3(.075,jamb_height,.065),true)
 		if window:
 			for edge in [CELL,2.0*CELL]:
-				box(parent,Vector3(0,edge,.105),Vector3(CELL,.075,.07),
-					"wall_frame",Color("#60402a"))
+				wall_surface_box(beams,Vector3(0,float(edge),.105),Vector3(CELL,.075,.07),true)
 		else:
-			box(parent,Vector3(0,high,.105),Vector3(CELL,.095,.075),
-				"wall_frame",Color("#60402a"))
-	# A base de cada parede acompanha o relevo. Em saves antigos,
-	# pilares sustentam as partes que antes ficavam suspensas.
+			wall_surface_box(beams,Vector3(0,high,.105),Vector3(CELL,.095,.075),true)
+	var wall_mesh := boards.commit()
+	beams.commit(wall_mesh)
+	var visual := MeshInstance3D.new()
+	visual.name = "MadeiraTexturizada"
+	visual.mesh = wall_mesh
+	parent.add_child(visual)
 	add_wall_foundations(parent)
 	if kind=="wood_doorway":
 		build_door_transitions(parent)
