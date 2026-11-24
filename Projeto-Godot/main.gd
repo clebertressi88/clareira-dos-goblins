@@ -5909,7 +5909,7 @@ func apply_mining_hit(rock: Node3D, tool: int, miner_peer: int) -> void:
 	if not is_instance_valid(rock) or str(rock.get_meta("kind","")) not in ["stone","block"]:
 		return
 	var count: int = int(rock.get_meta("mine_hits",0))+1
-	var required: int = 2 if tool==STONE_PICKAXE else 4
+	var required: int = 8 if tool==STONE_PICKAXE else 12
 	rock.set_meta("mine_hits",count)
 	impact(rock.global_position+Vector3.UP*0.4,Vector3.UP,true)
 	if count<required:
