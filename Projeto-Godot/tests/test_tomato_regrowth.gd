@@ -22,8 +22,31 @@ func _run() -> void:
 		printerr("TOMATO REGROW FAIL: planta deve comecar com 4 frutos")
 		quit(1)
 		return
+	var red_before := 0
+	for cluster in plant.get_children():
+		if str(cluster.name).begins_with("Fruto_") and cluster.visible:
+			for part in cluster.get_children():
+				if part.name=="TomateMaduro":
+					red_before += 1
+	if red_before!=4:
+		printerr("TOMATO REGROW FAIL: frutos disponiveis devem ser vermelhos")
+		quit(1)
+		return
 	if not bool(game.call("take_one_tomato",plant)) or int(game.call("tomato_available",plant))!=3:
 		printerr("TOMATO REGROW FAIL: colher deve retirar apenas 1")
+		quit(1)
+		return
+	var ripe_after := 0
+	var green_after := 0
+	for cluster in plant.get_children():
+		if str(cluster.name).begins_with("Fruto_") and cluster.visible:
+			for part in cluster.get_children():
+				if part.name=="TomateMaduro":
+					ripe_after += 1
+				if part.name=="TomateVerde":
+					green_after += 1
+	if ripe_after!=3 or green_after!=1:
+		printerr("TOMATO REGROW FAIL: fruto regenerando deve estar verde")
 		quit(1)
 		return
 	if not is_instance_valid(plant) or str(plant.get_meta("kind",""))!="tomato_plant":
