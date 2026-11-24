@@ -16,6 +16,9 @@ const TOMATO_ITEM := 27
 const TOMATO_HEAL := 12
 const TOMATO_SEED_ITEM := 28
 const TOMATO_GROW_SECONDS := 300.0
+const TOMATO_FRUIT_SECONDS := 600.0 # 10 min para cada novo fruto.
+const TOMATO_MAX_FRUITS := 4
+var tomato_fruits: Dictionary = {} # id -> {count, next}; estado compartilhado e salvo.
 var tomato_crop_times: Dictionary = {}
 const VINE_INTERVAL_SECONDS := 300.0 # Uma vinha a cada 5 min, apenas em arvores adultas.
 var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado pelo anfitriao.
@@ -24,7 +27,7 @@ var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
 const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate", "Baú", "Escada reta", "Escada em L", "Escada vertical", "Bancada de marcenaria"]
 const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed","chest","stairs_straight","stairs_l","ladder","carpentry_bench"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú","stairs_straight":"Escada reta","stairs_l":"Escada em L","ladder":"Escada vertical","carpentry_bench":"Bancada de marcenaria"}
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú","stairs_straight":"Escada reta","stairs_l":"Escada em L","ladder":"Escada vertical","carpentry_bench":"Bancada de marcenaria","tomato_seeds":"3 sementes de tomate"}
 const LEVEL_2_RECIPES := ["stone_pickaxe","spiked_club","spear","carpentry_bench"]
 const CARPENTRY_PATTERNS := {"wood_wall":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_doorway":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,-1,7,-1,-1,-1,-1,-1,-1],"wood_window":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_floor":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,6,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"chest":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,11,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"ladder":[-1,-1,-1,-1,-1,-1,1,11,1,-1,-1,1,-1,1,-1,-1,1,11,1,-1,-1,-1,-1,-1,-1],"stairs_straight":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,7,7,-1,-1,7,7,-1,-1,-1,1,-1,-1,-1,-1],"stairs_l":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,1,7,7,7,-1,7,7,7,1,7,7,1,-1,-1]}
 const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"carpentry_bench":[7,7,7,7,10,7,6,7,6]}
@@ -903,9 +906,12 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 			if str(obj.get_meta("npc_owner",""))!=str(npc.get_meta("id","")):
 				continue
 		elif kind=="tomato_crop":
-			if not bool(obj.get_meta("ready",false)):
+			if not bool(obj.get_meta("ready",false)) or tomato_available(obj)<=0:
 				continue
-		elif kind not in ["tree","tomato_plant"]:
+		elif kind=="tomato_plant":
+			if tomato_available(obj)<=0:
+				continue
+		elif kind!="tree":
 			continue
 		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or TERRAIN.is_river(obj.global_position.x,obj.global_position.z):
 			continue
@@ -965,10 +971,9 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		npc.set_meta(key,int(npc.get_meta(key,0))+1)
 		save_game()
 	elif kind=="tomato_plant" or (kind=="tomato_crop" and bool(obj.get_meta("ready",false))):
-		remove_object(obj)
-		# Replantio no mesmo canteiro, sem debitar sementes do jogador.
-		plant_tomato_at(pos)
-		npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+3)
+		if take_one_tomato(obj):
+			npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+1)
+			save_game()
 
 # Depositos dos moradores nao usam o inventario do jogador.
 func npc_chest_capacity(id: String, item: int) -> int:
@@ -1374,6 +1379,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			# Vegetacao rasteira com tomates verdes e maduros; so interativa, sem bloquear caminho.
 			preload("res://forest_tomato_plant.gd").build(o,id)
 			collider(o,Vector3(1.05,.45,1.05),Vector3.UP*.22)
+			update_tomato_fruits(o)
 		"tomato_crop":
 			var crop_visual := Node3D.new()
 			crop_visual.name = "Horta"
@@ -1381,6 +1387,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			preload("res://forest_tomato_plant.gd").build(crop_visual,id)
 			collider(o,Vector3(1.05,.45,1.05),Vector3.UP*.22)
 			update_tomato_crop(o)
+			update_tomato_fruits(o)
 		"tomato_seed":
 			var seed := SphereMesh.new()
 			seed.radius = .042
@@ -3593,6 +3600,8 @@ func basic_recipe() -> String:
 	var total := 0
 	for amount in counts:
 		total += int(amount)
+	if counts[TOMATO_ITEM]==1 and total==1:
+		return "tomato_seeds"
 	if counts[6]>=1 and total==counts[6]:
 		return "plank"
 	if craft_mode=="station":
@@ -3625,7 +3634,7 @@ func craft_basic() -> void:
 		notice("Esta receita exige a bancada de trabalho nível 2.")
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1},"stairs_straight":{7:8,1:2},"stairs_l":{7:12,1:4},"ladder":{1:6,VINE:2},"carpentry_bench":{7:6,6:2,10:1}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1},"stairs_straight":{7:8,1:2},"stairs_l":{7:12,1:4},"ladder":{1:6,VINE:2},"carpentry_bench":{7:6,6:2,10:1},"tomato_seeds":{TOMATO_ITEM:1}
 	}[kind]
 	for index: int in costs:
 		if stock[index]<int(costs[index]):
@@ -3641,6 +3650,9 @@ func craft_basic() -> void:
 		craft_cells[i] = Vector2i(cell.x,cell.y-used) if cell.y>used else Vector2i(-1,0)
 	sync_hotbar()
 	match kind:
+		"tomato_seeds":
+			stock[TOMATO_SEED_ITEM] += 3
+			item_received(TOMATO_SEED_ITEM)
 		"plank":
 			stock[7] += 4
 			item_received(7)
@@ -4584,6 +4596,7 @@ func _physics_process(dt: float) -> void:
 		tree_regrowth_clock = 0.0
 		update_regrowing_trees()
 		update_all_tomato_crops()
+		update_tomato_fruit_regrowth()
 	if net_role!="solo" and multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
 		if net_role=="host" or net_connected:
@@ -4647,7 +4660,7 @@ func _physics_process(dt: float) -> void:
 				"carpentry_bench": interaction_hint = "Botão direito · Usar marcenaria 5 × 5"
 				"chest": interaction_hint = "Botão direito · Abrir baú"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
-				"tomato_plant","tomato_crop": interaction_hint = "Botão direito · Colher tomates"
+				"tomato_plant","tomato_crop": interaction_hint = "Botão direito · Colher 1 tomate · Pá para retirar pé"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
 				"stump": interaction_hint = "Pá + clique esquerdo · desenterrar toco"
@@ -4962,6 +4975,9 @@ func primary() -> void:
 		sync_hotbar()
 		save_game()
 		notice("Muda plantada! A árvore crescerá com o tempo.")
+		return
+	if kind in ["tomato_plant","tomato_crop"] and held==SHOVEL_ITEM:
+		uproot_tomato(o)
 		return
 	if kind in ["stone","block"]:
 		mine_stone(o,held,hit["position"],hit["normal"])
