@@ -229,6 +229,97 @@ func _create_npc_identifier() -> void:
 	name_label.modulate = colored.lightened(0.32)
 	add_child(name_label)
 
+# Pose noturna procedural sobre o rig original; nao altera os clips do jogador.
+var _camp_warm := false
+var _camp_stretch := -1.0
+var _camp_weight := 0.0
+var _camp_base: Dictionary = {}
+var _camp_arms: Array[Vector2i] = []
+var _camp_head := -1
+var _camp_cached := false
+
+func set_camp_warmth(enabled: bool, stretch: float = -1.0) -> void:
+	_camp_warm = enabled and variant in ["bruma","talo"]
+	_camp_stretch = clampf(stretch,0.0,1.0) if _camp_warm and stretch>=0.0 else -1.0
+
+func _camp_find_bones() -> void:
+	if _camp_cached:
+		return
+	_camp_cached = true
+	for i in range(_skeleton.get_bone_count()):
+		var n := str(_skeleton.get_bone_name(i)).to_lower().replace("_","").replace(".","").replace(":","")
+		if n.contains("head") and not n.contains("end"):
+			_camp_head = i
+		if n.contains("forearm") or n.contains("lowerarm") or n.contains("elbow"):
+			var upper := _skeleton.get_bone_parent(i)
+			if upper>=0:
+				_camp_arms.append(Vector2i(upper,i))
+
+func _camp_restore() -> void:
+	if _skeleton!=null:
+		for key in _camp_base:
+			_skeleton.set_bone_pose_rotation(int(key),_camp_base[key])
+	_camp_base.clear()
+
+func _camp_aim(bone: int, child: int, desired: Vector3, weight: float) -> void:
+	var at := _skeleton.get_bone_global_pose(bone).origin
+	var toward := _skeleton.get_bone_global_pose(child).origin-at
+	if toward.length_squared()<0.00001 or desired.is_zero_approx():
+		return
+	var delta := Quaternion(toward.normalized(),toward.normalized().lerp(desired.normalized(),weight).normalized())
+	var parent := _skeleton.get_bone_parent(bone)
+	var parent_basis := Basis.IDENTITY
+	if parent>=0:
+		parent_basis = _skeleton.get_bone_global_pose(parent).basis.orthonormalized()
+	var local_delta := parent_basis.get_rotation_quaternion().inverse()*delta*parent_basis.get_rotation_quaternion()
+	_skeleton.set_bone_pose_rotation(bone,(local_delta*_skeleton.get_bone_pose_rotation(bone)).normalized())
+
+func _camp_pose(dt: float) -> void:
+	_camp_weight = move_toward(_camp_weight,1.0 if _camp_warm else 0.0,dt*2.5)
+	if _camp_weight<=0.0:
+		_camp_restore()
+		return
+	_camp_find_bones()
+	# Restaurar a pose de base a cada quadro: nunca acumular rotacoes.
+	if _camp_base.is_empty():
+		for pair in _camp_arms:
+			_camp_base[pair.x] = _skeleton.get_bone_pose_rotation(pair.x)
+			_camp_base[pair.y] = _skeleton.get_bone_pose_rotation(pair.y)
+		if _camp_head>=0:
+			_camp_base[_camp_head] = _skeleton.get_bone_pose_rotation(_camp_head)
+	for key in _camp_base:
+		_skeleton.set_bone_pose_rotation(int(key),_camp_base[key])
+	var stretch := sin(_camp_stretch*PI) if _camp_stretch>=0.0 else 0.0
+	stretch = smoothstep(0.0,1.0,stretch)
+	var convert := _skeleton.global_transform.basis.orthonormalized().inverse()*global_transform.basis.orthonormalized()
+	var forward := (convert*Vector3.BACK).normalized()
+	var up := (convert*Vector3.UP).normalized()
+	var right := (convert*Vector3.RIGHT).normalized()
+	var torso_center := _skeleton.get_bone_global_pose(_quiet_idle_bone).origin if _quiet_idle_bone>=0 else Vector3.ZERO
+	for pair in _camp_arms:
+		var shoulder := _skeleton.get_bone_global_pose(pair.x).origin
+		var side := 1.0 if (shoulder-torso_center).dot(right)>=0.0 else -1.0
+		var warm_upper := forward*0.55-up*0.8+right*side*0.18
+		var stretch_upper := up*0.9+right*side*0.45+forward*0.14
+		_camp_aim(pair.x,pair.y,warm_upper.lerp(stretch_upper,stretch),_camp_weight)
+		var hand := -1
+		for child in _skeleton.get_bone_children(pair.y):
+			hand = child
+			break
+		if hand>=0:
+			var small := sin(_quiet_idle_time*1.3+side)*0.035
+			var warm_lower := forward*0.93+up*(0.30+small)-right*side*0.15
+			var stretch_lower := up*0.95+right*side*0.18
+			_camp_aim(pair.y,hand,warm_lower.lerp(stretch_lower,stretch),_camp_weight)
+	if _camp_head>=0:
+		var parent := _skeleton.get_bone_parent(_camp_head)
+		var axis := right
+		if parent>=0:
+			axis = _skeleton.get_bone_global_pose(parent).basis.orthonormalized().inverse()*right
+		var nod := (0.10+sin(_quiet_idle_time*0.45)*0.025-0.18*stretch)*_camp_weight
+		var base: Quaternion = _camp_base[_camp_head]
+		_skeleton.set_bone_pose_rotation(_camp_head,(Quaternion(axis.normalized(),nod)*base).normalized())
+
 func _update_quiet_idle(dt: float) -> void:
 	if _quiet_idle_bone < 0:
 		for i in range(_skeleton.get_bone_count()):
@@ -250,6 +341,8 @@ func _switch_motion(new_state: String, rate: float) -> void:
 	if not _animation_player.has_animation(clip):
 		return
 	if _state != new_state or _animation_player.current_animation != clip:
+		_camp_restore()
+		_camp_weight = 0.0
 		if _state == "idle" and _quiet_idle_bone >= 0:
 			_skeleton.set_bone_pose_scale(_quiet_idle_bone, _quiet_idle_base)
 		_quiet_idle_bone = -1
@@ -280,10 +373,16 @@ func animate(velocity: Vector3, _dt: float, grounded: bool = true) -> void:
 	_switch_motion(target, rate)
 	if target == "idle":
 		_update_quiet_idle(_dt)
+		if variant in ["bruma","talo"]:
+			_camp_pose(_dt)
 
 func play_action(action: String) -> void:
 	if _animation_player == null or action not in ["attack", "hit", "death"]:
 		return
+	_camp_warm = false
+	_camp_stretch = -1.0
+	_camp_restore()
+	_camp_weight = 0.0
 	_action_locked = true
 	_switch_motion(action, 1.0)
 
