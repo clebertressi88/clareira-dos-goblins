@@ -10,8 +10,8 @@ const TERRAIN := preload("res://landscape_terrain.gd")
 const DISTANT_HORIZON := preload("res://distant_horizon.gd")
 const UNDERSTORY := preload("res://forest_understory.gd")
 const DIRE_WOLF := preload("res://dire_wolf_model.gd")
-const WOLF_MAX_HP := 5
-const WOLF_FLEE_HP := 2
+const WOLF_MAX_HP := 7
+const WOLF_FLEE_HP := 3
 const WOLF_SAFE_DISTANCE := 12.0
 const WOLF_SAFE_DELAY := 8.0
 const WOLF_HEAL_INTERVAL := 12.0
@@ -1223,7 +1223,7 @@ func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vecto
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
 			rig.call("play_action","attack")
-		var hp := maxi(0,int(wolf.get_meta("hp",5))-1)
+		var hp := maxi(0,int(wolf.get_meta("hp",WOLF_MAX_HP))-1)
 		wolf.set_meta("hp",hp)
 		wolf_damage_received(wolf)
 		if hp<=0:
