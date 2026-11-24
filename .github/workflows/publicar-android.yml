@@ -21,22 +21,55 @@ jobs:
       run:
         shell: powershell
     steps:
+      - name: Registrar inicio
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -f state=pending -f context=clareira/android-build -f description="Compilacao Android iniciada" -f target_url="$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
       - uses: actions/checkout@v4
       - name: JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Android SDK (ZIP oficial, compativel com PowerShell 5.1)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = Join-Path $env:RUNNER_TOOL_CACHE 'ClareiraAndroidSDK'
+          $latest = Join-Path $sdk 'cmdline-tools/latest'
+          $manager = Join-Path $latest 'bin/sdkmanager.bat'
+          if (-not (Test-Path $manager)) {
+            New-Item -ItemType Directory -Path $sdk -Force | Out-Null
+            $archive = Join-Path $env:RUNNER_TEMP 'android-commandlinetools.zip'
+            $unpack = Join-Path $env:RUNNER_TEMP 'android-commandlinetools-unpack'
+            if (Test-Path $unpack) { Remove-Item $unpack -Recurse -Force }
+            Invoke-WebRequest -UseBasicParsing 'https://dl.google.com/android/repository/commandlinetools-win-12266719_latest.zip' -OutFile $archive
+            Expand-Archive -LiteralPath $archive -DestinationPath $unpack -Force
+            New-Item -ItemType Directory -Path $latest -Force | Out-Null
+            Copy-Item (Join-Path $unpack 'cmdline-tools/*') -Destination $latest -Recurse -Force
+            Remove-Item $archive -Force
+            Remove-Item $unpack -Recurse -Force
+          }
+          if (-not (Test-Path $manager)) { throw 'sdkmanager ausente' }
+          $env:ANDROID_HOME = $sdk
+          $env:ANDROID_SDK_ROOT = $sdk
+          $ErrorActionPreference = 'Continue'
+          1..100 | ForEach-Object { 'y' } | & $manager "--sdk_root=$sdk" --licenses
+          $rc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($rc -ne 0) { throw 'Falha ao aceitar licencas Android' }
+          $ErrorActionPreference = 'Continue'
+          & $manager "--sdk_root=$sdk" "platform-tools" "platforms;android-35" "build-tools;35.0.1"
+          $rc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($rc -ne 0) { throw 'Falha no SDK Android' }
+          "ANDROID_HOME=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "ANDROID_SDK_ROOT=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: Preparar Android SDK e Godot isolado
         run: |
           $ErrorActionPreference = 'Stop'
           $sdk = $env:ANDROID_HOME
-          if (-not $sdk) { $sdk = $env:ANDROID_SDK_ROOT }
-          if (-not $sdk) { throw 'SDK Android ausente' }
-          & sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.1"
-          if ($LASTEXITCODE -ne 0) { throw 'Falha no SDK Android' }
+          if (-not (Test-Path (Join-Path $sdk 'build-tools/35.0.1/apksigner.bat'))) { throw 'SDK Android incompleto' }
           $version = '4.7.2'
           $base = "https://github.com/godotengine/godot/releases/download/$version-stable"
           $root = Join-Path $env:RUNNER_TEMP "clareira-android-$version"
