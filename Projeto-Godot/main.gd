@@ -2986,10 +2986,10 @@ func make_ui() -> void:
 		marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		marker.add_theme_font_size_override("font_size",15)
+		marker.add_theme_font_size_override("font_size",11)
 		marker.add_theme_color_override("font_color",NPC_MARKER_COLORS[id])
 		marker.add_theme_color_override("font_outline_color",Color("#121410"))
-		marker.add_theme_constant_override("outline_size",5)
+		marker.add_theme_constant_override("outline_size",2)
 		npc_marker_overlay.add_child(marker)
 		marker.hide()
 		npc_markers[id] = marker
@@ -3244,12 +3244,15 @@ func update_npc_markers() -> void:
 		var ratio := maxf(absf(offset.x)/limits.x,absf(offset.y)/limits.y)
 		var edge := behind or ratio>1.0
 		var point := center+offset/maxf(1.0,ratio)
-		var symbol := "●"
+		var symbol := "•"
 		if edge:
 			var arrows := ["→","↘","↓","↙","←","↖","↑","↗"]
 			var sector := posmod(roundi(atan2(offset.y,offset.x)/(PI/4.0)),8)
-			symbol = arrows[sector]+" ●"
-		marker.text = "%s %s · %d m" % [symbol,str(id),roundi(distance)]
+			symbol = arrows[sector]+" •"
+		# Distancia longa: apenas ponto pequeno, sem texto persistente.
+		# Nome aparece ao se aproximar, sem duplicar o rotulo 3D.
+		marker.text = "%s %s" % [symbol,str(id)] if distance<=8.0 and not edge else symbol
+		marker.modulate.a = 0.85 if distance<=8.0 and not edge else 0.65
 		marker.reset_size()
 		var extent := marker.size
 		var top_left := point-Vector2(extent.x*0.5,extent.y)
