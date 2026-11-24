@@ -7,6 +7,7 @@ const LAN_INVENTORY := preload("res://lan_inventory_slots.gd")
 const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
+const DISTANT_HORIZON := preload("res://distant_horizon.gd")
 const UNDERSTORY := preload("res://forest_understory.gd")
 const BIOMES := preload("res://forest_biomes.gd")
 const VEGETATION_REGROW_SECONDS := 480.0
@@ -113,6 +114,9 @@ var build_level := 0 # 0=terreo; 1=segundo; 2=terceiro; 3=teto terceiro
 var build_rotation := 0 # incrementos de 90 graus
 var objects: Dictionary = {}
 var chunks: Dictionary = {}
+var distant_horizon: MeshInstance3D
+var distant_horizon_center := Vector2i(1000000,1000000)
+var distant_horizon_radius := -1
 var visible_chunk_radius := 2 # 5x5 chunks de terreno por padrao; ajustavel de 1 a 4.
 var key_bindings = GAME_KEYBINDS.new()
 var mobs: Array[CharacterBody3D] = []
@@ -376,8 +380,8 @@ func setup_world() -> void:
 	environment.ambient_light_color = Color("#c3d5d9")
 	environment.ambient_light_energy = .52
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#98ada0")
-	environment.fog_density = 0.008
+	environment.fog_light_color = Color("#b7c6bf")
+	environment.fog_density = 0.013
 	world.environment = environment
 	add_child(world)
 	var sun := DirectionalLight3D.new()
@@ -392,7 +396,8 @@ func setup_world() -> void:
 	# Discos celestes visiveis diretamente no ceu, alem dos reflexos.
 	sky_material.sun_angle_max = 6.5
 	sky_material.sun_curve = 0.18
-	environment.fog_sky_affect = 0.12
+	# Aplica uma leve bruma tambem ao ceu, eliminando a linha dura no horizonte.
+	environment.fog_sky_affect = 0.35
 	npc_sun = sun
 	npc_environment = environment
 	npc_sky = sky_material
@@ -507,7 +512,8 @@ func make_player() -> void:
 	player.add_child(col)
 	camera = Camera3D.new()
 	camera.position.y = 1.49
-	camera.far = 125
+	# O fundo usa geometria simplificada; nao aumenta a carga da floresta jogavel.
+	camera.far = 195
 	camera.current = true
 	player.add_child(camera)
 	player_model = Node3D.new()
@@ -665,6 +671,18 @@ func ground(x: float,z: float) -> float:
 func chunk_from_position(pos: Vector3) -> Vector2i:
 	return Vector2i(floori(pos.x/CHUNK),floori(pos.z/CHUNK))
 
+func refresh_distant_horizon(center: Vector2i) -> void:
+	if distant_horizon_center==center and distant_horizon_radius==visible_chunk_radius and is_instance_valid(distant_horizon):
+		return
+	# Mantem o horizonte no mesmo relevo deterministico, mas sem fisica.
+	var next_horizon: MeshInstance3D = DISTANT_HORIZON.build(center,visible_chunk_radius,CHUNK)
+	add_child(next_horizon)
+	if is_instance_valid(distant_horizon):
+		distant_horizon.queue_free()
+	distant_horizon = next_horizon
+	distant_horizon_center = center
+	distant_horizon_radius = visible_chunk_radius
+
 func load_chunks() -> void:
 	# Cada maquina desenha sua vizinhanca; o anfitriao mantem carregadas
 	# TODAS as vizinhancas ocupadas por jogadores, mesmo distantes entre si.
@@ -698,6 +716,7 @@ func load_chunks() -> void:
 	for key: Vector2i in desired.keys():
 		if not chunks.has(key):
 			create_chunk(key)
+	refresh_distant_horizon(centers[0])
 
 func create_chunk(key: Vector2i) -> void:
 	var chunk := Node3D.new()
@@ -987,7 +1006,7 @@ func update_npc_daylight(dt: float) -> void:
 		npc_moon.rotation_degrees = moon_arc
 		npc_moon.light_energy = .32*dark if phase>=NPC_DAY_SECONDS else 0.0
 	npc_environment.ambient_light_energy = lerpf(.52,.23,dark)
-	npc_environment.fog_light_color = Color("#98ada0").lerp(Color("#172539"),dark)
+	npc_environment.fog_light_color = Color("#b7c6bf").lerp(Color("#1e3045"),dark)
 	npc_sky.sky_top_color = Color("#43738a").lerp(Color("#071326"),dark)
 	npc_sky.sky_horizon_color = Color("#c3c9a1").lerp(Color("#26354b"),dark)
 
