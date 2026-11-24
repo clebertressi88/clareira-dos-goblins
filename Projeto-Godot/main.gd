@@ -83,7 +83,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 8 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
+const NET_PROTOCOL := 9 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
 const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -3626,13 +3626,18 @@ func chest_apply_transfer(id: String,index: int,item: int,count: int,deposit: bo
 
 @rpc("any_peer","call_remote","reliable")
 func net_chest_action(id: String,index: int,item: int,count: int,deposit: bool) -> void:
-	if net_role!="host" or not objects.has(id):
+	if net_role!="host":
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
+	if not objects.has(id):
+		net_chest_confirm.rpc_id(peer_id,id,item,0,deposit,normalized_chest_slots(id))
+		return
 	var chest: Node3D = objects[id]
 	if not is_instance_valid(chest) or str(chest.get_meta("kind",""))!="chest" or not remote_can_interact(peer_id,chest.global_position,5.5):
+		net_chest_confirm.rpc_id(peer_id,id,item,0,deposit,normalized_chest_slots(id))
 		return
 	if index<0 or index>=CHEST_SIZE or item<0 or item>=ITEMS.size() or count<=0 or count>CHEST_STACK_LIMIT or (deposit and item==CHEST_ITEM):
+		net_chest_confirm.rpc_id(peer_id,id,item,0,deposit,normalized_chest_slots(id))
 		return
 	var slots := normalized_chest_slots(id)
 	var cell: Array = slots[index]
@@ -4077,7 +4082,7 @@ func construction_candidate(kind: String) -> Dictionary:
 
 func update_construction_ghost() -> void:
 	var item: int = bar_items[selected]
-	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM] or stock[item]<=0:
+	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM] or stock[item]<=0:
 		if is_instance_valid(construction_ghost):
 			construction_ghost.hide()
 		construction_preview = {}
@@ -4093,7 +4098,9 @@ func update_construction_ghost() -> void:
 		ghost.set_meta("kind",kind)
 		add_child(ghost)
 		ghost.global_position = construction_preview["point"]
-		if kind=="wood_floor":
+		if kind=="chest":
+			preload("res://chest_model.gd").build(ghost)
+		elif kind=="wood_floor":
 			build_wood_floor(ghost)
 		elif kind in ["wood_wall","wood_doorway","wood_window"]:
 			build_wood_wall(ghost,kind)
@@ -5188,6 +5195,9 @@ func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) 
 func remove_object(o: Node3D) -> void:
 	var removed_kind := str(o.get_meta("kind",""))
 	var id: String = str(o.get_meta("id",""))
+	if removed_kind=="chest" and chest_has_items(id):
+		notice("Esvazie o baú antes de removê-lo.")
+		return
 	if net_role=="client" and removed_kind in NET_SHARED_KINDS and not net_apply_in_progress:
 		if net_world_ready:
 			net_request_remove.rpc_id(1,id)
