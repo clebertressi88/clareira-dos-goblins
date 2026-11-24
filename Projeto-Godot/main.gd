@@ -136,6 +136,8 @@ var crosshair: Label
 var hud: Label
 var hint: Label
 var navigation_label: Label
+const MENU_OPTIONS_FILE := "user://clareira-menu.cfg"
+var show_coordinates := false
 const SPAWN_ORIGIN := Vector2.ZERO
 var hotbar: HBoxContainer
 const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg"),preload("res://icones/stairs_straight.svg"),preload("res://icones/stairs_l.svg"),preload("res://icones/ladder.svg"),preload("res://icones/carpentry_bench.svg")]
@@ -206,6 +208,9 @@ var net_remote_world_uid := ""
 var net_offline_inventory_backup: Dictionary = {}
 
 func _ready() -> void:
+	var menu_preferences := ConfigFile.new()
+	menu_preferences.load(MENU_OPTIONS_FILE)
+	show_coordinates = bool(menu_preferences.get_value("display","show_coordinates",false))
 	# Saves antigos tinham 20 itens; ferramentas novas nao podem acessar indices
 	# inexistentes. Sempre complete estoques antes de carregar inventario.
 	while stock.size()<ITEMS.size():
@@ -2821,6 +2826,7 @@ func make_ui() -> void:
 	panel_scroll.add_child(menu)
 	get_viewport().size_changed.connect(func(): center_panel.call_deferred())
 	gameplay_overlays = [crosshair,hud,hint,bottom,navigation_label]
+	navigation_label.visible = false
 	medieval_menu = MEDIEVAL_MENU.new()
 	layer.add_child(medieval_menu)
 	medieval_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -2937,7 +2943,7 @@ func sync_hotbar() -> void:
 					bar_items[slot] = item
 
 func update_navigation() -> void:
-	if navigation_label==null or not is_instance_valid(player):
+	if not show_coordinates or navigation_label==null or not is_instance_valid(player):
 		return
 	var here := Vector2(player.global_position.x,player.global_position.z)
 	var to_spawn := SPAWN_ORIGIN-here
@@ -3072,7 +3078,14 @@ func button(title: String, callback: Callable, use_craft_style: bool = false) ->
 func set_gameplay_overlays_visible(visible_now: bool) -> void:
 	for overlay in gameplay_overlays:
 		if is_instance_valid(overlay):
-			overlay.visible = visible_now
+			overlay.visible = visible_now and (overlay!=navigation_label or show_coordinates)
+
+func toggle_coordinates(enabled: bool) -> void:
+	show_coordinates = enabled
+	if is_instance_valid(navigation_label):
+		navigation_label.visible = enabled and moving
+	if enabled:
+		update_navigation()
 
 func _refresh_update_status(current_status: Dictionary) -> void:
 	if is_instance_valid(medieval_menu):
@@ -3120,6 +3133,7 @@ func show_menu(starting_page: String = "home") -> void:
 		"rename_world": Callable(self,"rename_named_world"),
 		"select_world": Callable(self,"select_named_world"),
 		"check_update": Callable(updater,"check_updates"),
+		"toggle_coordinates": Callable(self,"toggle_coordinates"),
 		"install_update": Callable(updater,"download_and_install"),
 		"quit": func(): save_game(); get_tree().quit()
 	},starting_page)
