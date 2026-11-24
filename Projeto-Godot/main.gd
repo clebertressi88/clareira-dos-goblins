@@ -809,6 +809,7 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	npc.set_meta("talk_count",0)
 	npc.set_meta("next_work",elapsed+randf_range(15.0,35.0))
 	var saved: Dictionary = npc_saved_resources.get(kind,{})
+	npc.set_meta("extra_items",(saved.get("extra_items",{}) as Dictionary).duplicate(true))
 	for key in NPC_RESOURCE_KEYS:
 		npc.set_meta(key,int(saved.get(key,-1 if key=="axe_item" else 0)))
 	var visual := Node3D.new()
@@ -900,6 +901,55 @@ func update_npc_daylight(dt: float) -> void:
 	npc_sky.sky_top_color = Color("#43738a").lerp(Color("#071326"),dark)
 	npc_sky.sky_horizon_color = Color("#c3c9a1").lerp(Color("#26354b"),dark)
 
+# Somente itens recolhiveis pelas mesmas regras do jogador.
+func npc_loose_item(obj: Node3D) -> int:
+	if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+		return -1
+	var kind := str(obj.get_meta("kind",""))
+	if kind=="vine_bush" or kind=="tree_vine":
+		return -1
+	return collectible_item_for_kind(kind)
+
+func npc_extra_items(npc: CharacterBody3D) -> Dictionary:
+	return npc.get_meta("extra_items",{}) as Dictionary
+
+func npc_extra_count(npc: CharacterBody3D) -> int:
+	var total := 0
+	for amount in npc_extra_items(npc).values():
+		total += maxi(0,int(amount))
+	return total
+
+func npc_delivery_count(npc: CharacterBody3D) -> int:
+	return npc_extra_count(npc)+int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))+int(npc.get_meta("carried_meat",0))+int(npc.get_meta("carried_teeth",0))+maxi(0,int(npc.get_meta("carried_seeds",0))-3)
+
+func npc_collect_loose(npc: CharacterBody3D,obj: Node3D) -> void:
+	var item := npc_loose_item(obj)
+	if item<0 or npc_delivery_count(npc)>=32:
+		return
+	var owner := str(obj.get_meta("npc_owner",""))
+	if not owner.is_empty() and owner!=str(npc.get_meta("id","")):
+		return
+	remove_object(obj)
+	if item in [WOOD_AXE,STONE_AXE] and int(npc.get_meta("axe_uses",0))<=0:
+		npc.set_meta("axe_item",item)
+		npc.set_meta("axe_uses",int(TOOL_MAX_DURABILITY[item]))
+	elif item==TOMATO_SEED_ITEM and int(npc.get_meta("carried_seeds",0))<3:
+		npc.set_meta("carried_seeds",int(npc.get_meta("carried_seeds",0))+1)
+	elif item==TOMATO_ITEM:
+		npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+1)
+	elif item==6:
+		npc.set_meta("carried_wood",int(npc.get_meta("carried_wood",0))+1)
+	elif item==3:
+		npc.set_meta("carried_meat",int(npc.get_meta("carried_meat",0))+1)
+	elif item==WOLF_TOOTH:
+		npc.set_meta("carried_teeth",int(npc.get_meta("carried_teeth",0))+1)
+	else:
+		var bag := npc_extra_items(npc)
+		var key := str(item)
+		bag[key] = int(bag.get(key,0))+1
+		npc.set_meta("extra_items",bag)
+	save_game()
+
 func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 	var best: Node3D
 	var best_distance := INF
@@ -907,8 +957,10 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
 			continue
 		var kind := str(obj.get_meta("kind",""))
-		if kind in ["log","meat_wolf","wolf_tooth"]:
-			if str(obj.get_meta("npc_owner",""))!=str(npc.get_meta("id","")):
+		var loose := npc_loose_item(obj)>=0
+		if loose:
+			var owner := str(obj.get_meta("npc_owner",""))
+			if npc_delivery_count(npc)>=32 or (not owner.is_empty() and owner!=str(npc.get_meta("id",""))):
 				continue
 		elif kind=="tomato_crop":
 			if not bool(obj.get_meta("ready",false)) or tomato_available(obj)<=0:
@@ -927,7 +979,7 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if reserved:
 			continue
 		var d: float = npc.global_position.distance_to(obj.global_position)
-		if kind in ["log","meat_wolf","wolf_tooth"]:
+		if loose:
 			d -= 100.0
 		elif kind=="tree" and str(npc.get_meta("id",""))=="Talo":
 			d -= 2.0
@@ -974,15 +1026,8 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 					objects[log_id].set_meta("npc_owner",str(npc.get_meta("id","")))
 		save_game()
 		return
-	if kind=="log" and str(obj.get_meta("npc_owner",""))==str(npc.get_meta("id","")):
-		remove_object(obj)
-		npc.set_meta("carried_wood",int(npc.get_meta("carried_wood",0))+1)
-		save_game()
-	elif kind in ["meat_wolf","wolf_tooth"] and str(obj.get_meta("npc_owner",""))==str(npc.get_meta("id","")):
-		var key := "carried_meat" if kind=="meat_wolf" else "carried_teeth"
-		remove_object(obj)
-		npc.set_meta(key,int(npc.get_meta(key,0))+1)
-		save_game()
+	if npc_loose_item(obj)>=0:
+		npc_collect_loose(npc,obj)
 	elif kind=="tomato_plant" or (kind=="tomato_crop" and bool(obj.get_meta("ready",false))):
 		if take_one_tomato(obj):
 			npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+1)
@@ -1005,7 +1050,12 @@ func npc_nearest_chest(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or absf(obj.global_position.y-ground(obj.global_position.x,obj.global_position.z))>0.8:
 			continue
 		var id := str(obj.get_meta("id",""))
-		if not ((int(npc.get_meta("carried_wood",0))>0 and npc_chest_capacity(id,6)>0) or (int(npc.get_meta("carried_tomatoes",0))>0 and npc_chest_capacity(id,TOMATO_ITEM)>0) or (int(npc.get_meta("carried_meat",0))>0 and npc_chest_capacity(id,3)>0) or (int(npc.get_meta("carried_teeth",0))>0 and npc_chest_capacity(id,WOLF_TOOTH)>0)):
+		var fits := (int(npc.get_meta("carried_wood",0))>0 and npc_chest_capacity(id,6)>0) or (int(npc.get_meta("carried_tomatoes",0))>0 and npc_chest_capacity(id,TOMATO_ITEM)>0) or (int(npc.get_meta("carried_meat",0))>0 and npc_chest_capacity(id,3)>0) or (int(npc.get_meta("carried_teeth",0))>0 and npc_chest_capacity(id,WOLF_TOOTH)>0)
+		for key in npc_extra_items(npc).keys():
+			if int(npc_extra_items(npc)[key])>0 and npc_chest_capacity(id,int(key))>0:
+				fits = true
+				break
+		if not fits:
 			continue
 		var distance: float = npc.global_position.distance_to(obj.global_position)
 		if distance<nearest:
@@ -1221,14 +1271,14 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
 	var task := str(npc.get_meta("work_mode",""))
 	var loot := npc_work_target(npc,camp) if task=="" or task=="warm" else null
-	if is_instance_valid(loot) and str(loot.get_meta("kind","")) in ["meat_wolf","wolf_tooth","log"]:
+	if is_instance_valid(loot) and npc_loose_item(loot)>=0 and (not night or str(loot.get_meta("npc_owner",""))==str(npc.get_meta("id",""))) and (npc_delivery_count(npc)<8 or npc_nearest_chest(npc,camp)==null):
 		npc.set_meta("work_id",str(loot.get_meta("id","")))
 		npc.set_meta("work_mode","work")
 		npc.set_meta("work_deadline",elapsed+20.0)
 		task = "work"
 	if task=="work":
 		var active: Node3D = objects.get(str(npc.get_meta("work_id","")),null)
-		if is_instance_valid(active) and str(active.get_meta("kind","")) in ["meat_wolf","wolf_tooth","log"]:
+		if is_instance_valid(active) and npc_loose_item(active)>=0:
 			night = false
 	if int(npc.get_meta("carried_meat",0))+int(npc.get_meta("carried_teeth",0))>0:
 		night = false
@@ -1333,6 +1383,14 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		npc.set_meta("carried_tomatoes",npc_deposit(id,TOMATO_ITEM,int(npc.get_meta("carried_tomatoes",0))))
 		npc.set_meta("carried_meat",npc_deposit(id,3,int(npc.get_meta("carried_meat",0))))
 		npc.set_meta("carried_teeth",npc_deposit(id,WOLF_TOOTH,int(npc.get_meta("carried_teeth",0))))
+		var bag := npc_extra_items(npc)
+		for key in bag.keys():
+			var left := npc_deposit(id,int(key),int(bag[key]))
+			if left>0:
+				bag[key] = left
+			else:
+				bag.erase(key)
+		npc.set_meta("extra_items",bag)
 		npc.set_meta("work_mode","")
 		npc.set_meta("next_work",elapsed+randf_range(25.0,45.0))
 		save_game()
@@ -1360,7 +1418,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 				npc.set_meta("work_deadline",elapsed+20.0)
 				save_game()
 				return Vector3.ZERO
-		if int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))+int(npc.get_meta("carried_meat",0))+int(npc.get_meta("carried_teeth",0))>0:
+		if npc_delivery_count(npc)>0:
 			npc.set_meta("work_mode","deliver")
 			return Vector3.ZERO
 		if not night and int(npc.get_meta("axe_uses",0))<=0 and npc_supply_chest(npc,camp)!=null:
@@ -6084,6 +6142,7 @@ func save_game() -> bool:
 				var resources: Dictionary = {}
 				for key in NPC_RESOURCE_KEYS:
 					resources[key] = int(npc.get_meta(key,-1 if key=="axe_item" else 0))
+				resources["extra_items"] = npc_extra_items(npc).duplicate(true)
 				npc_saved_resources[str(npc.get_meta("id",""))] = resources
 		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
 			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
