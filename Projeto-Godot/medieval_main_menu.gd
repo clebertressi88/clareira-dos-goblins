@@ -32,6 +32,7 @@ var _navigation: VBoxContainer
 var _page_container: VBoxContainer
 var _panel_art: TextureRect
 var _primary_button: Button
+var _footer_shortcuts: HBoxContainer
 var _nav_buttons: Dictionary = {}
 var _update_marker: Label
 var _volume_label: Label
@@ -91,7 +92,7 @@ func _recreate() -> void:
 	_navigation = VBoxContainer.new()
 	_navigation.add_theme_constant_override("separation",5)
 	_place(_stage,_navigation,Vector2(58,173),Vector2(307,645))
-	_nav_button("▶  Jogar","home",true)
+	_nav_button("▶  Jogar","play",true)
 	_nav_button("♜  Multijogador (LAN)","network")
 	_nav_button("✚  Novo Mundo","new_world")
 	_nav_button("▣  Carregar Mundo","worlds")
@@ -104,9 +105,7 @@ func _recreate() -> void:
 	_middle = Control.new()
 	_place(_stage,_middle,Vector2(464,235),Vector2(705,530))
 	_art(_stage,FOOTER,Vector2(370,825),Vector2(860,64))
-	var help := _text("WASD  MOVER     ·     MOUSE  ATACAR / USAR     ·     E  INVENTÁRIO     ·     SHIFT  CORRER     ·     ESPAÇO  PULAR",18,CREAM)
-	_place(_stage,help,Vector2(394,835),Vector2(816,40))
-	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_build_footer_shortcuts()
 	_render_page()
 	_refresh_update_indicator()
 	_fit()
@@ -136,6 +135,35 @@ func _fit() -> void:
 	_stage.scale = Vector2.ONE * fit_scale
 	_stage.position = (size-SIZE*fit_scale)*0.5
 
+func _build_footer_shortcuts() -> void:
+	# Cada atalho ocupa uma coluna fixa. Isso elimina texto sobreposto
+	# e desalinhamento causado por uma unica Label comprida.
+	_footer_shortcuts = HBoxContainer.new()
+	_footer_shortcuts.add_theme_constant_override("separation",0)
+	_place(_stage,_footer_shortcuts,Vector2(390,833),Vector2(820,47))
+	var hints := [
+		["WASD","Mover",145],
+		["MOUSE","Atacar / usar",212],
+		["E","Inventário",153],
+		["SHIFT","Correr",145],
+		["ESPAÇO","Pular",165]
+	]
+	for hint in hints:
+		var cell := CenterContainer.new()
+		cell.custom_minimum_size = Vector2(float(hint[2]),45)
+		_footer_shortcuts.add_child(cell)
+		var pair := HBoxContainer.new()
+		pair.add_theme_constant_override("separation",6)
+		cell.add_child(pair)
+		var keycap := PanelContainer.new()
+		keycap.add_theme_stylebox_override("panel",_flat(Color("#24190de8"),Color("#ac8248"),1,4))
+		pair.add_child(keycap)
+		var key_label := _text(str(hint[0]),14,GOLD)
+		key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		keycap.add_child(key_label)
+		var action_label := _text(str(hint[1]),15,CREAM)
+		pair.add_child(action_label)
+
 func _nav_button(text_value: String,page: String,featured: bool = false) -> void:
 	var button := Button.new()
 	button.text = text_value
@@ -158,6 +186,12 @@ func _nav_button(text_value: String,page: String,featured: bool = false) -> void
 
 func _activate(destination: String) -> void:
 	match destination:
+		"play":
+			if str(_state.get("role","solo"))!="solo":
+				_call_action("play")
+			else:
+				_page = "worlds"
+				_render_page()
 		"home","new_world","worlds","network","settings","controls","updates","credits":
 			_page = destination
 			_render_page()
@@ -187,7 +221,7 @@ func _render_page() -> void:
 		child.queue_free()
 	for key in _nav_buttons:
 		var button: Button = _nav_buttons[key]
-		button.modulate = Color.WHITE if str(key)==_page else Color("#e4d3b7")
+		button.modulate = Color.WHITE if str(key)==_page or (str(key)=="play" and _page=="home") else Color("#e4d3b7")
 	var wide := _page!="home"
 	var x := 0.0 if not wide else -30.0
 	var y := 24.0 if not wide else -42.0
@@ -251,7 +285,7 @@ func _render_home() -> void:
 	cta.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_style_button(cta,true,true)
 	_place(_middle,cta,Vector2(100,429),Vector2(370,67))
-	cta.pressed.connect(func(): _call_action("play"))
+	cta.pressed.connect(func(): _activate("play"))
 	_primary_button = cta
 
 func _render_new_world() -> void:

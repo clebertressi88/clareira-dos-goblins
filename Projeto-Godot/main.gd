@@ -9,6 +9,7 @@ const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
 const GAME_UPDATER := preload("res://game_updater.gd")
+const PLAY_AFTER_WORLD_CHANGE := "clareira_enter_world_after_reload"
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
 const TOMATO_ITEM := 27
@@ -212,6 +213,13 @@ func _ready() -> void:
 	village()
 	load_chunks()
 	show_menu()
+	# Ao escolher outro mapa no menu Jogar, abrir a aventura depois
+	# que a cena e o save selecionado terminarem de carregar.
+	if get_tree().has_meta(PLAY_AFTER_WORLD_CHANGE):
+		var requested_world: String = str(get_tree().get_meta(PLAY_AFTER_WORLD_CHANGE))
+		get_tree().remove_meta(PLAY_AFTER_WORLD_CHANGE)
+		if requested_world==str(world_storage.active_id):
+			call_deferred("begin")
 	multiplayer.peer_connected.connect(net_peer_connected)
 	multiplayer.peer_disconnected.connect(net_peer_disconnected)
 	multiplayer.connected_to_server.connect(net_connected_to_server)
@@ -2612,7 +2620,9 @@ func select_named_world(id: String) -> void:
 	if not world_storage.select_world(id):
 		world_action_error()
 		return
+	get_tree().set_meta(PLAY_AFTER_WORLD_CHANGE,id)
 	if get_tree().reload_current_scene()!=OK:
+		get_tree().remove_meta(PLAY_AFTER_WORLD_CHANGE)
 		world_storage.select_world(previous_id)
 		net_session_message = ""
 		notice("Falha ao carregar o mundo selecionado.")

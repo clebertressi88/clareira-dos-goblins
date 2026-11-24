@@ -25,6 +25,26 @@ func _verify() -> void:
 	if not is_instance_valid(ui._primary_button):
 		_fail("Botao Jogar Agora ausente")
 		return
+	if not is_instance_valid(ui._footer_shortcuts) or ui._footer_shortcuts.get_child_count()!=5:
+		_fail("O rodape nao possui cinco atalhos separados e alinhados")
+		return
+	var total_columns := 0.0
+	for column in ui._footer_shortcuts.get_children():
+		total_columns += column.custom_minimum_size.x
+	if total_columns>ui._footer_shortcuts.size.x:
+		_fail("Atalhos do rodape ultrapassam o painel de madeira")
+		return
+	# As duas formas de Jogar devem escolher o mundo primeiro, sem iniciar a partida.
+	ui._nav_buttons["play"].pressed.emit()
+	if ui._page!="worlds" or not is_instance_valid(ui.world_picker):
+		_fail("Menu lateral Jogar nao abriu o seletor de mundos")
+		return
+	ui._activate("home")
+	ui._primary_button.pressed.emit()
+	if ui._page!="worlds" or not is_instance_valid(ui.world_picker):
+		_fail("Botao Jogar Agora nao abriu o seletor de mundos")
+		return
+	ui._activate("home")
 	if ui._stage.scale.x<=0.0 or ui._stage.scale.x>1.0:
 		_fail("Escala responsiva invalida")
 		return
