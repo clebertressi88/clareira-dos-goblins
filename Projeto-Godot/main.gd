@@ -4007,7 +4007,9 @@ func construction_surface(point: Vector3, ceiling: float) -> float:
 func construction_candidate(kind: String) -> Dictionary:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
 	var is_floor := kind=="wood_floor"
-	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall or kind=="chest" else 0.0
+	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else (player.rotation.y+float(build_rotation)*PI*.5 if kind=="chest" else 0.0)
+	# O lado frontal do bau (fechadura, +Z local) aponta para o jogador por padrao.
+	# R gira a pre-visualizacao em passos de 90 graus sem perder essa orientacao inicial.
 	var point := player.position-player.basis.z*2.15
 	var hit := ray(5.8)
 	build_level = 0
