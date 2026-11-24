@@ -124,10 +124,11 @@ func attach_backpack(accessory: Node3D) -> bool:
 	anchor.bone_name = _skeleton.get_bone_name(bone_index)
 	_skeleton.add_child(anchor)
 	accessory.reparent(anchor,false)
-	# Reposiciona o modelo inteiro proximo ao osso do peito. A mochila
-	# original mede de y=0.6 a y=1.4; sua base agora fica abaixo do ombro.
-	accessory.position = Vector3(0.0,-1.02,-0.17)
-	accessory.scale = Vector3.ONE*0.80
+	# O modelo novo ja e centrado no osso: nada de -1 metro de offset.
+	# Volume achatado e correias proximas ao torso evitam que pareca flutuar.
+	accessory.position = Vector3(0.0,-0.055,-0.055)
+	accessory.rotation = Vector3.ZERO
+	accessory.scale = Vector3.ONE*0.82
 	return true
 
 func set_equipment(sword: bool, shield: bool) -> void:
