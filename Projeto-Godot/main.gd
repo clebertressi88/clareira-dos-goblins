@@ -938,7 +938,7 @@ var npc_sun: DirectionalLight3D
 var npc_moon: DirectionalLight3D
 var npc_environment: Environment
 var npc_sky: ProceduralSkyMaterial
-var npc_world_clock := 0.0
+var npc_world_clock := 0.0 # Tempo decorrido somente durante a sessao; salvo por mundo.
 const NPC_DAY_SECONDS := 1200.0
 const NPC_NIGHT_SECONDS := 300.0
 
@@ -6526,6 +6526,9 @@ func load_game() -> void:
 			bar_items[i] = item
 	sync_hotbar()
 	sync_tool_durability()
+	# Relogio persistido: nenhum tempo de jogo passa enquanto o aplicativo esta fechado.
+	npc_world_clock = fposmod(maxf(0.0,float(data.get("npc_world_clock",0.0))),NPC_DAY_SECONDS+NPC_NIGHT_SECONDS)
+	update_npc_daylight(0.0)
 	removed = data.get("removed",{})
 	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
@@ -6562,7 +6565,7 @@ func save_game() -> bool:
 					resources[key] = int(npc.get_meta(key,-1 if key=="axe_item" else 0))
 				resources["extra_items"] = npc_extra_items(npc).duplicate(true)
 				npc_saved_resources[str(npc.get_meta("id",""))] = resources
-		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
+		file.store_string(JSON.stringify({"world_uid":world_uid,"npc_world_clock":fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS),"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
 			"placed":placed,"tree_regrowth":tree_regrowth,"vegetation_harvest":vegetation_harvest,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
@@ -6742,6 +6745,7 @@ func net_kick_message(message: String) -> void:
 func capture_net_world() -> Dictionary:
 	return {
 		"world_uid": world_uid,
+		"npc_world_clock": fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS),
 		"placed": placed.duplicate(true),
 		"removed": removed.duplicate(true),
 		"cleared_stumps": cleared_stumps.duplicate(true),
@@ -6777,6 +6781,9 @@ func apply_net_world(snapshot: Dictionary) -> void:
 				if old is CollisionObject3D:
 					old.collision_layer = 0
 				old.queue_free()
+	# Relogio do anfitriao ou backup offline: restaurar a fase exata.
+	npc_world_clock = fposmod(maxf(0.0,float(snapshot.get("npc_world_clock",npc_world_clock))),NPC_DAY_SECONDS+NPC_NIGHT_SECONDS)
+	update_npc_daylight(0.0)
 	placed = (snapshot["placed"] as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	removed = (snapshot["removed"] as Dictionary).duplicate(true)
 	if removed.has(STARTER_CABIN_ID) and objects.has(STARTER_CABIN_ID):
