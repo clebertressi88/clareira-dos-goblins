@@ -461,6 +461,10 @@ func make_player() -> void:
 	backpack_visual = preload("res://backpack_model.gd").new()
 	backpack_visual.name = "MochilaVestida"
 	player_model.add_child(backpack_visual)
+	var player_rig := player_model.get_node_or_null("GoblinRig")
+	if player_rig != null and player_rig.has_method("attach_backpack"):
+		if not bool(player_rig.call("attach_backpack",backpack_visual)):
+			push_warning("Mochila sem osso de tronco; verifique o rig do personagem.")
 	backpack_visual.visible = backpack_equipped
 	player_model.hide()
 	spear = Node3D.new()
