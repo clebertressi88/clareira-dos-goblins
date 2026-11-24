@@ -456,10 +456,22 @@ func _render_settings() -> void:
 	fullscreen.button_pressed = DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN
 	fullscreen.toggled.connect(_set_fullscreen)
 	_page_container.add_child(fullscreen)
+	var coords := CheckButton.new()
+	coords.text = "Mostrar coordenadas e bússola"
+	coords.add_theme_font_override("font",_font)
+	coords.add_theme_font_size_override("font_size",19)
+	coords.button_pressed = bool(_settings().get_value("display","show_coordinates",false))
+	coords.toggled.connect(func(enabled: bool):
+		var config := _settings()
+		config.set_value("display","show_coordinates",enabled)
+		config.save(OPTIONS_FILE)
+		_call_action("toggle_coordinates",enabled)
+	)
+	_page_container.add_child(coords)
 	_page_container.add_child(HSeparator.new())
 	var controls := _action_button("⌨  VER CONTROLES DO JOGO")
 	controls.pressed.connect(func(): _activate("controls"))
-	_page_container.add_child(_text("As opções de som ficam salvas neste computador.",16,MUTED,true))
+	_page_container.add_child(_text("As preferências de som e exibição ficam salvas neste computador.",16,MUTED,true))
 	_message()
 
 func _render_controls() -> void:
