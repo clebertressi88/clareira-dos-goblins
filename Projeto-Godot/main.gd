@@ -2029,7 +2029,7 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	# As outras paredes mantem as aberturas e colisoes anteriores.
 	for row in range(3) if kind!="wood_doorway" else range(0):
 		for column in range(3):
-			var opening := column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
+			var opening: bool = column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
 			if opening:
 				continue
 			if kind=="wood_doorway" and row==2 and column==1:
