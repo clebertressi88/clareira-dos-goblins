@@ -16,11 +16,11 @@ permissions:
 
 jobs:
   windows:
-    # Runner hospedado pelo GitHub: nao depende do PC local nem da etiqueta clareira-goblins.
-    runs-on: windows-latest
+    # Usa os runners Windows dedicados ao jogo.
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
     concurrency:
       group: publicar-clareira-windows
-      cancel-in-progress: false
+      cancel-in-progress: true
     timeout-minutes: 60
     defaults:
       run:
