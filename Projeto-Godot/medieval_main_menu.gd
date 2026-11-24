@@ -33,6 +33,12 @@ var _page_container: VBoxContainer
 var _panel_art: TextureRect
 var _primary_button: Button
 var _footer_shortcuts: HBoxContainer
+var _footer_key_labels: Dictionary = {}
+var _controls_model: RefCounted
+var _key_capture_action := ""
+var _key_buttons: Dictionary = {}
+var _key_capture_feedback: Label
+var _view_distance_value: Label
 var _nav_buttons: Dictionary = {}
 var _update_marker: Label
 var _volume_label: Label
@@ -50,6 +56,7 @@ func _ready() -> void:
 func rebuild(state: Dictionary, actions: Dictionary, starting_page: String = "home") -> void:
 	_state = state
 	_actions = actions
+	_controls_model = _state.get("controls_model") as RefCounted
 	_page = starting_page
 	_recreate()
 
@@ -64,6 +71,11 @@ func _recreate() -> void:
 	_update_install_button = null
 	_update_check_button = null
 	_nav_buttons.clear()
+	_footer_key_labels.clear()
+	_key_buttons.clear()
+	_key_capture_action = ""
+	_key_capture_feedback = null
+	_view_distance_value = null
 	_update_marker = null
 	for child in get_children():
 		remove_child(child)
@@ -142,11 +154,11 @@ func _build_footer_shortcuts() -> void:
 	_footer_shortcuts.add_theme_constant_override("separation",0)
 	_place(_stage,_footer_shortcuts,Vector2(390,833),Vector2(820,47))
 	var hints := [
-		["WASD","Mover",145],
-		["MOUSE","Atacar / usar",212],
-		["E","Inventário",153],
-		["SHIFT","Correr",145],
-		["ESPAÇO","Pular",165]
+		["move","Mover",145],
+		["mouse","Atacar / usar",212],
+		["goblin_inventario","Inventário",153],
+		["goblin_correr","Correr",145],
+		["goblin_pular","Pular",165]
 	]
 	for hint in hints:
 		var cell := CenterContainer.new()
@@ -158,11 +170,102 @@ func _build_footer_shortcuts() -> void:
 		var keycap := PanelContainer.new()
 		keycap.add_theme_stylebox_override("panel",_flat(Color("#24190de8"),Color("#ac8248"),1,4))
 		pair.add_child(keycap)
-		var key_label := _text(str(hint[0]),14,GOLD)
+		var hotkey_name := str(hint[0])
+		var key_label := _text(_footer_key_name(hotkey_name),14,GOLD)
 		key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		keycap.add_child(key_label)
+		_footer_key_labels[hotkey_name] = key_label
 		var action_label := _text(str(hint[1]),15,CREAM)
 		pair.add_child(action_label)
+
+func _footer_key_name(action: String) -> String:
+	if action=="mouse":
+		return "MOUSE"
+	if _controls_model==null:
+		return "WASD" if action=="move" else ""
+	if action=="move":
+		var symbols := ""
+		for direction in ["goblin_frente","goblin_esquerda","goblin_tras","goblin_direita"]:
+			symbols += OS.get_keycode_string(int(_controls_model.call("key_for",direction)))
+		return symbols
+	return OS.get_keycode_string(int(_controls_model.call("key_for",action)))
+
+func _refresh_footer_hotkeys() -> void:
+	for action in _footer_key_labels:
+		var label: Label = _footer_key_labels[action]
+		if is_instance_valid(label):
+			label.text = _footer_key_name(str(action))
+
+func _input(event: InputEvent) -> void:
+	if _key_capture_action.is_empty():
+		return
+	var keyboard := event as InputEventKey
+	if keyboard==null or not keyboard.pressed or keyboard.echo:
+		return
+	get_viewport().set_input_as_handled()
+	if keyboard.keycode==KEY_ESCAPE or keyboard.physical_keycode==KEY_ESCAPE:
+		_key_capture_action = ""
+		_set_key_feedback("Alteração cancelada.",MUTED)
+		_refresh_key_buttons()
+		return
+	if keyboard.alt_pressed or keyboard.ctrl_pressed or keyboard.meta_pressed:
+		_set_key_feedback("Pressione apenas uma tecla, sem Ctrl ou Alt.",GOLD)
+		return
+	var key_code: int = keyboard.physical_keycode if keyboard.physical_keycode!=KEY_NONE else keyboard.keycode
+	if not _actions.has("rebind_key"):
+		_set_key_feedback("Editor de controles indisponível.",GOLD)
+		return
+	var action_name: String = _key_capture_action
+	var callback: Callable = _actions["rebind_key"]
+	var result: String = str(callback.call(action_name,key_code))
+	if not result.is_empty():
+		_set_key_feedback(result,Color("#ffb999"))
+		return
+	_key_capture_action = ""
+	_set_key_feedback("Tecla alterada e salva.",Color("#a9d992"))
+	_refresh_key_buttons()
+	_refresh_footer_hotkeys()
+
+func _set_key_feedback(message: String,tint: Color) -> void:
+	if is_instance_valid(_key_capture_feedback):
+		_key_capture_feedback.text = message
+		_key_capture_feedback.add_theme_color_override("font_color",tint)
+
+func _refresh_key_buttons() -> void:
+	for action in _key_buttons:
+		var button: Button = _key_buttons[action]
+		if not is_instance_valid(button):
+			continue
+		if str(action)==_key_capture_action:
+			button.text = "PRESSIONE..."
+		elif _controls_model!=null:
+			button.text = str(_controls_model.call("text_for",str(action)))
+
+func _begin_capture(action: String) -> void:
+	_key_capture_action = action
+	_refresh_key_buttons()
+	_set_key_feedback("Pressione a nova tecla para "+str(_controls_model.call("label_for",action))+". Esc cancela.",GOLD)
+
+func _restore_keys() -> void:
+	_key_capture_action = ""
+	_call_action("reset_keys")
+	_refresh_key_buttons()
+	_refresh_footer_hotkeys()
+	_set_key_feedback("Todas as teclas voltaram ao padrão.",Color("#a9d992"))
+
+func _distance_description(radius: int) -> String:
+	var names := ["Curto","Padrão","Longo","Muito longo"]
+	var side: int = radius*2+1
+	return "%s · %d×%d chunks" % [names[clampi(radius-1,0,3)],side,side]
+
+func _on_distance_changed(value: float) -> void:
+	var radius: int = clampi(roundi(value),1,4)
+	_state["view_radius"] = radius
+	if is_instance_valid(_view_distance_value):
+		_view_distance_value.text = _distance_description(radius)
+	if _actions.has("change_view_radius"):
+		var callback: Callable = _actions["change_view_radius"]
+		callback.call(radius)
 
 func _nav_button(text_value: String,page: String,featured: bool = false) -> void:
 	var button := Button.new()
@@ -212,6 +315,10 @@ func _render_page() -> void:
 	world_create_input = null
 	world_rename_input = null
 	_volume_label = null
+	_key_capture_feedback = null
+	_key_capture_action = ""
+	_key_buttons.clear()
+	_view_distance_value = null
 	_update_status_label = null
 	_update_progress = null
 	_update_install_button = null
@@ -472,27 +579,60 @@ func _render_settings() -> void:
 	)
 	_page_container.add_child(coords)
 	_page_container.add_child(HSeparator.new())
-	var controls := _action_button("⌨  VER CONTROLES DO JOGO")
+	_page_container.add_child(_text("DISTÂNCIA DE VISÃO DO MAPA",18,GOLD))
+	var distance_row := HBoxContainer.new()
+	distance_row.add_theme_constant_override("separation",15)
+	_page_container.add_child(distance_row)
+	var distance_slider := HSlider.new()
+	distance_slider.min_value = 1
+	distance_slider.max_value = 4
+	distance_slider.step = 1
+	distance_slider.custom_minimum_size = Vector2(315,40)
+	distance_row.add_child(distance_slider)
+	var current_radius: int = clampi(int(_state.get("view_radius",2)),1,4)
+	_view_distance_value = _text(_distance_description(current_radius),17,CREAM,true)
+	_page_container.add_child(_view_distance_value)
+	distance_slider.set_value_no_signal(current_radius)
+	distance_slider.value_changed.connect(_on_distance_changed)
+	_page_container.add_child(_text("Padrão: 5×5 chunks. Distâncias maiores carregam mais árvores, terreno e colisões e podem diminuir o FPS.",15,MUTED,true))
+	_page_container.add_child(HSeparator.new())
+	_page_container.add_child(_text("CONTROLES PERSONALIZADOS",18,GOLD))
+	var controls := _action_button("⌨  ALTERAR TECLAS DO JOGO",true)
 	controls.pressed.connect(func(): _activate("controls"))
-	_page_container.add_child(_text("As preferências de som e exibição ficam salvas neste computador.",16,MUTED,true))
+	_page_container.add_child(_text("Volume, exibição, distância de visão e teclas ficam salvos neste computador.",15,MUTED,true))
 	_message()
 
 func _render_controls() -> void:
-	_page_container.add_child(_heading("⌨  CONTROLES"))
-	for pair in [
-		["WASD / setas","Movimentar"],["Mouse","Olhar ao redor"],
-		["Clique esquerdo","Atacar / construir"],["Clique direito","Pegar / interagir"],
-		["Shift","Correr"],["Espaço","Pular"],["E","Inventário"],
-		["Q","Largar item"],["V","Trocar câmera"],["Esc","Menu"],
-		["F10","Retornar à clareira"]
-	]:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation",10)
-		_page_container.add_child(row)
-		var key := _text(pair[0],18,GOLD)
-		key.custom_minimum_size.x=223
-		row.add_child(key)
-		row.add_child(_text(pair[1],18,CREAM))
+	_page_container.add_child(_heading("⌨  CONFIGURAR TECLAS"))
+	_page_container.add_child(_text("Clique na tecla de um comando e pressione a nova tecla. Esc cancela. Teclas 1–9 permanecem reservadas para a barra de itens.",16,CREAM,true))
+	_page_container.add_child(HSeparator.new())
+	_key_capture_feedback = _text("Escolha um comando abaixo para alterar.",15,MUTED,true)
+	_page_container.add_child(_key_capture_feedback)
+	if _controls_model==null:
+		_page_container.add_child(_text("Os controles personalizados não estão disponíveis nesta tela.",17,GOLD,true))
+	else:
+		var action_list: Array = _controls_model.call("actions")
+		for value in action_list:
+			var action: String = str(value)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation",9)
+			_page_container.add_child(row)
+			var name_label := _text(str(_controls_model.call("label_for",action)),16,CREAM,true)
+			name_label.custom_minimum_size.x=270
+			name_label.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+			row.add_child(name_label)
+			var button := Button.new()
+			button.custom_minimum_size = Vector2(197,42)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_style_button(button,false)
+			button.add_theme_font_size_override("font_size",16)
+			button.pressed.connect(_begin_capture.bind(action))
+			row.add_child(button)
+			_key_buttons[action] = button
+		_refresh_key_buttons()
+		_page_container.add_child(_text("Setas e a tecla C continuam como alternativas. O mouse mantém os cliques para interagir e atacar.",15,MUTED,true))
+		var restore := _action_button("↺  RESTAURAR TECLAS PADRÃO")
+		restore.pressed.connect(_restore_keys)
 	var back := _action_button("←  VOLTAR ÀS CONFIGURAÇÕES")
 	back.pressed.connect(func(): _activate("settings"))
 

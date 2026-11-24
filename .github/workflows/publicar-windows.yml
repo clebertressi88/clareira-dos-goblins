@@ -138,6 +138,7 @@ jobs:
             @{path='res://tests/test_goblin_v3.gd'; message='GOBLIN V3 OK'},
             @{path='res://tests/test_goblin_v4.gd'; message='GOBLIN V4 OK'},
             @{path='res://tests/test_medieval_menu.gd'; message='MEDIEVAL MENU OK'},
+            @{path='res://tests/test_control_settings.gd'; message='KEY SETTINGS OK'},
             @{path='res://tests/test_lan_inventory.gd'; message='LAN INVENTORY OK'},
             @{path='res://tests/test_multiplayer_distant_chunks.gd'; message='MULTIPLAYER DISTANT CHUNKS OK'},
             @{path='res://tests/test_game_updater.gd'; message='GAME UPDATE OK'}

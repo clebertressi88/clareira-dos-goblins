@@ -9,6 +9,7 @@ const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
 const GAME_UPDATER := preload("res://game_updater.gd")
+const GAME_KEYBINDS := preload("res://control_bindings.gd")
 const PLAY_AFTER_WORLD_CHANGE := "clareira_enter_world_after_reload"
 const TREE_BUD_DELAY := 120.0
 const TREE_GROW_SECONDS := 720.0
@@ -105,6 +106,8 @@ var build_level := 0 # 0=terreo; 1=segundo; 2=terceiro; 3=teto terceiro
 var build_rotation := 0 # incrementos de 90 graus
 var objects: Dictionary = {}
 var chunks: Dictionary = {}
+var visible_chunk_radius := 2 # 5x5 chunks de terreno por padrao; ajustavel de 1 a 4.
+var key_bindings = GAME_KEYBINDS.new()
 var mobs: Array[CharacterBody3D] = []
 var villagers: Array[CharacterBody3D] = [] # Bruma e Talo: NPCs amigáveis que passeiam pela clareira.
 var materials: Dictionary = {}
@@ -223,6 +226,7 @@ func _ready() -> void:
 	backpack_slots.fill(Vector2i(-1,0))
 	setup_world()
 	configure_movement_inputs()
+	load_render_distance()
 	load_last_lan_ip()
 	world_storage.initialize()
 	load_game()
@@ -251,51 +255,44 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(net_connection_failed)
 
 func configure_movement_inputs() -> void:
-	# Acoes configuradas no inicio: layouts de teclado diferentes e setas.
-	# Nao depende exclusivamente de is_physical_key_pressed (WASD).
-	var bindings := {
-		"goblin_esquerda": [KEY_A,KEY_LEFT],
-		"goblin_direita": [KEY_D,KEY_RIGHT],
-		"goblin_frente": [KEY_W,KEY_UP],
-		"goblin_tras": [KEY_S,KEY_DOWN]
-	}
-	for action: String in bindings.keys():
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		for key: int in bindings[action]:
-			var physical := InputEventKey.new()
-			physical.physical_keycode = key
-			if not InputMap.action_has_event(action,physical):
-				InputMap.action_add_event(action,physical)
-			var logical := InputEventKey.new()
-			logical.keycode = key
-			if not InputMap.action_has_event(action,logical):
-				InputMap.action_add_event(action,logical)
+	key_bindings.configure()
 
 func movement_axis() -> Vector2:
-	var direction := Input.get_vector("goblin_esquerda","goblin_direita","goblin_frente","goblin_tras")
-	if not direction.is_zero_approx():
-		return direction
-	# Reserva para teclados cuja entrada chega so como tecla logica.
-	var x := float(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))
-	var y := float(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))
-	return Vector2(x,y).normalized()
+	return Input.get_vector("goblin_esquerda","goblin_direita","goblin_frente","goblin_tras")
+
+func load_render_distance() -> void:
+	var config := ConfigFile.new()
+	if config.load("user://clareira-menu.cfg")==OK:
+		visible_chunk_radius = clampi(int(config.get_value("video","chunk_radius",2)),1,4)
+
+func set_render_distance(radius: int) -> void:
+	var next_radius := clampi(radius,1,4)
+	if next_radius==visible_chunk_radius:
+		return
+	visible_chunk_radius = next_radius
+	var config := ConfigFile.new()
+	config.load("user://clareira-menu.cfg")
+	config.set_value("video","chunk_radius",visible_chunk_radius)
+	if config.save("user://clareira-menu.cfg")!=OK:
+		push_warning("Nao foi possivel salvar a distancia de visao.")
+	if is_instance_valid(player):
+		load_chunks()
+
+func rebind_player_key(action: String,key_code: int) -> String:
+	return key_bindings.rebind(action,key_code)
+
+func restore_player_keys() -> void:
+	key_bindings.reset_defaults()
 
 func _input(event: InputEvent) -> void:
 	var keyboard := event as InputEventKey
-	if keyboard == null or not keyboard.pressed or keyboard.echo:
+	if keyboard==null or not keyboard.pressed or keyboard.echo:
 		return
-	var key: int = keyboard.physical_keycode
-	if key == KEY_NONE:
-		key = keyboard.keycode
-	if key==KEY_F10 and moving:
-		# Recuperacao manual se um save antigo prender o jogador no relevo.
+	if keyboard.is_action_pressed("goblin_respawn") and moving:
 		respawn()
 		save_game()
 		get_viewport().set_input_as_handled()
 		return
-	# A tela inicial usa botoes com foco de teclado; teclas de movimento
-	# nao devem abrir o jogo enquanto o jogador navega pelos menus.
 
 func character_texture(family: String) -> ImageTexture:
 	if surface_textures.has(family):
@@ -667,7 +664,7 @@ func load_chunks() -> void:
 		var center: Vector2i = centers[center_index]
 		# O host conserva cinco por cinco ao redor de si; para cada visitante,
 		# tres por tres bastam para validar acoes sem renderizar o mundo inteiro.
-		var radius := 2 if center_index==0 else 1
+		var radius: int = visible_chunk_radius if center_index==0 else 1
 		for z in range(center.y-radius,center.y+radius+1):
 			for x in range(center.x-radius,center.x+radius+1):
 				desired[Vector2i(x,z)] = true
@@ -3122,6 +3119,8 @@ func show_menu(starting_page: String = "home") -> void:
 		"worlds": world_storage.list_worlds(),
 		"active_world_id": world_storage.active_id,
 		"active_world_name": world_storage.active_name(),
+		"view_radius": visible_chunk_radius,
+		"controls_model": key_bindings,
 		"updater": updater.get_state()
 	}, {
 		"play": Callable(self,"begin"),
@@ -3135,6 +3134,9 @@ func show_menu(starting_page: String = "home") -> void:
 		"check_update": Callable(updater,"check_updates"),
 		"toggle_coordinates": Callable(self,"toggle_coordinates"),
 		"install_update": Callable(updater,"download_and_install"),
+		"change_view_radius": Callable(self,"set_render_distance"),
+		"rebind_key": Callable(self,"rebind_player_key"),
+		"reset_keys": Callable(self,"restore_player_keys"),
 		"quit": func(): save_game(); get_tree().quit()
 	},starting_page)
 	medieval_menu.show()
@@ -4801,39 +4803,43 @@ func _unhandled_input(event: InputEvent) -> void:
 				begin()
 			get_viewport().set_input_as_handled()
 			return
-		if event.keycode==KEY_E and (moving or inventory):
+		if event.is_action_pressed("goblin_inventario") and (moving or inventory):
 			if inventory:
 				begin()
 			else:
 				show_inventory()
+			get_viewport().set_input_as_handled()
 			return
 		if not moving:
 			return
-		match event.keycode:
-			KEY_SPACE: jump = true
-			KEY_Q: drop_selected()
-			KEY_C: show_inventory()
-			KEY_R:
-				if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
-					build_rotation = (build_rotation+1)%4
-					notice("Rotação: %d°" % (build_rotation*90))
-				else:
-					eat()
-			KEY_F: primary()
-			KEY_F5: toggle_view()
-			KEY_PAGEUP:
-				build_level = mini(build_level+1,BUILD_MAX_LEVEL)
-				notice("Altura selecionada: %s" % construction_level_name())
-			KEY_PAGEDOWN:
-				build_level = maxi(build_level-1,0)
-				notice("Altura selecionada: %s" % construction_level_name())
-			KEY_T:
-				if bar_items[selected]==FLOOR_ITEM:
-					build_level = (build_level+1)%(BUILD_MAX_LEVEL+1)
-					notice("Painel selecionado: %s" % construction_level_name())
-				else:
-					build_rotation = (build_rotation+1)%4
-					notice("Girar parede: %d°" % (build_rotation*90))
+		if event.is_action_pressed("goblin_pular"):
+			jump = true
+		elif event.is_action_pressed("goblin_largar"):
+			drop_selected()
+		elif event.is_action_pressed("goblin_girar_usar"):
+			if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
+				build_rotation = (build_rotation+1)%4
+				notice("Rotação: %d°" % (build_rotation*90))
+			else:
+				eat()
+		elif event.is_action_pressed("goblin_interagir"):
+			primary()
+		elif event.is_action_pressed("goblin_camera"):
+			toggle_view()
+		elif event.is_action_pressed("goblin_subir_construcao"):
+			build_level = mini(build_level+1,BUILD_MAX_LEVEL)
+			notice("Altura selecionada: %s" % construction_level_name())
+		elif event.is_action_pressed("goblin_descer_construcao"):
+			build_level = maxi(build_level-1,0)
+			notice("Altura selecionada: %s" % construction_level_name())
+		elif event.is_action_pressed("goblin_girar_alternativo"):
+			if bar_items[selected]==FLOOR_ITEM:
+				build_level = (build_level+1)%(BUILD_MAX_LEVEL+1)
+				notice("Painel selecionado: %s" % construction_level_name())
+			else:
+				build_rotation = (build_rotation+1)%4
+				notice("Girar parede: %d°" % (build_rotation*90))
+		# Barra de 1 a 9 e mouse continuam reservados para os slots.
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:
 			selected = event.keycode-KEY_1
 	if not moving:
@@ -4899,17 +4905,17 @@ func _physics_process(dt: float) -> void:
 	update_npc_daylight(dt)
 	if moving:
 		var input_axis := movement_axis()
-		var crouch := update_crouch(Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X))
+		var crouch := update_crouch(Input.is_action_pressed("goblin_agachar"))
 		var in_water := player_in_water()
-		var running := sprint_step(not in_water and not crouch and input_axis.y<0 and (Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_SHIFT)),dt)
+		var running := sprint_step(not in_water and not crouch and input_axis.y<0 and Input.is_action_pressed("goblin_correr"),dt)
 		var speed := 2.4 if in_water else 2. if crouch else RUN_SPEED if running else WALK_SPEED
 		var requested := player.basis*Vector3(input_axis.x,0,input_axis.y)*speed
 		player.velocity.x = move_toward(player.velocity.x,requested.x,dt*28)
 		player.velocity.z = move_toward(player.velocity.z,requested.z,dt*28)
 		if in_water:
 			# Espaco sobe/nada; X afunda; sem comando o corpo afunda devagar.
-			var swim_up := Input.is_physical_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_SPACE)
-			var swim_down := Input.is_physical_key_pressed(KEY_X) or Input.is_key_pressed(KEY_X)
+			var swim_up := Input.is_action_pressed("goblin_pular")
+			var swim_down := Input.is_action_pressed("goblin_agachar")
 			var swim_vertical := 3.2 if swim_up else -2.2 if swim_down else -0.42
 			player.velocity.y = move_toward(player.velocity.y,swim_vertical,dt*7.0)
 		elif not player.is_on_floor():
