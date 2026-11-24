@@ -6221,6 +6221,8 @@ func drop_selected() -> void:
 	p.y = construction_surface(p,player.position.y+.35)
 	store_object("stone_drop" if item==2 else ITEM_KINDS[item],p)
 	stock[item] -= 1
+	sync_hotbar()
+	save_game()
 
 func eat_tomato() -> void:
 	if stock[TOMATO_ITEM]>0 and health<100:
