@@ -22,11 +22,11 @@ var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado p
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira"}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate", "Baú"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed","chest"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú"}
 const LEVEL_2_RECIPES := ["stone_pickaxe","spiked_club","spear"]
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7]}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7],"chest":[7,7,7,7,11,7,7,7,7]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
 const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70,24:110,25:80,26:200}
@@ -49,6 +49,13 @@ const WOLF_TOOTH := 23
 const SPIKED_CLUB := 24
 const WOOD_PICKAXE := 25
 const STONE_PICKAXE := 26
+const CHEST_ITEM := 29
+const CHEST_SIZE := 16
+const CHEST_STACK_LIMIT := 64
+var chest_storage: Dictionary = {}
+var open_chest_id := ""
+var chest_selected_item := -1
+var chest_pending := false
 const BUILD_MAX_LEVEL := 3
 const STARTER_CABIN_ID := "starter-cabin"
 const STARTER_CABIN_CENTER := Vector2(0.0,-15.0)
@@ -119,7 +126,7 @@ var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -1200,6 +1207,10 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			# Galho caido com casca texturizada, nos e madeira quebrada.
 			preload("res://forest_fallen_stick.gd").build(o,id)
 			collider(o,Vector3(.78,.23,.33),Vector3.UP*.115)
+		"chest":
+			o.collision_layer |= SOLID
+			preload("res://chest_model.gd").build(o)
+			collider(o,Vector3(1.05,0.78,0.67),Vector3.UP*0.39)
 		"bench","bench2":
 			o.collision_layer |= SOLID
 			var advanced_workbench := kind=="bench2"
@@ -2639,6 +2650,7 @@ func open_goblin_skin_test() -> void:
 
 
 func begin() -> void:
+	close_chest_visual()
 	if net_role=="client" and not net_world_ready:
 		notice("Aguarde o anfitrião enviar o mundo antes de começar.")
 		show_menu()
@@ -3402,7 +3414,7 @@ func craft_basic() -> void:
 		notice("Esta receita exige a bancada de trabalho nível 2.")
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1}
 	}[kind]
 	for index: int in costs:
 		stock[index] -= costs[index]
@@ -4084,6 +4096,7 @@ func _physics_process(dt: float) -> void:
 		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
+				"chest": interaction_hint = "Botão direito · Abrir baú"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
 				"tomato_plant","tomato_crop": interaction_hint = "Botão direito · Colher tomates"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
@@ -4305,7 +4318,7 @@ func primary() -> void:
 		return
 	next_attack = elapsed+.46
 	var held: int = bar_items[selected]
-	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM] and stock[held]>0:
+	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM] and stock[held]>0:
 		if place_craft(ITEM_KINDS[held]):
 			stock[held] -= 1
 			if held in [BENCH_ITEM,BENCH2_ITEM]:
@@ -4378,7 +4391,11 @@ func primary() -> void:
 	if kind in ["stone","block"]:
 		mine_stone(o,held,hit["position"],hit["normal"])
 		return
-	if kind in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
+	if kind=="chest":
+		if chest_has_items(str(o.get_meta("id",""))):
+			notice("Esvazie o baú antes de desmontar.")
+			return
+	if kind in ["chest","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
@@ -4632,7 +4649,7 @@ func collectible_item_for_kind(kind: String) -> int:
 	if kind=="vine_bush":
 		return VINE
 	# Bancadas, estruturas, arvores e rochas exigem mecanicas proprias.
-	if kind in ["tree","stump","stone","block","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","tomato_plant","tomato_crop"]:
+	if kind in ["tree","stump","stone","block","chest","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","tomato_plant","tomato_crop"]:
 		return -1
 	return ITEM_KINDS.find(kind)
 
@@ -4650,6 +4667,9 @@ func secondary() -> void:
 			return
 		if kind in ["Bruma","Talo"]:
 			speak_to_goblin(o)
+			return
+		if kind=="chest":
+			open_chest(o)
 			return
 		if kind in ["bench","bench2"]:
 			station_level = 2 if kind=="bench2" else 1
@@ -4725,7 +4745,7 @@ func drop_selected() -> void:
 	if item==BACKPACK_ITEM and backpack_equipped:
 		notice("Retire a mochila antes de largá-la.")
 		return
-	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
+	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM]:
 		if place_craft(ITEM_KINDS[item]):
 			stock[item] -= 1
 			if item in [BENCH_ITEM,BENCH2_ITEM]:
@@ -4950,6 +4970,10 @@ func remove_object(o: Node3D) -> void:
 	elif id!="lobo-errante":
 		removed[id] = true
 	objects.erase(id)
+	if removed_kind=="chest":
+		chest_storage.erase(id)
+		if open_chest_id==id:
+			open_chest_id = ""
 	if removed_kind=="tomato_crop":
 		tomato_crop_times.erase(id)
 	o.queue_free()
@@ -5088,6 +5112,7 @@ func load_game() -> void:
 	tree_regrowth = data.get("tree_regrowth",{})
 	tree_vines = data.get("tree_vines",{})
 	tomato_crop_times = data.get("tomato_crop_times",{})
+	chest_storage = data.get("chest_storage",{})
 	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -5109,7 +5134,7 @@ func save_game() -> bool:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"chest_storage":chest_storage,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.flush()
@@ -5294,6 +5319,7 @@ func capture_net_world() -> Dictionary:
 		"tree_regrowth": tree_regrowth.duplicate(true),
 		"tree_vines": tree_vines.duplicate(true),
 		"tomato_crop_times": tomato_crop_times.duplicate(true),
+		"chest_storage": chest_storage.duplicate(true),
 		"hut":hut,"won":won,"bench":bench,
 		"pos":[player.position.x,player.position.y,player.position.z],
 		"entities":net_capture_entities()
@@ -5334,6 +5360,7 @@ func apply_net_world(snapshot: Dictionary) -> void:
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
 	tree_vines = (snapshot.get("tree_vines",{}) as Dictionary).duplicate(true)
 	tomato_crop_times = (snapshot.get("tomato_crop_times",{}) as Dictionary).duplicate(true)
+	chest_storage = (snapshot.get("chest_storage",{}) as Dictionary).duplicate(true)
 	hut = bool(snapshot.get("hut",false))
 	won = bool(snapshot.get("won",false))
 	bench = bool(snapshot.get("bench",false))
@@ -5404,7 +5431,10 @@ func net_request_dismantle(id: String,tool: int) -> void:
 	if not is_instance_valid(obj) or not remote_can_interact(peer_id,obj.global_position,5.5):
 		return
 	var kind := str(obj.get_meta("kind",""))
-	if kind not in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
+	if kind not in ["chest","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor"]:
+		return
+	if kind=="chest" and chest_has_items(id):
+		net_dismantle_feedback.rpc_id(peer_id,-2,0,-1)
 		return
 	var last := float(obj.get_meta("net_last_dismantle_"+str(peer_id),-100.0))
 	if elapsed-last<0.30:
@@ -5432,6 +5462,8 @@ func net_dismantle_feedback(hits: int,required: int,recovered_item: int) -> void
 		sync_hotbar()
 		save_game()
 		notice("Estrutura recuperada para o inventario.")
+	elif hits==-2:
+		notice("Esvazie o baú antes de desmontar.")
 	elif hits>=0 and required>0:
 		notice("Desmontando estrutura: %d/%d" % [hits,required])
 
@@ -5494,6 +5526,7 @@ func net_shared_remove(id: String) -> void:
 		remove_object(obj)
 		net_apply_in_progress = false
 	elif id.begins_with("item-"):
+		chest_storage.erase(id)
 		placed = placed.filter(func(entry): return str(entry.get("id",""))!=id)
 		tomato_crop_times.erase(id)
 	else:
