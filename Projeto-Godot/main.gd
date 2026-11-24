@@ -6078,6 +6078,7 @@ func update_tomato_crop(crop: Node3D) -> void:
 	var progress := clampf(age/TOMATO_GROW_SECONDS,0.0,1.0)
 	visual.scale = Vector3.ONE*lerpf(0.18,1.0,progress)
 	crop.set_meta("ready",progress>=1.0)
+	update_tomato_fruits(crop)
 
 func update_all_tomato_crops() -> void:
 	for id in tomato_crop_times.keys():
@@ -6171,14 +6172,29 @@ func update_tomato_fruits(plant: Node3D) -> void:
 	var visual: Node3D = plant.get_node_or_null("Horta") as Node3D
 	if visual==null:
 		visual = plant
-	var count := tomato_available(plant)
+	var now := Time.get_unix_time_from_system()
+	var cultivated := str(plant.get_meta("kind",""))=="tomato_crop"
+	var planted := float(tomato_crop_times.get(id,now))
+	var mature_plant := not cultivated or now-planted>=TOMATO_GROW_SECONDS
+	var ready_count := tomato_available(plant) if mature_plant else 0
+	var state: Dictionary = tomato_fruits.get(id,{})
+	var next_time := float(state.get("next",now+TOMATO_FRUIT_SECONDS))
+	var regrowth_ratio := clampf(1.0-(next_time-now)/TOMATO_FRUIT_SECONDS,0.0,1.0)
+	var growth_ratio := clampf((now-planted)/TOMATO_GROW_SECONDS,0.0,1.0) if cultivated else 1.0
 	var fruits: Array[Node3D] = []
 	for child in visual.get_children():
 		if child is Node3D and str(child.name).begins_with("Fruto_"):
 			fruits.append(child)
-	# A ordem e estavel; separar a fruta de sua estrela verde permite ocultar 1 por vez.
+	var tomato_model := preload("res://forest_tomato_plant.gd")
 	for i in range(fruits.size()):
-		fruits[i].visible = i<count
+		var ripe := mature_plant and i<ready_count
+		var growing := (not mature_plant) or (i==ready_count and ready_count<TOMATO_MAX_FRUITS)
+		fruits[i].visible = ripe or growing
+		if fruits[i].visible:
+			tomato_model.set_fruit_ripe(fruits[i],ripe)
+			# O proximo fruto nasce pequeno e amadurece gradualmente.
+			var size_ratio := growth_ratio if not mature_plant else regrowth_ratio
+			fruits[i].scale = Vector3.ONE if ripe else Vector3.ONE*lerpf(0.34,0.95,size_ratio)
 
 func take_one_tomato(plant: Node3D) -> bool:
 	if not is_instance_valid(plant) or str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"]:
@@ -6205,6 +6221,8 @@ func update_tomato_fruit_regrowth() -> void:
 		return
 	var now := Time.get_unix_time_from_system()
 	for id in tomato_fruits.keys():
+		if objects.has(id):
+			update_tomato_fruits(objects[id])
 		var state: Dictionary = tomato_fruits[id]
 		var count := clampi(int(state.get("count",TOMATO_MAX_FRUITS)),0,TOMATO_MAX_FRUITS)
 		if count>=TOMATO_MAX_FRUITS:
