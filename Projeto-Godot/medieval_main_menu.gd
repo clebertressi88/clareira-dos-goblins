@@ -465,7 +465,10 @@ func _render_settings() -> void:
 		var config := _settings()
 		config.set_value("display","show_coordinates",enabled)
 		config.save(OPTIONS_FILE)
-		_call_action("toggle_coordinates",enabled)
+		if _actions.has("toggle_coordinates"):
+			var callback: Callable = _actions["toggle_coordinates"]
+			if callback.is_valid():
+				callback.call(enabled)
 	)
 	_page_container.add_child(coords)
 	_page_container.add_child(HSeparator.new())
