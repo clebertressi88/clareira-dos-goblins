@@ -4303,6 +4303,43 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_WHEEL_UP: selected = posmod(selected-1,HOTBAR_SIZE)
 			MOUSE_BUTTON_WHEEL_DOWN: selected = posmod(selected+1,HOTBAR_SIZE)
 
+# Sobe apenas pequenos degraus de piso, sem impulso de salto.
+func try_player_step(dt: float) -> void:
+	if not player.is_on_floor() or player.velocity.y>0.0:
+		return
+	var motion := Vector3(player.velocity.x,0,player.velocity.z)*dt
+	if motion.length()<.001:
+		return
+	var start := player.global_transform
+	var obstacle := KinematicCollision3D.new()
+	if not player.test_move(start,motion,obstacle):
+		return
+	var body := obstacle.get_collider() as Node3D
+	if body==null or str(body.get_meta("kind",""))!="wood_floor":
+		return
+	var rise := Vector3.UP*.32
+	if player.test_move(start,rise):
+		return
+	var raised := start
+	raised.origin += rise
+	if player.test_move(raised,motion):
+		return
+	raised.origin += motion
+	var landing := KinematicCollision3D.new()
+	if not player.test_move(raised,Vector3.DOWN*.38,landing):
+		return
+	var support := landing.get_collider() as Node3D
+	if support==null or str(support.get_meta("kind",""))!="wood_floor":
+		return
+	if landing.get_normal().dot(Vector3.UP)<.7:
+		return
+	var step_height := rise.y+landing.get_travel().y
+	if step_height<=.008 or step_height>.32:
+		return
+	# Apenas a altura muda: move_and_slide executa o movimento horizontal normal.
+	player.global_position += Vector3.UP*(step_height+.003)
+	player.velocity.y = 0.0
+
 func _physics_process(dt: float) -> void:
 	elapsed += dt
 	update_npc_daylight(dt)
@@ -4325,8 +4362,12 @@ func _physics_process(dt: float) -> void:
 			player.velocity.y -= dt*15
 		elif jump and not crouch:
 			player.velocity.y = 5.2
+		if not in_water and not jump:
+			try_player_step(dt)
 		jump = false
 		player.move_and_slide()
+		if not in_water and player.velocity.y<=0.0:
+			player.apply_floor_snap()
 		# Nao ha cavernas: nunca permitir um save antigo ou uma falha de fisica
 		# deixar a camera abaixo do relevo.
 		var ground_level := ground(player.position.x,player.position.z)
