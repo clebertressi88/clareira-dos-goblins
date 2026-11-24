@@ -8,6 +8,7 @@ const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
 const UNDERSTORY := preload("res://forest_understory.gd")
+const BIOMES := preload("res://forest_biomes.gd")
 const VEGETATION_REGROW_SECONDS := 480.0
 var vegetation_harvest: Dictionary = {} # id -> proximo horario Unix de colheita.
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
@@ -744,7 +745,7 @@ func create_chunk(key: Vector2i) -> void:
 	for i in range(15):
 		var x := key.x*CHUNK+rng.randf_range(1,15)
 		var z := key.y*CHUNK+rng.randf_range(1,15)
-		if Vector2(x,z).length()<5 or Vector2(x-STARTER_CABIN_CENTER.x,z-STARTER_CABIN_CENTER.y).length()<5.8 or TERRAIN.is_river(x,z):
+		if Vector2(x,z).length()<5 or Vector2(x-STARTER_CABIN_CENTER.x,z-STARTER_CABIN_CENTER.y).length()<5.8 or TERRAIN.is_river(x,z) or BIOMES.is_trail(x,z):
 			continue
 		var kind := "tree" if i<6 else "stone" if i<9 else "stick" if i<12 else "rabbit" if i==12 else "tomato_plant"
 		var id := "%s:%s:%s" % [key.x,key.y,i]
@@ -762,6 +763,24 @@ func create_chunk(key: Vector2i) -> void:
 				creature(kind,id,at,chunk)
 		elif not removed.has(id):
 			spawn_object(kind,id,at,chunk)
+	# Arvores adicionais no bioma de floresta fechada; trilhas mantidas livres.
+	if BIOMES.dense_forest(float(key.x*CHUNK+8),float(key.y*CHUNK+8)):
+		for forest_index in range(5):
+			var fx := float(key.x*CHUNK)+rng.randf_range(1.3,14.7)
+			var fz := float(key.y*CHUNK)+rng.randf_range(1.3,14.7)
+			if Vector2(fx,fz).length()<12.0 or TERRAIN.is_river(fx,fz) or BIOMES.trail_distance(fx,fz)<3.0:
+				continue
+			var forest_id := "%s:%s:forest:%s" % [key.x,key.y,forest_index]
+			if removed.has(forest_id) or cleared_stumps.has(forest_id):
+				continue
+			var occupied := false
+			for entry in placed:
+				var p: Array = entry.get("p",[])
+				if p.size()>=3 and Vector2(fx-float(p[0]),fz-float(p[2])).length()<2.0:
+					occupied = true
+					break
+			if not occupied:
+				spawn_object("tree",forest_id,Vector3(fx,ground(fx,fz),fz),chunk)
 	# Plantas de coleta: poucas instancias e IDs fixos para save/multiplayer.
 	for plant_index in range(3):
 		var px := float(key.x*CHUNK)+rng.randf_range(1.7,14.3)
@@ -770,6 +789,8 @@ func create_chunk(key: Vector2i) -> void:
 			continue
 		var river_d := absf(px-TERRAIN.river_x(pz))
 		var plant_kind := "fern" if plant_index==0 else "forest_shrub"
+		if BIOMES.is_trail(px,pz):
+			continue
 		if river_d>TERRAIN.RIVER_HALF_WIDTH and river_d<TERRAIN.RIVER_HALF_WIDTH+2.8:
 			plant_kind = "river_reed"
 		elif river_d<=TERRAIN.RIVER_HALF_WIDTH:
