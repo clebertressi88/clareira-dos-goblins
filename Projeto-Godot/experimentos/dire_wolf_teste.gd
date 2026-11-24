@@ -40,6 +40,7 @@ func _ready() -> void:
 	camera.look_at(Vector3(0, 0.8, 0))
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.size = 4.5
+	camera.h_offset = 0.85
 	camera.current = true
 	_build_controls()
 	for arg in OS.get_cmdline_user_args():
@@ -70,30 +71,71 @@ func _ready() -> void:
 func _build_controls() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	var theme_ui := Theme.new()
+	theme_ui.default_font_size = 16
+	theme_ui.set_color("font_color", "Label", Color("#e6dfd1"))
+	theme_ui.set_color("font_color", "Button", Color("#ede1ca"))
+	theme_ui.set_color("font_hover_color", "Button", Color("#ffffff"))
+	theme_ui.set_color("font_disabled_color", "Button", Color("#85817a"))
+	theme_ui.set_stylebox("normal", "Button", _style(Color("#302b24"), Color("#62503b"), 6))
+	theme_ui.set_stylebox("hover", "Button", _style(Color("#493b2a"), Color("#d0a36a"), 6))
+	theme_ui.set_stylebox("pressed", "Button", _style(Color("#5e442a"), Color("#e4bd80"), 6))
+	theme_ui.set_stylebox("disabled", "Button", _style(Color("#24231f"), Color("#3b3933"), 6))
 	var panel := PanelContainer.new()
-	panel.position = Vector2(12, 22)
-	panel.custom_minimum_size = Vector2(290, 0)
 	layer.add_child(panel)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	panel.offset_left = -342
+	panel.offset_right = -16
+	panel.offset_top = 16
+	panel.offset_bottom = -16
+	panel.theme = theme_ui
+	panel.add_theme_stylebox_override("panel", _style(Color(0.09, 0.11, 0.10, 0.96), Color("#91734d"), 12))
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 16)
+	panel.add_child(margin)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(scroll)
 	controls = VBoxContainer.new()
-	panel.add_child(controls)
-	var title := Label.new()
-	title.text = "LABORATORIO DIRE WOLF"
-	controls.add_child(title)
-	_button("Carregar ZIP ou GLB do computador", func(): picker.popup_centered_ratio(0.8))
+	controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	controls.add_theme_constant_override("separation", 8)
+	scroll.add_child(controls)
+	_section("CLAREIRA DOS GOBLINS", 12, Color("#c7a36c"))
+	_section("Dire Wolf", 28, Color("#f4ead6"))
+	_section("Laboratorio de criaturas  /  Modelo experimental", 13, Color("#a9b0a4"))
+	_button("Carregar ZIP ou GLB", func(): picker.popup_centered_ratio(0.8))
+	controls.add_child(HSeparator.new())
+	_section("ANIMACOES", 13, Color("#c7a36c"))
+	var motion_grid := GridContainer.new()
+	motion_grid.columns = 2
+	motion_grid.add_theme_constant_override("h_separation", 8)
+	motion_grid.add_theme_constant_override("v_separation", 8)
+	controls.add_child(motion_grid)
 	for pair in [["Parado", "idle"], ["Caminhar", "walk"], ["Correr", "run"], ["Morder", "bite"]]:
 		var state: String = str(pair[1])
-		var btn := _button(str(pair[0]), _play.bind(state))
+		var btn := _button(str(pair[0]), _play.bind(state), motion_grid)
 		btn.disabled = true
 		motion_buttons[state] = btn
-	_button("Girar 90 graus", func(): holder.rotate_y(PI * 0.5))
-	_button("Zoom +", func(): camera.size = maxf(0.5, camera.size * 0.8))
-	_button("Zoom -", func(): camera.size = minf(30.0, camera.size * 1.25))
-	_button("Voltar ao laboratorio", _back)
+	controls.add_child(HSeparator.new())
+	_section("CAMERA E INSPECAO", 13, Color("#c7a36c"))
+	var camera_grid := GridContainer.new()
+	camera_grid.columns = 2
+	camera_grid.add_theme_constant_override("h_separation", 8)
+	camera_grid.add_theme_constant_override("v_separation", 8)
+	controls.add_child(camera_grid)
+	_button("Girar 90 graus", func(): holder.rotate_y(PI * 0.5), camera_grid)
+	_button("Centralizar", _reset_view, camera_grid)
+	_button("Zoom +", func(): camera.size = maxf(0.5, camera.size * 0.8), camera_grid)
+	_button("Zoom -", func(): camera.size = minf(30.0, camera.size * 1.25), camera_grid)
+	controls.add_child(HSeparator.new())
+	_section("DADOS DO MODELO", 13, Color("#c7a36c"))
 	info = Label.new()
-	info.custom_minimum_size = Vector2(290, 0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "ZIP nao localizado automaticamente. Selecione o pacote oficial na pasta Downloads."
+	info.text = "Selecione o ZIP oficial na pasta Downloads."
 	controls.add_child(info)
+	_section("Dire Wolf por Literock Studios", 12, Color("#a9b0a4"))
+	_button("Voltar ao laboratorio  [ESC]", _back)
 	picker = FileDialog.new()
 	picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	picker.access = FileDialog.ACCESS_FILESYSTEM
@@ -101,13 +143,45 @@ func _build_controls() -> void:
 	picker.add_filter("*.zip", "Pacote oficial Dire Wolf")
 	picker.file_selected.connect(_load_model)
 	layer.add_child(picker)
+	var downloads := OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
+	if not downloads.is_empty():
+		picker.current_dir = downloads
 
-func _button(title: String, action: Callable) -> Button:
+func _style(bg: Color, border: Color, corner: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(corner)
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	return style
+
+func _section(title: String, font_size: int, color: Color) -> void:
+	var label := Label.new()
+	label.text = title
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	controls.add_child(label)
+
+func _button(title: String, action: Callable, parent: Control = null) -> Button:
 	var btn := Button.new()
 	btn.text = title
-	controls.add_child(btn)
+	btn.custom_minimum_size.y = 36
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if parent == null:
+		controls.add_child(btn)
+	else:
+		parent.add_child(btn)
 	btn.pressed.connect(action)
 	return btn
+
+func _reset_view() -> void:
+	holder.rotation = Vector3.ZERO
+	camera.size = 4.5
 
 func _load_model(path: String) -> void:
 	var extension := path.get_extension().to_lower()
@@ -154,7 +228,7 @@ func _load_model(path: String) -> void:
 	for key in motion_buttons:
 		var btn: Button = motion_buttons[key]
 		btn.disabled = _find_animation(str(key)).is_empty()
-	info.text = "%s\nOssos: %d\nAnimacoes: %s" % [path.get_file(), bone_count, ", ".join(names)]
+	info.text = "%s\nOssos: %d | Animacoes: %d\n%s" % [path.get_file(), bone_count, names.size(), ", ".join(names)]
 	var cfg := ConfigFile.new()
 	cfg.set_value("asset", "path", path)
 	cfg.save("user://dire_wolf_lab.cfg")
