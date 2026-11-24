@@ -37,7 +37,7 @@ static func build(center: Vector2i, loaded_radius: int, chunk_size: int) -> Mesh
 			if x>=near_left and x+step<=near_right and z>=near_top and z+step<=near_bottom:
 				continue
 			for corner in QUAD_ORDER:
-				var grid_key := Vector2i(x_index,z_index)+corner
+				var grid_key: Vector2i = Vector2i(x_index,z_index)+corner
 				if not cached_vertices.has(grid_key):
 					var vx := first_x+float(grid_key.x)*step
 					var vz := first_z+float(grid_key.y)*step
