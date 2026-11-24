@@ -5664,6 +5664,111 @@ func net_mining_feedback(completed: bool, hits: int, required: int) -> void:
 	else:
 		notice("Minerando pedra: %d/%d golpes" % [hits,required])
 
+func vegetation_kind(kind: String) -> bool:
+	return kind in ["fern","forest_shrub","river_reed"]
+
+func update_vegetation_visual(plant: Node3D) -> void:
+	if not is_instance_valid(plant):
+		return
+	var visual := plant.get_node_or_null("Vegetacao") as Node3D
+	if visual==null:
+		return
+	var id := str(plant.get_meta("id",""))
+	var remaining := maxf(0.0,float(vegetation_harvest.get(id,0.0))-Time.get_unix_time_from_system())
+	var stage := clampf(1.0-remaining/VEGETATION_REGROW_SECONDS,0.0,1.0)
+	visual.scale = Vector3.ONE*lerpf(0.32,1.0,stage)
+	plant.set_meta("ready",remaining<=0.0)
+
+func update_vegetation_regrowth() -> void:
+	if net_role=="client":
+		return
+	var now := Time.get_unix_time_from_system()
+	for id in vegetation_harvest.keys():
+		if float(vegetation_harvest[id])<=now:
+			vegetation_harvest.erase(id)
+			if objects.has(id):
+				update_vegetation_visual(objects[id])
+			if net_role=="host":
+				net_vegetation_harvested.rpc(str(id),0.0)
+			save_game()
+		elif objects.has(id):
+			update_vegetation_visual(objects[id])
+
+func harvest_vegetation(plant: Node3D) -> void:
+	if not vegetation_kind(str(plant.get_meta("kind",""))):
+		return
+	var id := str(plant.get_meta("id",""))
+	if net_role=="client":
+		if net_world_ready:
+			net_request_harvest_vegetation.rpc_id(1,id)
+		return
+	if not bool(plant.get_meta("ready",true)):
+		notice("A planta ainda esta se regenerando.")
+		return
+	var item := 1 if str(plant.get_meta("kind",""))=="forest_shrub" else VINE
+	stock[item] += 1
+	item_received(item)
+	sync_hotbar()
+	vegetation_harvest[id] = Time.get_unix_time_from_system()+VEGETATION_REGROW_SECONDS
+	update_vegetation_visual(plant)
+	if net_role=="host":
+		net_vegetation_harvested.rpc(id,float(vegetation_harvest[id]))
+	save_game()
+	notice("Fibra vegetal coletada." if item==VINE else "Graveto do arbusto coletado.")
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_harvest_vegetation(id: String) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	var plant: Node3D = objects[id]
+	if not is_instance_valid(plant) or not vegetation_kind(str(plant.get_meta("kind",""))) or not remote_can_interact(peer,plant.global_position,4.5):
+		return
+	if not bool(plant.get_meta("ready",true)):
+		return
+	var item := 1 if str(plant.get_meta("kind",""))=="forest_shrub" else VINE
+	vegetation_harvest[id] = Time.get_unix_time_from_system()+VEGETATION_REGROW_SECONDS
+	update_vegetation_visual(plant)
+	net_vegetation_harvested.rpc(id,float(vegetation_harvest[id]))
+	net_collect_reward.rpc_id(peer,item,1)
+	save_game()
+
+@rpc("authority","call_remote","reliable")
+func net_vegetation_harvested(id: String, next_time: float) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	if next_time>0:
+		vegetation_harvest[id] = next_time
+	else:
+		vegetation_harvest.erase(id)
+	if objects.has(id):
+		update_vegetation_visual(objects[id])
+
+func uproot_vegetation(plant: Node3D) -> void:
+	if not vegetation_kind(str(plant.get_meta("kind",""))):
+		return
+	var id := str(plant.get_meta("id",""))
+	if net_role=="client":
+		if net_world_ready:
+			use_tool(SHOVEL_ITEM)
+			net_request_uproot_vegetation.rpc_id(1,id,SHOVEL_ITEM)
+		return
+	use_tool(SHOVEL_ITEM)
+	remove_object(plant)
+	save_game()
+	notice("Planta removida com a pa.")
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_uproot_vegetation(id: String, tool: int) -> void:
+	if net_role!="host" or tool!=SHOVEL_ITEM or not objects.has(id):
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	var plant: Node3D = objects[id]
+	if not is_instance_valid(plant) or not vegetation_kind(str(plant.get_meta("kind",""))) or not remote_can_interact(peer,plant.global_position,4.5):
+		return
+	remove_object(plant)
+	save_game()
+
 func collectible_item_for_kind(kind: String) -> int:
 	if kind in ["meat_wolf","meat_rabbit"]:
 		return 3
