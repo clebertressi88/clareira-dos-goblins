@@ -135,6 +135,8 @@ var stone_pickaxe_head: Node3D
 var crosshair: Label
 var hud: Label
 var hint: Label
+var navigation_label: Label
+const SPAWN_ORIGIN := Vector2.ZERO
 var hotbar: HBoxContainer
 const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg"),preload("res://icones/stairs_straight.svg"),preload("res://icones/stairs_l.svg"),preload("res://icones/ladder.svg"),preload("res://icones/carpentry_bench.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
@@ -2715,6 +2717,22 @@ func make_ui() -> void:
 	layer.add_child(hud)
 	hud.position = Vector2(15,12)
 	hud.add_theme_font_size_override("font_size",18)
+	# Navegacao sempre visivel, independente de mapa ou minimapa.
+	navigation_label = Label.new()
+	navigation_label.name = "BussolaDaClareira"
+	navigation_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	navigation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	navigation_label.add_theme_font_size_override("font_size",15)
+	navigation_label.add_theme_color_override("font_color",Color("#f3dfa8"))
+	navigation_label.add_theme_color_override("font_shadow_color",Color(0,0,0,0.9))
+	navigation_label.add_theme_constant_override("shadow_offset_x",1)
+	navigation_label.add_theme_constant_override("shadow_offset_y",2)
+	layer.add_child(navigation_label)
+	navigation_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	navigation_label.offset_left = -300
+	navigation_label.offset_right = -16
+	navigation_label.offset_top = 12
+	navigation_label.offset_bottom = 68
 	hint = Label.new()
 	layer.add_child(hint)
 	hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
@@ -2802,7 +2820,7 @@ func make_ui() -> void:
 	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.add_child(menu)
 	get_viewport().size_changed.connect(func(): center_panel.call_deferred())
-	gameplay_overlays = [crosshair,hud,hint,bottom]
+	gameplay_overlays = [crosshair,hud,hint,bottom,navigation_label]
 	medieval_menu = MEDIEVAL_MENU.new()
 	layer.add_child(medieval_menu)
 	medieval_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -2918,7 +2936,29 @@ func sync_hotbar() -> void:
 				if slot>=0:
 					bar_items[slot] = item
 
+func update_navigation() -> void:
+	if navigation_label==null or not is_instance_valid(player):
+		return
+	var here := Vector2(player.global_position.x,player.global_position.z)
+	var to_spawn := SPAWN_ORIGIN-here
+	var distance := to_spawn.length()
+	var direction := "●"
+	if distance>1.0:
+		var forward := Vector2(-player.global_basis.z.x,-player.global_basis.z.z).normalized()
+		var relative_angle := atan2(forward.cross(to_spawn),forward.dot(to_spawn))
+		var sector := posmod(roundi(relative_angle/(PI/4.0)),8)
+		var arrows := ["↑","↗","→","↘","↓","↙","←","↖"]
+		direction = arrows[sector]
+	var cardinal := "N"
+	var horizontal_forward := -player.global_basis.z
+	if absf(horizontal_forward.x)>absf(horizontal_forward.z):
+		cardinal = "L" if horizontal_forward.x>0.0 else "O"
+	else:
+		cardinal = "S" if horizontal_forward.z>0.0 else "N"
+	navigation_label.text = "Coordenadas  X: %d  Z: %d\nDireção: %s  ·  Clareira %s %d m" % [roundi(here.x),roundi(here.y),cardinal,direction,roundi(distance)]
+
 func update_player_hud() -> void:
+	update_navigation()
 	sync_hotbar()
 	life_bar.value = health
 	var showing_breath := player_in_water() or breath < 99.99
