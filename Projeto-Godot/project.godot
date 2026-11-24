@@ -12,3 +12,6 @@ renderer/rendering_method.mobile="gl_compatibility"
 textures/default_filters/use_nearest_mipmap_filter=false
 [physics]
 common/physics_ticks_per_second=60
+
+[autoload]
+MusicManager="*res://music_manager.gd"
