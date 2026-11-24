@@ -28,6 +28,29 @@ static func _quad(width: float, height: float, tip: float = 0.0) -> ArrayMesh:
 	st.generate_normals()
 	return st.commit()
 
+## Um unico mesh de tufo com folhas cruzadas e inclinadas, renderizado
+## por MultiMesh. Evita as antigas pontas isoladas tipo estacas.
+static func _tuft(blades: int, max_height: float, width: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(blades):
+		var angle := TAU*float(i)/float(blades)+0.21*sin(float(i)*2.7)
+		var radial := Vector3(cos(angle),0.0,sin(angle))
+		var across := Vector3(-radial.z,0.0,radial.x)
+		var length := max_height*(0.64+0.36*absf(sin(float(i)*1.7+0.8)))
+		var root := radial*(0.012+float(i%3)*0.010)
+		var mid := root+radial*(length*0.24)+Vector3.UP*(length*0.53)
+		var tip := root+radial*(length*0.63)+Vector3.UP*length
+		var base_left := root-across*width*0.5
+		var base_right := root+across*width*0.5
+		var mid_left := mid-across*width*0.32
+		var mid_right := mid+across*width*0.32
+		# Duas secoes curvadas, terminacao estreita (nao triangulo rigido).
+		for point in [base_left,base_right,mid_left,base_right,mid_right,mid_left,mid_left,mid_right,tip]:
+			st.add_vertex(point)
+	st.generate_normals()
+	return st.commit()
+
 static func _flat_leaf() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -46,8 +69,8 @@ static func _mesh(name: String) -> Mesh:
 		return meshes[name]
 	var result: Mesh
 	match name:
-		"grass": result = _quad(0.12,0.32,0.07)
-		"moss": result = _quad(0.21,0.065,0.04)
+		"grass": result = _tuft(7,0.20,0.032)
+		"moss": result = _flat_leaf()
 		"leaf": result = _flat_leaf()
 		"pebble":
 			var sphere := SphereMesh.new()
@@ -56,8 +79,8 @@ static func _mesh(name: String) -> Mesh:
 			sphere.radial_segments = 7
 			sphere.rings = 3
 			result = sphere
-		"reeds": result = _quad(0.08,0.67,0.06)
-		"aquatic": result = _quad(0.22,0.41,0.12)
+		"reeds": result = _tuft(5,0.58,0.025)
+		"aquatic": result = _tuft(5,0.30,0.055)
 		_: result = _quad(0.10,0.20)
 	meshes[name] = result
 	return result
@@ -114,7 +137,7 @@ static func populate_chunk(chunk: Node3D, key: Vector2i, avoid: Array = []) -> v
 				3,4: kind = "leaf"
 				5: kind = "pebble"
 				_: kind = "grass"
-		var scale := rng.randf_range(.7,1.3)
+		var scale := rng.randf_range(.66,1.1) if kind=="grass" else rng.randf_range(.75,1.2)
 		var basis := Basis(Vector3.UP,rng.randf_range(0,TAU)).scaled(Vector3(scale,scale,scale))
 		pos.y += 0.018 if kind in ["moss","leaf","pebble"] else 0.0
 		data[kind].append(Transform3D(basis,pos))
