@@ -4007,7 +4007,7 @@ func construction_surface(point: Vector3, ceiling: float) -> float:
 func construction_candidate(kind: String) -> Dictionary:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
 	var is_floor := kind=="wood_floor"
-	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else 0.0
+	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall or kind=="chest" else 0.0
 	var point := player.position-player.basis.z*2.15
 	var hit := ray(5.8)
 	build_level = 0
@@ -4176,8 +4176,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_Q: drop_selected()
 			KEY_C: show_inventory()
 			KEY_R:
-				if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM]:
+				if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM]:
 					build_rotation = (build_rotation+1)%4
+					notice("Rotação: %d°" % (build_rotation*90))
 				else:
 					eat()
 			KEY_F: primary()
@@ -4332,8 +4333,8 @@ func _physics_process(dt: float) -> void:
 		next_interaction_hint = elapsed+.12
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
-		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
-			interaction_hint = "Aponte para encaixar · Clique: instalar · R: girar"
+		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM]:
+			interaction_hint = "Aponte para posicionar · Clique: instalar · R: girar"
 		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
