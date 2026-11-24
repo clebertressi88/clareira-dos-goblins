@@ -1174,7 +1174,10 @@ func update_villagers(dt: float) -> void:
 			npc.velocity.y -= 15.0*dt
 		else:
 			npc.velocity.y = -0.1
+		try_character_step(npc,dt)
 		npc.move_and_slide()
+		if npc.velocity.y<=0.0:
+			npc.apply_floor_snap()
 		# O limite é aplicado após a física, mesmo quando há empurrões.
 		var displacement := Vector2(npc.global_position.x-campfire.x,npc.global_position.z-campfire.z)
 		if displacement.length()>NPC_PATROL_RADIUS:
@@ -4328,29 +4331,29 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_WHEEL_DOWN: selected = posmod(selected+1,HOTBAR_SIZE)
 
 # Sobe apenas pequenos degraus de piso, sem impulso de salto.
-func try_player_step(dt: float) -> void:
-	if not player.is_on_floor() or player.velocity.y>0.0:
+func try_character_step(character: CharacterBody3D, dt: float) -> void:
+	if not character.is_on_floor() or character.velocity.y>0.0:
 		return
-	var motion := Vector3(player.velocity.x,0,player.velocity.z)*dt
+	var motion := Vector3(character.velocity.x,0,character.velocity.z)*dt
 	if motion.length()<.001:
 		return
-	var start := player.global_transform
+	var start := character.global_transform
 	var obstacle := KinematicCollision3D.new()
-	if not player.test_move(start,motion,obstacle):
+	if not character.test_move(start,motion,obstacle):
 		return
 	var body := obstacle.get_collider() as Node3D
 	if body==null or str(body.get_meta("kind",""))!="wood_floor":
 		return
 	var rise := Vector3.UP*.32
-	if player.test_move(start,rise):
+	if character.test_move(start,rise):
 		return
 	var raised := start
 	raised.origin += rise
-	if player.test_move(raised,motion):
+	if character.test_move(raised,motion):
 		return
 	raised.origin += motion
 	var landing := KinematicCollision3D.new()
-	if not player.test_move(raised,Vector3.DOWN*.38,landing):
+	if not character.test_move(raised,Vector3.DOWN*.38,landing):
 		return
 	var support := landing.get_collider() as Node3D
 	if support==null or str(support.get_meta("kind",""))!="wood_floor":
@@ -4361,8 +4364,8 @@ func try_player_step(dt: float) -> void:
 	if step_height<=.008 or step_height>.32:
 		return
 	# Apenas a altura muda: move_and_slide executa o movimento horizontal normal.
-	player.global_position += Vector3.UP*(step_height+.003)
-	player.velocity.y = 0.0
+	character.global_position += Vector3.UP*(step_height+.003)
+	character.velocity.y = 0.0
 
 func _physics_process(dt: float) -> void:
 	elapsed += dt
@@ -4387,7 +4390,7 @@ func _physics_process(dt: float) -> void:
 		elif jump and not crouch:
 			player.velocity.y = 5.2
 		if not in_water and not jump:
-			try_player_step(dt)
+			try_character_step(player,dt)
 		jump = false
 		player.move_and_slide()
 		if not in_water and player.velocity.y<=0.0:
@@ -4646,7 +4649,11 @@ func update_mobs(dt: float) -> void:
 			mob.rotation.y = atan2(stride.x,stride.z) if kind=="guardian" else atan2(-stride.x,-stride.z)
 		if not mob.is_on_floor():
 			mob.velocity.y -= dt*15
+		if kind=="guardian":
+			try_character_step(mob,dt)
 		mob.move_and_slide()
+		if kind=="guardian" and mob.velocity.y<=0.0:
+			mob.apply_floor_snap()
 		var mob_visual: Node3D = mob.get_node("Visual")
 		walk_pose(mob_visual,mob.get_real_velocity(),dt,mob.is_on_floor())
 		if kind=="guardian":
