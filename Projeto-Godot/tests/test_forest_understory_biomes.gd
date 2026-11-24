@@ -73,7 +73,7 @@ func _test() -> void:
 			if child.mesh is SphereMesh:
 				sphere_count += 1
 	if leaf_count<25 or sphere_count>0:
-		printerr("UNDERSTORY FAIL: arbusto ainda usa blocos/esferas em vez de folhas")
+		printerr("UNDERSTORY FAIL: arbusto ainda usa blocos/esferas em vez de folhas (folhas=%d esferas=%d filhos=%d)" % [leaf_count,sphere_count,shrub.get_child_count()])
 		quit(1)
 		return
 	print("UNDERSTORY BIOMES OK: lotes, mata densa, plantas e trilhas")
