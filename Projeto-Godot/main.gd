@@ -7,6 +7,9 @@ const LAN_INVENTORY := preload("res://lan_inventory_slots.gd")
 const CELL := 0.85
 const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
+const UNDERSTORY := preload("res://forest_understory.gd")
+const VEGETATION_REGROW_SECONDS := 480.0
+var vegetation_harvest: Dictionary = {} # id -> proximo horario Unix de colheita.
 const MEDIEVAL_MENU := preload("res://medieval_main_menu.gd")
 const GAME_UPDATER := preload("res://game_updater.gd")
 const GAME_KEYBINDS := preload("res://control_bindings.gd")
@@ -726,6 +729,16 @@ func create_chunk(key: Vector2i) -> void:
 	floor_collision.shape = height_shape
 	floor_body.add_child(floor_collision)
 	create_river_chunk(chunk,key)
+	# Cobertura do solo em malhas agrupadas; omitir perto de obras existentes.
+	var blocked_positions: Array = []
+	for entry in placed:
+		var p: Array = entry.get("p",[])
+		if p.size()>=3:
+			var px := float(p[0])
+			var pz := float(p[2])
+			if absf(px-float(key.x*CHUNK+8))<11.0 and absf(pz-float(key.y*CHUNK+8))<11.0:
+				blocked_positions.append(Vector3(px,0,pz))
+	UNDERSTORY.populate_chunk(chunk,key,blocked_positions)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
 	for i in range(15):
@@ -749,6 +762,30 @@ func create_chunk(key: Vector2i) -> void:
 				creature(kind,id,at,chunk)
 		elif not removed.has(id):
 			spawn_object(kind,id,at,chunk)
+	# Plantas de coleta: poucas instancias e IDs fixos para save/multiplayer.
+	for plant_index in range(3):
+		var px := float(key.x*CHUNK)+rng.randf_range(1.7,14.3)
+		var pz := float(key.y*CHUNK)+rng.randf_range(1.7,14.3)
+		if Vector2(px,pz).length()<8.0 or Vector2(px-STARTER_CABIN_CENTER.x,pz-STARTER_CABIN_CENTER.y).length()<6.0:
+			continue
+		var river_d := absf(px-TERRAIN.river_x(pz))
+		var plant_kind := "fern" if plant_index==0 else "forest_shrub"
+		if river_d>TERRAIN.RIVER_HALF_WIDTH and river_d<TERRAIN.RIVER_HALF_WIDTH+2.8:
+			plant_kind = "river_reed"
+		elif river_d<=TERRAIN.RIVER_HALF_WIDTH:
+			continue
+		var plant_id := "%s:%s:veg:%s" % [key.x,key.y,plant_index]
+		if removed.has(plant_id):
+			continue
+		var plant_pos := Vector3(px,ground(px,pz),pz)
+		var near_structure := false
+		for entry in placed:
+			var q: Array = entry.get("p",[])
+			if q.size()>=3 and Vector2(px-float(q[0]),pz-float(q[2])).length()<1.35:
+				near_structure = true
+				break
+		if not near_structure:
+			spawn_object(plant_kind,plant_id,plant_pos,chunk)
 
 func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
 	var x0 := float(key.x * CHUNK)
@@ -1714,6 +1751,13 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 		"tomato":
 			preload("res://forest_tomato_plant.gd").build(o,id,true)
 			collider(o,Vector3(.26,.24,.26),Vector3.UP*.12)
+		"fern","forest_shrub","river_reed":
+			var vegetation := Node3D.new()
+			vegetation.name = "Vegetacao"
+			o.add_child(vegetation)
+			UNDERSTORY.build_plant(vegetation,kind,id)
+			collider(o,Vector3(.78,1.15,.78),Vector3.UP*.55)
+			update_vegetation_visual(o)
 		"vine_bush":
 			for i in range(5):
 				var a := i*TAU/5.
@@ -4977,6 +5021,7 @@ func _physics_process(dt: float) -> void:
 		tree_regrowth_clock = 0.0
 		update_regrowing_trees()
 		update_all_tomato_crops()
+		update_vegetation_regrowth()
 		update_tomato_fruit_regrowth()
 	if net_role!="solo" and multiplayer.multiplayer_peer and multiplayer.multiplayer_peer.get_connection_status()==MultiplayerPeer.CONNECTION_CONNECTED and elapsed>next_net:
 		next_net = elapsed+.10
@@ -5041,6 +5086,7 @@ func _physics_process(dt: float) -> void:
 				"carpentry_bench": interaction_hint = "Botão direito · Usar marcenaria 5 × 5"
 				"chest": interaction_hint = "Botão direito · Abrir baú"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
+				"fern","forest_shrub","river_reed": interaction_hint = "Botão direito · Colher · Pá: remover planta"
 				"tomato_plant","tomato_crop": interaction_hint = "Botão direito · Colher 1 tomate · Pá para retirar pé"
 				"Bruma": interaction_hint = "Botão direito · Conversar com Bruma"
 				"Talo": interaction_hint = "Botão direito · Conversar com Talo"
@@ -5357,6 +5403,9 @@ func primary() -> void:
 		save_game()
 		notice("Muda plantada! A árvore crescerá com o tempo.")
 		return
+	if kind in ["fern","forest_shrub","river_reed"] and held==SHOVEL_ITEM:
+		uproot_vegetation(o)
+		return
 	if kind in ["tomato_plant","tomato_crop"] and held==SHOVEL_ITEM:
 		uproot_tomato(o)
 		return
@@ -5621,7 +5670,7 @@ func collectible_item_for_kind(kind: String) -> int:
 	if kind=="vine_bush":
 		return VINE
 	# Bancadas, estruturas, arvores e rochas exigem mecanicas proprias.
-	if kind in ["tree","stump","stone","block","chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","tomato_plant","tomato_crop"]:
+	if kind in ["tree","stump","stone","block","chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","tomato_plant","tomato_crop","fern","forest_shrub","river_reed"]:
 		return -1
 	return ITEM_KINDS.find(kind)
 
@@ -5631,6 +5680,9 @@ func secondary() -> void:
 		var o: Node3D = hit["collider"]
 		var kind: String = o.get_meta("kind","")
 		var item := collectible_item_for_kind(kind)
+		if kind in ["fern","forest_shrub","river_reed"]:
+			harvest_vegetation(o)
+			return
 		if kind=="tree_vine":
 			harvest_tree_vine(o)
 			return
@@ -6042,6 +6094,8 @@ func remove_object(o: Node3D) -> void:
 	elif id!="lobo-errante":
 		removed[id] = true
 	objects.erase(id)
+	if removed_kind in ["fern","forest_shrub","river_reed"]:
+		vegetation_harvest.erase(id)
 	if removed_kind=="chest":
 		chest_storage.erase(id)
 		if open_chest_id==id:
@@ -6184,6 +6238,7 @@ func load_game() -> void:
 	removed = data.get("removed",{})
 	cleared_stumps = data.get("cleared_stumps",{})
 	tree_regrowth = data.get("tree_regrowth",{})
+	vegetation_harvest = data.get("vegetation_harvest",{})
 	tree_vines = data.get("tree_vines",{})
 	tomato_crop_times = data.get("tomato_crop_times",{})
 	tomato_fruits = data.get("tomato_fruits",{})
@@ -6217,7 +6272,7 @@ func save_game() -> bool:
 				resources["extra_items"] = npc_extra_items(npc).duplicate(true)
 				npc_saved_resources[str(npc.get_meta("id",""))] = resources
 		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"vegetation_harvest":vegetation_harvest,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.flush()
@@ -6400,6 +6455,7 @@ func capture_net_world() -> Dictionary:
 		"removed": removed.duplicate(true),
 		"cleared_stumps": cleared_stumps.duplicate(true),
 		"tree_regrowth": tree_regrowth.duplicate(true),
+		"vegetation_harvest": vegetation_harvest.duplicate(true),
 		"tree_vines": tree_vines.duplicate(true),
 		"tomato_crop_times": tomato_crop_times.duplicate(true),
 		"tomato_fruits": tomato_fruits.duplicate(true),
@@ -6442,6 +6498,7 @@ func apply_net_world(snapshot: Dictionary) -> void:
 		spawn_starter_cabin()
 	cleared_stumps = (snapshot.get("cleared_stumps",{}) as Dictionary).duplicate(true)
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
+	vegetation_harvest = (snapshot.get("vegetation_harvest",{}) as Dictionary).duplicate(true)
 	tree_vines = (snapshot.get("tree_vines",{}) as Dictionary).duplicate(true)
 	tomato_crop_times = (snapshot.get("tomato_crop_times",{}) as Dictionary).duplicate(true)
 	tomato_fruits = (snapshot.get("tomato_fruits",{}) as Dictionary).duplicate(true)
