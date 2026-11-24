@@ -62,5 +62,11 @@ static func _add(parent: Node3D, mesh: Mesh, pos: Vector3, color: Color) -> void
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 0.86
+	if color!=Color("#505052") and color!=Color("#c1a069"):
+		mat.albedo_texture = preload("res://chest_wood_grain.svg")
+		mat.uv1_scale = Vector3(1.5,1.5,1.5)
+	else:
+		mat.metallic = 0.75
+		mat.roughness = 0.68
 	part.material_override = mat
 	parent.add_child(part)
