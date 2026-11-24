@@ -345,9 +345,20 @@ func setup_world() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 38
 	add_child(sun)
+	# Discos celestes visiveis diretamente no ceu, alem dos reflexos.
+	sky_material.sun_angle_max = 5.0
+	sky_material.sun_curve = 0.18
+	environment.fog_sky_affect = 0.12
 	npc_sun = sun
 	npc_environment = environment
 	npc_sky = sky_material
+	npc_moon = DirectionalLight3D.new()
+	npc_moon.name = "Lua"
+	npc_moon.light_color = Color("#b9d3ff")
+	npc_moon.light_energy = 0.0
+	npc_moon.shadow_enabled = false
+	add_child(npc_moon)
+	update_npc_daylight(0.0)
 	var grass := material("grass", Color("#f5f5ee"))
 	grass.albedo_texture = preload("res://grass.png")
 	# Renderizar ambas as faces: evita o terreno desaparecer quando a camera
@@ -827,6 +838,7 @@ func choose_goblin_destination(npc: CharacterBody3D) -> void:
 
 # Rotina de trabalho dos moradores, executada somente pela autoridade do mundo.
 var npc_sun: DirectionalLight3D
+var npc_moon: DirectionalLight3D
 var npc_environment: Environment
 var npc_sky: ProceduralSkyMaterial
 var npc_world_clock := 0.0
@@ -842,7 +854,17 @@ func update_npc_daylight(dt: float) -> void:
 		return
 	var phase := fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS)
 	var dark := smoothstep(NPC_DAY_SECONDS-25.0,NPC_DAY_SECONDS,phase)*(1.0-smoothstep(NPC_DAY_SECONDS+NPC_NIGHT_SECONDS-25.0,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS,phase))
-	npc_sun.light_energy = lerpf(.81,.035,dark)
+	var day_progress := clampf(phase/NPC_DAY_SECONDS,0.0,1.0)
+	var night_progress := clampf((phase-NPC_DAY_SECONDS)/NPC_NIGHT_SECONDS,0.0,1.0)
+	# Cada astro percorre seu arco acima do horizonte na fase correspondente.
+	var sun_altitude := lerpf(4.0,70.0,sin(day_progress*PI)) if phase<NPC_DAY_SECONDS else -12.0
+	var moon_altitude := lerpf(4.0,65.0,sin(night_progress*PI)) if phase>=NPC_DAY_SECONDS else -12.0
+	npc_sun.rotation_degrees = Vector3(-sun_altitude,lerpf(-95.0,95.0,day_progress),0.0)
+	npc_sun.light_energy = lerpf(.81,0.0,dark) if phase<NPC_DAY_SECONDS else 0.0
+	npc_sun.light_color = Color("#ffc27c").lerp(Color("#fff0d6"),clampf(sun_altitude/40.0,0.0,1.0))
+	if is_instance_valid(npc_moon):
+		npc_moon.rotation_degrees = Vector3(-moon_altitude,lerpf(85.0,275.0,night_progress),0.0)
+		npc_moon.light_energy = .32*dark if phase>=NPC_DAY_SECONDS else 0.0
 	npc_environment.ambient_light_energy = lerpf(.52,.23,dark)
 	npc_environment.fog_light_color = Color("#98ada0").lerp(Color("#172539"),dark)
 	npc_sky.sky_top_color = Color("#43738a").lerp(Color("#071326"),dark)
