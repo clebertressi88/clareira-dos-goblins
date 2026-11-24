@@ -1,105 +1,115 @@
 extends Node3D
-## Mochila medieval de couro para o protagonista. Modelo procedural independente:
-## corpo abaulado, tampa arredondada, pespontos, bolsos, fivelas e correias.
-## Frente da mochila aponta para -Z, mantendo a orientacao do modelo anterior.
+## Mochila leve de couro gasto, feita para acompanhar o tronco do Skirmisher.
+## A origem coincide com o osso do peito: sem deslocamento vertical artificial.
+## Lado de fora = -Z; lado das alcas, encostado no goblin = +Z.
 
-func _material(color: Color, roughness: float = 0.92, metal: float = 0.0) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = roughness
-	m.metallic = metal
-	return m
+func _mat(hex: String, metal: float = 0.0) -> StandardMaterial3D:
+	var result := StandardMaterial3D.new()
+	result.albedo_color = Color(hex)
+	result.roughness = 0.94 if metal == 0.0 else 0.53
+	result.metallic = metal
+	return result
 
-func _part(shape: Mesh, at: Vector3, scale_value: Vector3, mat: Material) -> MeshInstance3D:
-	var n := MeshInstance3D.new()
-	n.mesh = shape
-	n.position = at
-	n.scale = scale_value
-	n.material_override = mat
-	add_child(n)
-	return n
+func _mesh(mesh: Mesh, position_value: Vector3, mat: Material, size_value: Vector3 = Vector3.ONE) -> MeshInstance3D:
+	var piece := MeshInstance3D.new()
+	piece.mesh = mesh
+	piece.position = position_value
+	piece.scale = size_value
+	piece.material_override = mat
+	add_child(piece)
+	return piece
 
-func _rounded(at: Vector3, radius: float, size: Vector3, mat: Material) -> void:
-	var sphere := SphereMesh.new()
-	sphere.radius = radius
-	sphere.height = radius * 2.0
-	sphere.radial_segments = 16
-	sphere.rings = 8
-	_part(sphere,at,size,mat)
+func _soft(position_value: Vector3, size_value: Vector3, mat: Material) -> void:
+	var m := SphereMesh.new()
+	m.radius = 0.5
+	m.height = 1.0
+	m.radial_segments = 20
+	m.rings = 12
+	_mesh(m,position_value,mat,size_value)
 
-func _box(at: Vector3, size: Vector3, mat: Material) -> void:
-	var cube := BoxMesh.new()
-	cube.size = size
-	_part(cube,at,Vector3.ONE,mat)
+func _bar(position_value: Vector3, size_value: Vector3, mat: Material) -> void:
+	var m := BoxMesh.new()
+	m.size = size_value
+	_mesh(m,position_value,mat)
 
-func _strap(from_pos: Vector3, to_pos: Vector3, thickness: float, mat: Material) -> void:
-	var segment := to_pos-from_pos
-	var cube := BoxMesh.new()
-	cube.size = Vector3(thickness,segment.length(),thickness*.55)
-	var item := _part(cube,(from_pos+to_pos)*.5,Vector3.ONE,mat)
-	item.quaternion = Quaternion(Vector3.UP,segment.normalized())
+func _ribbon(points: Array[Vector3], width: float, mat: Material) -> void:
+	# Trechos sucessivos criam correias curvas acompanhando os ombros.
+	for i in range(points.size()-1):
+		var delta: Vector3 = points[i+1]-points[i]
+		if delta.length_squared()<0.000001:
+			continue
+		var segment := BoxMesh.new()
+		segment.size = Vector3(width,delta.length(),0.017)
+		var piece := _mesh(segment,(points[i+1]+points[i])*0.5,mat)
+		piece.quaternion = Quaternion(Vector3.UP,delta.normalized())
 
-func _ring(center: Vector3, half_w: float, half_h: float, mat: Material) -> void:
-	var thick := 0.015
-	_box(center+Vector3(0,half_h,0),Vector3(half_w*2+thick,thick,thick),mat)
-	_box(center-Vector3(0,half_h,0),Vector3(half_w*2+thick,thick,thick),mat)
-	_box(center+Vector3(half_w,0,0),Vector3(thick,half_h*2,thick),mat)
-	_box(center-Vector3(half_w,0,0),Vector3(thick,half_h*2,thick),mat)
+func _buckle(at: Vector3, mat: Material, width: float = 0.057) -> void:
+	var half := width * 0.5
+	_bar(at+Vector3(0,half,0),Vector3(width,0.012,0.009),mat)
+	_bar(at-Vector3(0,half,0),Vector3(width,0.012,0.009),mat)
+	_bar(at+Vector3(half,0,0),Vector3(0.012,width,0.009),mat)
+	_bar(at-Vector3(half,0,0),Vector3(0.012,width,0.009),mat)
 
 func _ready() -> void:
-	var leather := _material(Color("#815233"))
-	var leather_light := _material(Color("#a47649"))
-	var flap := _material(Color("#704229"))
-	var pocket := _material(Color("#885631"))
-	var edging := _material(Color("#4b3021"))
-	var stitches := _material(Color("#d0ab74"))
-	var brass := _material(Color("#c19a4a"),0.36,0.62)
-	var cloth := _material(Color("#a99770"))
-	var patch := _material(Color("#59352b"))
+	var leather := _mat("#65452f")
+	var leather_lit := _mat("#826044")
+	var flap := _mat("#503728")
+	var piping := _mat("#443025")
+	var seam := _mat("#b09165")
+	var buckle := _mat("#847658",0.48)
+	var canvas := _mat("#74664b")
+	var patch := _mat("#79553e")
 
-	# Corpo volumoso, com fundo e topo arredondados em vez de uma caixa.
-	_rounded(Vector3(0,.95,-.34),.5,Vector3(.59,.65,.33),leather)
-	_rounded(Vector3(0,.75,-.36),.40,Vector3(.68,.36,.39),leather)
-	# Faixa inferior de reforco.
-	_rounded(Vector3(0,.69,-.505),.27,Vector3(.83,.15,.19),edging)
+	# Corpo estreito e achatado para encaixar na curvatura das costas.
+	# A frente do volume (Z positivo) fica quase junto ao osso de fixacao.
+	_soft(Vector3(0,-0.075,-0.145),Vector3(0.43,0.53,0.20),leather)
+	_soft(Vector3(0,-0.17,-0.146),Vector3(0.41,0.30,0.205),leather_lit)
+	# Fundo discreto em vez de uma caixa retangular.
+	_soft(Vector3(0,-0.292,-0.17),Vector3(0.39,0.10,0.18),piping)
 
-	# Tampa externa abaulada com acabamento escuro.
-	_rounded(Vector3(0,1.19,-.51),.43,Vector3(.71,.28,.20),flap)
-	_rounded(Vector3(0,1.17,-.615),.40,Vector3(.71,.24,.055),leather_light)
-	# Borda costurada da aba; pontos individuais visiveis de perto.
-	for i in range(15):
-		var x := -.275+float(i)*.039
-		var arc := sqrt(maxf(0.0,1.0-pow(x/.325,2.0)))
-		_box(Vector3(x,1.098-.045*arc,-.650),Vector3(.012,.008,.008),stitches)
-
-	# Faixa central de couro para fechamento, terminando em fivela de latao.
-	_box(Vector3(0,.99,-.64),Vector3(.080,.37,.034),flap)
-	_ring(Vector3(0,.989,-.669),.051,.060,brass)
-	_box(Vector3(0,.974,-.683),Vector3(.012,.056,.013),brass)
-	_box(Vector3(0,.85,-.647),Vector3(.065,.12,.034),leather_light)
-	# Presilhas na parte superior e ombros.
+	# Tampa abaulada e caída na frente, integrada ao corpo.
+	_soft(Vector3(0,0.142,-0.175),Vector3(0.435,0.20,0.19),flap)
+	_soft(Vector3(0,0.075,-0.258),Vector3(0.405,0.115,0.039),leather_lit)
+	# Cinto vertical simples, uma pequena fivela oxidada.
+	_ribbon([Vector3(0,0.115,-0.277),Vector3(0,0.005,-0.281),Vector3(0,-0.105,-0.262)],0.051,flap)
+	_buckle(Vector3(0,-0.035,-0.300),buckle)
+	# Pontos irregulares nas laterais e na aba.
+	for i in range(9):
+		var x := -0.16+float(i)*0.040
+		_bar(Vector3(x,0.04,-0.289),Vector3(0.010,0.007,0.008),seam)
 	for side in [-1.0,1.0]:
-		var x: float = float(side) * 0.235
-		_box(Vector3(x,1.38,-.26),Vector3(.083,.045,.20),flap)
-		_strap(Vector3(x,.76,-.10),Vector3(x,1.34,-.14),.071,leather_light)
-		# Bolso lateral arredondado e sua pequena tampa.
-		_rounded(Vector3(side*.326,.85,-.44),.24,Vector3(.48,.46,.51),pocket)
-		_rounded(Vector3(side*.327,.99,-.52),.22,Vector3(.48,.20,.34),flap)
-		_box(Vector3(side*.333,.87,-.665),Vector3(.043,.15,.029),leather_light)
-		_ring(Vector3(side*.333,.87,-.688),.023,.031,brass)
-		for j in range(5):
-			var y := .71+float(j)*.060
-			_box(Vector3(side*.475,y,-.555),Vector3(.009,.013,.012),stitches)
-	# Patch gasto e emendas de couro.
-	_box(Vector3(-.15,.755,-.678),Vector3(.15,.09,.012),patch)
-	for i in range(4):
-		_box(Vector3(-.215+float(i)*.039,.80,-.686),Vector3(.012,.014,.012),stitches)
-	# Rolo de tecido preso a lateral direita.
+		for i in range(5):
+			_bar(Vector3(side*0.195,-0.225+float(i)*0.067,-0.198),Vector3(0.007,0.014,0.008),seam)
+
+	# Alcas traseiras seguem a silhueta dos ombros ate embaixo.
+	# A fita na face +Z torna visivel que o peso esta apoiado no corpo.
+	for side in [-1.0,1.0]:
+		var x := side*0.145
+		_ribbon([
+			Vector3(x,0.196,-0.105),
+			Vector3(side*0.190,0.205,-0.020),
+			Vector3(side*0.215,0.080,0.070),
+			Vector3(side*0.190,-0.110,0.070),
+			Vector3(side*0.145,-0.271,-0.080)
+		],0.055,leather_lit)
+
+	# Apenas um bolso lateral pequeno, sem exagerar o volume.
+	_soft(Vector3(-0.194,-0.169,-0.156),Vector3(0.102,0.169,0.117),leather_lit)
+	_soft(Vector3(-0.203,-0.095,-0.174),Vector3(0.103,0.057,0.109),flap)
+	_buckle(Vector3(-0.214,-0.131,-0.237),buckle,0.028)
+
+	# Rolo de lona preso discretamente no topo.
 	var roll := CylinderMesh.new()
-	roll.top_radius = .066
-	roll.bottom_radius = .066
-	roll.height = .27
+	roll.top_radius = 0.051
+	roll.bottom_radius = 0.052
+	roll.height = 0.28
 	roll.radial_segments = 14
-	_part(roll,Vector3(.40,1.04,-.30),Vector3.ONE,cloth)
-	_box(Vector3(.40,1.05,-.369),Vector3(.13,.050,.036),flap)
-	# Alcas de ombro sao parte do modelo, nao do inventario.
+	var cloth_roll := _mesh(roll,Vector3(0,0.228,-0.153),canvas)
+	cloth_roll.rotation.z = PI*0.5
+	_ribbon([Vector3(-0.085,0.264,-0.177),Vector3(-0.085,0.185,-0.176)],0.024,flap)
+	_ribbon([Vector3(0.085,0.264,-0.177),Vector3(0.085,0.185,-0.176)],0.024,flap)
+
+	# Remendo fino para aspecto artesanal sem poluir a silhueta.
+	_bar(Vector3(0.113,-0.183,-0.247),Vector3(0.080,0.066,0.010),patch)
+	for i in range(3):
+		_bar(Vector3(0.085+float(i)*0.027,-0.143,-0.255),Vector3(0.008,0.009,0.008),seam)
