@@ -5453,57 +5453,142 @@ func net_tomato_crop_time(id: String, planted: float) -> void:
 	if objects.has(id):
 		update_tomato_crop(objects[id])
 
+func tomato_available(plant: Node3D) -> int:
+	var id := str(plant.get_meta("id",""))
+	var state: Dictionary = tomato_fruits.get(id,{})
+	return clampi(int(state.get("count",TOMATO_MAX_FRUITS)),0,TOMATO_MAX_FRUITS)
+
+func update_tomato_fruits(plant: Node3D) -> void:
+	if not is_instance_valid(plant):
+		return
+	var id := str(plant.get_meta("id",""))
+	var visual: Node3D = plant.get_node_or_null("Horta") as Node3D
+	if visual==null:
+		visual = plant
+	var count := tomato_available(plant)
+	var fruits: Array[Node3D] = []
+	for child in visual.get_children():
+		if child is Node3D and str(child.name).begins_with("Fruto_"):
+			fruits.append(child)
+	# A ordem e estavel; separar a fruta de sua estrela verde permite ocultar 1 por vez.
+	for i in range(fruits.size()):
+		fruits[i].visible = i<count
+
+func take_one_tomato(plant: Node3D) -> bool:
+	if not is_instance_valid(plant) or str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"]:
+		return false
+	if str(plant.get_meta("kind",""))=="tomato_crop" and not bool(plant.get_meta("ready",false)):
+		return false
+	var available := tomato_available(plant)
+	if available<=0:
+		return false
+	var id := str(plant.get_meta("id",""))
+	var now := Time.get_unix_time_from_system()
+	var state: Dictionary = tomato_fruits.get(id,{"count":TOMATO_MAX_FRUITS,"next":now+TOMATO_FRUIT_SECONDS})
+	state["count"] = available-1
+	if available==TOMATO_MAX_FRUITS or float(state.get("next",0.0))<=0.0:
+		state["next"] = now+TOMATO_FRUIT_SECONDS
+	tomato_fruits[id] = state
+	update_tomato_fruits(plant)
+	if net_role=="host":
+		net_tomato_fruit_state.rpc(id,state)
+	return true
+
+func update_tomato_fruit_regrowth() -> void:
+	if net_role=="client":
+		return
+	var now := Time.get_unix_time_from_system()
+	for id in tomato_fruits.keys():
+		var state: Dictionary = tomato_fruits[id]
+		var count := clampi(int(state.get("count",TOMATO_MAX_FRUITS)),0,TOMATO_MAX_FRUITS)
+		if count>=TOMATO_MAX_FRUITS:
+			continue
+		var next_time := float(state.get("next",now+TOMATO_FRUIT_SECONDS))
+		if now<next_time:
+			continue
+		# Ate se o mundo ficou fechado, cada fruto exige seu proprio intervalo.
+		var steps := mini(TOMATO_MAX_FRUITS-count,1+int((now-next_time)/TOMATO_FRUIT_SECONDS))
+		state["count"] = count+steps
+		state["next"] = next_time+float(steps)*TOMATO_FRUIT_SECONDS
+		tomato_fruits[id] = state
+		if objects.has(id):
+			update_tomato_fruits(objects[id])
+		if net_role=="host":
+			net_tomato_fruit_state.rpc(str(id),state)
+		save_game()
+
+@rpc("authority","call_remote","reliable")
+func net_tomato_fruit_state(id: String, state: Dictionary) -> void:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
+		return
+	tomato_fruits[id] = state.duplicate(true)
+	if objects.has(id):
+		update_tomato_fruits(objects[id])
+
 func harvest_tomatoes(plant: Node3D) -> void:
 	var id := str(plant.get_meta("id",""))
 	if net_role=="client":
 		if net_world_ready:
 			net_request_harvest_tomatoes.rpc_id(1,id)
 		return
-	var plant_kind := str(plant.get_meta("kind",""))
-	if plant_kind not in ["tomato_plant","tomato_crop"]:
+	if not take_one_tomato(plant):
+		notice("Aguarde o crescimento de um tomate maduro.")
 		return
-	if plant_kind=="tomato_crop" and not bool(plant.get_meta("ready",false)):
-		notice("O tomateiro ainda esta crescendo.")
-		return
-	tomato_crop_times.erase(id)
-	# Plantas naturais retiradas do mundo sao persistidas em removed.
-	remove_object(plant)
-	stock[TOMATO_ITEM] += 3
-	stock[TOMATO_SEED_ITEM] += 2
+	stock[TOMATO_ITEM] += 1
 	item_received(TOMATO_ITEM)
-	item_received(TOMATO_SEED_ITEM)
 	sync_hotbar()
 	save_game()
-	notice("Colhidos 3 tomates.")
+	notice("Colhido 1 tomate. O pe continua crescendo.")
 
 @rpc("any_peer","call_remote","reliable")
 func net_request_harvest_tomatoes(id: String) -> void:
 	if net_role!="host" or not objects.has(id):
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
-	var avatar: Node3D = remotes.get(peer_id,null)
 	var plant: Node3D = objects[id]
-	if not is_instance_valid(avatar) or not is_instance_valid(plant):
+	if not is_instance_valid(plant) or not remote_can_interact(peer_id,plant.global_position,4.0):
 		return
-	if str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"] or not remote_can_interact(peer_id,plant.global_position,4.0):
-		return
-	if str(plant.get_meta("kind",""))=="tomato_crop" and not bool(plant.get_meta("ready",false)):
-		return
-	tomato_crop_times.erase(id)
-	remove_object(plant)
-	net_tomato_reward.rpc_id(peer_id,3)
-	save_game()
+	if take_one_tomato(plant):
+		net_tomato_reward.rpc_id(peer_id,1)
+		save_game()
 
 @rpc("authority","call_remote","reliable")
 func net_tomato_reward(amount: int) -> void:
-	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or amount!=3:
+	if net_role!="client" or multiplayer.get_remote_sender_id()!=1 or amount!=1:
 		return
-	stock[TOMATO_ITEM] += amount
-	stock[TOMATO_SEED_ITEM] += 2
+	stock[TOMATO_ITEM] += 1
 	item_received(TOMATO_ITEM)
-	item_received(TOMATO_SEED_ITEM)
 	sync_hotbar()
-	notice("Colhidos 3 tomates.")
+	save_game()
+	notice("Colhido 1 tomate.")
+
+func uproot_tomato(plant: Node3D) -> void:
+	if not is_instance_valid(plant) or str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"]:
+		return
+	var id := str(plant.get_meta("id",""))
+	if net_role=="client":
+		if net_world_ready:
+			net_request_uproot_tomato.rpc_id(1,id)
+		return
+	use_tool(SHOVEL_ITEM)
+	tomato_fruits.erase(id)
+	remove_object(plant)
+	save_game()
+	notice("Pe de tomate retirado com a pa.")
+
+@rpc("any_peer","call_remote","reliable")
+func net_request_uproot_tomato(id: String) -> void:
+	if net_role!="host" or not objects.has(id):
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	var plant: Node3D = objects[id]
+	if not is_instance_valid(plant) or str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"]:
+		return
+	if not remote_can_interact(peer,plant.global_position,4.0):
+		return
+	tomato_fruits.erase(id)
+	remove_object(plant)
+	save_game()
 
 func eat() -> void:
 	if stock[3]>0 and health<100:
@@ -5581,6 +5666,8 @@ func remove_object(o: Node3D) -> void:
 			open_chest_id = ""
 	if removed_kind=="tomato_crop":
 		tomato_crop_times.erase(id)
+	if removed_kind in ["tomato_crop","tomato_plant"]:
+		tomato_fruits.erase(id)
 	o.queue_free()
 	if removed_kind=="wood_floor":
 		refresh_door_transitions(removed_pos)
@@ -5717,6 +5804,7 @@ func load_game() -> void:
 	tree_regrowth = data.get("tree_regrowth",{})
 	tree_vines = data.get("tree_vines",{})
 	tomato_crop_times = data.get("tomato_crop_times",{})
+	tomato_fruits = data.get("tomato_fruits",{})
 	chest_storage = data.get("chest_storage",{})
 	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
@@ -5739,7 +5827,7 @@ func save_game() -> bool:
 	if file:
 		var p := player.position
 		file.store_string(JSON.stringify({"world_uid":world_uid,"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"chest_storage":chest_storage,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.flush()
@@ -5924,6 +6012,7 @@ func capture_net_world() -> Dictionary:
 		"tree_regrowth": tree_regrowth.duplicate(true),
 		"tree_vines": tree_vines.duplicate(true),
 		"tomato_crop_times": tomato_crop_times.duplicate(true),
+		"tomato_fruits": tomato_fruits.duplicate(true),
 		"chest_storage": chest_storage.duplicate(true),
 		"hut":hut,"won":won,"bench":bench,
 		"pos":[player.position.x,player.position.y,player.position.z],
@@ -5965,6 +6054,7 @@ func apply_net_world(snapshot: Dictionary) -> void:
 	tree_regrowth = (snapshot.get("tree_regrowth",{}) as Dictionary).duplicate(true)
 	tree_vines = (snapshot.get("tree_vines",{}) as Dictionary).duplicate(true)
 	tomato_crop_times = (snapshot.get("tomato_crop_times",{}) as Dictionary).duplicate(true)
+	tomato_fruits = (snapshot.get("tomato_fruits",{}) as Dictionary).duplicate(true)
 	chest_storage = (snapshot.get("chest_storage",{}) as Dictionary).duplicate(true)
 	hut = bool(snapshot.get("hut",false))
 	won = bool(snapshot.get("won",false))
@@ -6134,8 +6224,10 @@ func net_shared_remove(id: String) -> void:
 		chest_storage.erase(id)
 		placed = placed.filter(func(entry): return str(entry.get("id",""))!=id)
 		tomato_crop_times.erase(id)
+		tomato_fruits.erase(id)
 	else:
 		removed[id] = true
+		tomato_fruits.erase(id)
 
 
 # O anfitriao e a unica maquina que executa a IA dos mobs. O ID dos
