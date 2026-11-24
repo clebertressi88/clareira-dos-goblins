@@ -961,6 +961,85 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		plant_tomato_at(pos)
 		npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+3)
 
+# Depositos dos moradores nao usam o inventario do jogador.
+func npc_chest_capacity(id: String, item: int) -> int:
+	var capacity := 0
+	for cell in normalized_chest_slots(id):
+		if int(cell[0])==item or int(cell[0])<0:
+			capacity += CHEST_STACK_LIMIT-int(cell[1])
+	return capacity
+
+func npc_nearest_chest(npc: CharacterBody3D, camp: Vector3) -> Node3D:
+	var best: Node3D
+	var nearest := INF
+	for obj in objects.values():
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion() or obj.get_meta("kind","")!="chest":
+			continue
+		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or absf(obj.global_position.y-ground(obj.global_position.x,obj.global_position.z))>0.8:
+			continue
+		var id := str(obj.get_meta("id",""))
+		if not ((int(npc.get_meta("carried_wood",0))>0 and npc_chest_capacity(id,6)>0) or (int(npc.get_meta("carried_tomatoes",0))>0 and npc_chest_capacity(id,TOMATO_ITEM)>0)):
+			continue
+		var distance: float = npc.global_position.distance_to(obj.global_position)
+		if distance<nearest:
+			nearest = distance
+			best = obj
+	return best
+
+func npc_deposit(id: String,item: int,amount: int) -> int:
+	var slots := normalized_chest_slots(id)
+	var remaining := amount
+	for pass_index in range(2):
+		for index in range(slots.size()):
+			var cell: Array = slots[index]
+			if int(cell[0])!=(item if pass_index==0 else -1):
+				continue
+			var moved := mini(remaining,CHEST_STACK_LIMIT-int(cell[1]))
+			if moved>0:
+				slots[index] = [item,int(cell[1])+moved]
+				remaining -= moved
+			if remaining<=0:
+				break
+		if remaining<=0:
+			break
+	if remaining<amount:
+		chest_storage[id] = slots
+		if net_role=="host":
+			net_chest_snapshot.rpc(id,slots)
+		if open_chest_id==id and not chest_pending:
+			show_chest()
+	return remaining
+
+func npc_clear_combat_hit(attacker: CharacterBody3D, target: CharacterBody3D) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(attacker.global_position+Vector3.UP*.55,target.global_position+Vector3.UP*.55,SOLID|TARGET|4,[attacker.get_rid()])
+	var contact := get_world_3d().direct_space_state.intersect_ray(query)
+	return contact.is_empty() or contact.get("collider",null)==target
+
+func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vector3:
+	var direction := wolf.global_position-npc.global_position
+	direction.y = 0.0
+	var distance := direction.length()
+	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(direction.x,direction.z),minf(dt*9.0,1.0))
+	if distance>1.25:
+		return direction.normalized()
+	if elapsed>=float(npc.get_meta("defend_at",0.0)) and npc_clear_combat_hit(npc,wolf):
+		npc.set_meta("defend_at",elapsed+1.15)
+		npc.set_meta("attack_serial",int(npc.get_meta("attack_serial",0))+1)
+		var rig := npc.get_node_or_null("Visual/GoblinRig")
+		if rig!=null:
+			rig.call("play_action","attack")
+		var hp := maxi(0,int(wolf.get_meta("hp",5))-1)
+		wolf.set_meta("hp",hp)
+		if hp<=0:
+			var pos := wolf.global_position
+			remove_object(wolf)
+			store_object("meat_wolf",pos)
+			if randf()<.5:
+				store_object("wolf_tooth",pos+Vector3(.36,0,0))
+			npc.set_meta("attacker_id","")
+			save_game()
+	return Vector3.ZERO
+
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
 	var task := str(npc.get_meta("work_mode",""))
@@ -971,31 +1050,36 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	elif not night and task=="warm":
 		npc.set_meta("work_mode","")
 		task = ""
-	if task=="warm" or task=="deliver":
+	if task=="deliver":
+		var chest := npc_nearest_chest(npc,camp)
+		if chest==null:
+			npc.set_meta("work_mode","")
+			npc.set_meta("next_work",elapsed+15.0)
+			return Vector3.ZERO
+		var direction := chest.global_position-npc.global_position
+		direction.y = 0.0
+		if direction.length()>1.25:
+			if npc.is_on_wall():
+				npc.set_meta("work_mode","")
+				npc.set_meta("next_work",elapsed+15.0)
+				return Vector3.ZERO
+			return direction.normalized()
+		var id := str(chest.get_meta("id",""))
+		npc.set_meta("carried_wood",npc_deposit(id,6,int(npc.get_meta("carried_wood",0))))
+		npc.set_meta("carried_tomatoes",npc_deposit(id,TOMATO_ITEM,int(npc.get_meta("carried_tomatoes",0))))
+		npc.set_meta("work_mode","")
+		npc.set_meta("next_work",elapsed+randf_range(25.0,45.0))
+		save_game()
+		return Vector3.ZERO
+	if task=="warm":
 		var side := -1.0 if str(npc.get_meta("id",""))=="Bruma" else 1.0
 		var spot := camp+Vector3(side*1.9,0,.8)
 		var direction := spot-npc.global_position
 		direction.y = 0.0
 		if direction.length()>.45:
-			if npc.is_on_wall():
-				npc.set_meta("work_mode","")
-				npc.set_meta("next_work",elapsed+12.0)
-				return Vector3.ZERO
-			return direction.normalized()
+			return direction.normalized() if not npc.is_on_wall() else Vector3.ZERO
 		var face := camp-npc.global_position
 		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(face.x,face.z),minf(dt*5.0,1.0))
-		if task=="deliver":
-			var wood := int(npc.get_meta("carried_wood",0))
-			var tomatoes := int(npc.get_meta("carried_tomatoes",0))
-			for i in range(wood+tomatoes):
-				var drop := camp+Vector3(side*(2.6+float(i%3)*.38),0,1.2+float(i/3)*.35)
-				drop.y = ground(drop.x,drop.z)
-				store_object("log" if i<wood else "tomato",drop)
-			npc.set_meta("carried_wood",0)
-			npc.set_meta("carried_tomatoes",0)
-			npc.set_meta("work_mode","")
-			npc.set_meta("next_work",elapsed+randf_range(35.0,65.0))
-			save_game()
 		return Vector3.ZERO
 	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
 		if int(npc.get_meta("carried_wood",0))+int(npc.get_meta("carried_tomatoes",0))>0:
@@ -1050,7 +1134,14 @@ func update_villagers(dt: float) -> void:
 		var walking := false
 		var heading := Vector3.ZERO
 		# Prioridade absoluta: NPC que chega ao limite retorna para perto da fogueira.
-		if distance_home>NPC_PATROL_RADIUS-.85:
+		var attacker: CharacterBody3D = objects.get(str(npc.get_meta("attacker_id","")),null) as CharacterBody3D
+		if is_instance_valid(attacker) and not attacker.is_queued_for_deletion() and attacker.global_position.distance_to(npc.global_position)<6.0 and elapsed>=float(npc.get_meta("recover_until",0.0)):
+			heading = npc_defend(npc,attacker,dt)
+			walking = not heading.is_zero_approx()
+		elif elapsed<float(npc.get_meta("recover_until",0.0)):
+			heading = delta_home.normalized() if distance_home>2.0 else Vector3.ZERO
+			walking = not heading.is_zero_approx()
+		elif distance_home>NPC_PATROL_RADIUS-.85:
 			heading = delta_home.normalized()
 			walking = true
 			npc.set_meta("ai_state","idle")
@@ -4425,6 +4516,18 @@ func update_mobs(dt: float) -> void:
 			continue
 		var target_id := nearest_player_id(mob.global_position)
 		var target_pos: Vector3 = player.global_position if target_id==1 else (remotes[target_id].global_position if remotes.has(target_id) else player.global_position)
+		var npc_target: CharacterBody3D
+		if mob.get_meta("kind","")=="wolf":
+			var nearest: float = target_pos.distance_to(mob.global_position)
+			for candidate in villagers:
+				if not is_instance_valid(candidate) or candidate.is_queued_for_deletion() or elapsed<float(candidate.get_meta("recover_until",0.0)):
+					continue
+				var d: float = candidate.global_position.distance_to(mob.global_position)
+				if d<nearest and d<10.0:
+					nearest = d
+					npc_target = candidate
+			if is_instance_valid(npc_target):
+				target_pos = npc_target.global_position
 		var direction: Vector3 = target_pos-mob.global_position
 		direction.y = 0
 		var distance: float = direction.length()
@@ -4450,7 +4553,17 @@ func update_mobs(dt: float) -> void:
 			# Inimigos soterrados, em outro nivel ou atras de objetos
 			# nao devem causar dano apenas pela distancia horizontal.
 			if distance<1.35 and absf(target_pos.y-mob.global_position.y)<1.35:
-				if target_id==1 and elapsed>next_hurt and mob_has_clear_hit(mob):
+				if is_instance_valid(npc_target):
+					if elapsed>=float(mob.get_meta("npc_bite_at",0.0)) and npc_clear_combat_hit(mob,npc_target):
+						mob.set_meta("npc_bite_at",elapsed+1.0)
+						npc_target.set_meta("attacker_id",str(mob.get_meta("id","")))
+						var hp := maxi(0,int(npc_target.get_meta("npc_health",100))-15)
+						npc_target.set_meta("npc_health",hp)
+						if hp<=0:
+							npc_target.set_meta("recover_until",elapsed+30.0)
+							npc_target.set_meta("npc_health",100)
+							npc_target.set_meta("attacker_id","")
+				elif target_id==1 and elapsed>next_hurt and mob_has_clear_hit(mob):
 					next_hurt = elapsed+1.0
 					health -= 15 if kind=="wolf" else 23
 					if health<=0:
@@ -5807,7 +5920,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"clock":npc_world_clock})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0))})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -5847,6 +5960,12 @@ func net_apply_entities(states: Array) -> void:
 		obj.rotation.y = angle
 		if kind in ["Bruma","Talo"] and data.has("clock"):
 			npc_world_clock = float(data["clock"])
+			var serial := int(data.get("attack_serial",0))
+			if serial>int(obj.get_meta("net_attack_serial",0)):
+				obj.set_meta("net_attack_serial",serial)
+				var rig := obj.get_node_or_null("Visual/GoblinRig")
+				if rig!=null:
+					rig.call("play_action","attack")
 		if int(data.get("hp",-1))>=0:
 			obj.set_meta("hp",int(data["hp"]))
 	for mob in mobs:
