@@ -3565,6 +3565,26 @@ func chest_has_items(id: String) -> bool:
 			return true
 	return false
 
+var cached_chest_open_sound: AudioStreamWAV
+var cached_chest_close_sound: AudioStreamWAV
+
+func play_chest_lid_sound(at: Vector3, opening: bool) -> void:
+	if opening and cached_chest_open_sound==null:
+		cached_chest_open_sound = preload("res://chest_lid_sound.gd").make_stream(true)
+	if not opening and cached_chest_close_sound==null:
+		cached_chest_close_sound = preload("res://chest_lid_sound.gd").make_stream(false)
+	var audio := AudioStreamPlayer3D.new()
+	audio.name = "SomBauAbrindo" if opening else "SomTampaBauFechando"
+	add_child(audio)
+	audio.global_position = at+Vector3.UP*0.45
+	audio.stream = cached_chest_open_sound if opening else cached_chest_close_sound
+	audio.unit_size = 5.0
+	audio.max_distance = 20.0
+	audio.volume_db = -2.0 if opening else 0.0
+	audio.pitch_scale = randf_range(0.96,1.04)
+	audio.finished.connect(audio.queue_free)
+	audio.play()
+
 func close_chest_visual() -> void:
 	if open_chest_id.is_empty():
 		return
@@ -3572,7 +3592,10 @@ func close_chest_visual() -> void:
 	if is_instance_valid(old):
 		var lid := old.get_node_or_null("Tampa") as Node3D
 		if lid!=null:
-			lid.create_tween().tween_property(lid,"rotation:x",0.0,0.23)
+			var closing := lid.create_tween()
+			closing.tween_property(lid,"rotation:x",0.0,0.23)
+			# Pancada somente quando a tampa atinge a caixa.
+			closing.tween_callback(play_chest_lid_sound.bind(old.global_position,false))
 	open_chest_id = ""
 	chest_selected_item = -1
 	# A resposta do anfitriao ainda pode estar a caminho.
@@ -3586,6 +3609,7 @@ func open_chest(o: Node3D) -> void:
 	var lid := o.get_node_or_null("Tampa") as Node3D
 	if lid!=null:
 		lid.create_tween().tween_property(lid,"rotation:x",-1.15,0.28)
+		play_chest_lid_sound(o.global_position,true)
 	show_chest()
 
 func show_chest() -> void:
