@@ -147,6 +147,9 @@ var crosshair: Label
 var hud: Label
 var hint: Label
 var navigation_label: Label
+var npc_marker_overlay: Control
+var npc_markers: Dictionary = {}
+const NPC_MARKER_COLORS := {"Bruma":Color("#d8aaff"),"Talo":Color("#ffd18a")}
 const MENU_OPTIONS_FILE := "user://clareira-menu.cfg"
 var show_coordinates := false
 const SPAWN_ORIGIN := Vector2.ZERO
@@ -2971,6 +2974,25 @@ func make_ui() -> void:
 	layer.add_child(hud)
 	hud.position = Vector2(15,12)
 	hud.add_theme_font_size_override("font_size",18)
+	# Marcadores 2D: nao dependem de oclusao nem do plano de corte da camera 3D.
+	npc_marker_overlay = Control.new()
+	npc_marker_overlay.name = "MarcadoresNPC"
+	npc_marker_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(npc_marker_overlay)
+	npc_marker_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for id in NPC_MARKER_COLORS:
+		var marker := Label.new()
+		marker.name = "Marcador"+str(id)
+		marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		marker.add_theme_font_size_override("font_size",15)
+		marker.add_theme_color_override("font_color",NPC_MARKER_COLORS[id])
+		marker.add_theme_color_override("font_outline_color",Color("#121410"))
+		marker.add_theme_constant_override("outline_size",5)
+		npc_marker_overlay.add_child(marker)
+		marker.hide()
+		npc_markers[id] = marker
 	# Navegacao sempre visivel, independente de mapa ou minimapa.
 	navigation_label = Label.new()
 	navigation_label.name = "BussolaDaClareira"
@@ -3074,7 +3096,7 @@ func make_ui() -> void:
 	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.add_child(menu)
 	get_viewport().size_changed.connect(func(): center_panel.call_deferred())
-	gameplay_overlays = [crosshair,hud,hint,bottom,navigation_label]
+	gameplay_overlays = [crosshair,hud,hint,bottom,navigation_label,npc_marker_overlay]
 	navigation_label.visible = false
 	medieval_menu = MEDIEVAL_MENU.new()
 	layer.add_child(medieval_menu)
@@ -3191,6 +3213,56 @@ func sync_hotbar() -> void:
 				if slot>=0:
 					bar_items[slot] = item
 
+func update_npc_markers() -> void:
+	if not is_instance_valid(npc_marker_overlay) or not is_instance_valid(camera) or not is_instance_valid(player):
+		return
+	var screen := get_viewport().get_visible_rect().size
+	var center := screen*0.5
+	var limits := Vector2(maxf(12.0,center.x-82.0),maxf(12.0,center.y-95.0))
+	var occupied: Array[Rect2] = []
+	for id in npc_markers:
+		var marker: Label = npc_markers[id]
+		var npc: Node3D = objects.get(id,null)
+		if not moving or not is_instance_valid(npc) or npc.is_queued_for_deletion():
+			marker.hide()
+			continue
+		var name_label := npc.get_node_or_null("Visual/GoblinRig/NomeNPC") as Label3D
+		if is_instance_valid(name_label):
+			name_label.hide()
+		var at := npc.global_position+Vector3.UP*1.95
+		var distance := player.global_position.distance_to(npc.global_position)
+		var local := camera.to_local(at)
+		var behind := camera.is_position_behind(at)
+		var offset: Vector2
+		if behind:
+			offset = Vector2(local.x,-local.y)
+			if offset.length_squared()<0.001:
+				offset = Vector2.DOWN
+			offset = offset.normalized()*maxf(screen.x,screen.y)
+		else:
+			offset = camera.unproject_position(at)-center
+		var ratio := maxf(absf(offset.x)/limits.x,absf(offset.y)/limits.y)
+		var edge := behind or ratio>1.0
+		var point := center+offset/maxf(1.0,ratio)
+		var symbol := "●"
+		if edge:
+			var arrows := ["→","↘","↓","↙","←","↖","↑","↗"]
+			var sector := posmod(roundi(atan2(offset.y,offset.x)/(PI/4.0)),8)
+			symbol = arrows[sector]+" ●"
+		marker.text = "%s %s · %d m" % [symbol,str(id),roundi(distance)]
+		marker.reset_size()
+		var extent := marker.size
+		var top_left := point-Vector2(extent.x*0.5,extent.y)
+		top_left.x = clampf(top_left.x,8.0,maxf(8.0,screen.x-extent.x-8.0))
+		top_left.y = clampf(top_left.y,8.0,maxf(8.0,screen.y-extent.y-8.0))
+		var rect := Rect2(top_left,extent)
+		for other in occupied:
+			if rect.grow(3.0).intersects(other):
+				rect.position.y = other.end.y+4.0 if other.end.y+extent.y+4.0<screen.y-8.0 else maxf(8.0,other.position.y-extent.y-4.0)
+		marker.position = rect.position
+		occupied.append(rect)
+		marker.show()
+
 func update_navigation() -> void:
 	if not show_coordinates or navigation_label==null or not is_instance_valid(player):
 		return
@@ -3213,6 +3285,7 @@ func update_navigation() -> void:
 	navigation_label.text = "Coordenadas  X: %d  Z: %d\nDireção: %s  ·  Clareira %s %d m" % [roundi(here.x),roundi(here.y),cardinal,direction,roundi(distance)]
 
 func update_player_hud() -> void:
+	update_npc_markers()
 	update_navigation()
 	sync_hotbar()
 	life_bar.value = health
