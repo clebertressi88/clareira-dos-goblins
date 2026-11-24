@@ -102,7 +102,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 11 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
-const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -1758,6 +1758,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			o.collision_layer |= SOLID
 			mesh_part(o,rock_mesh,Vector3.UP*CELL/2,Vector3.ONE,materials["rock"])
 			collider(o,Vector3.ONE*CELL,Vector3.UP*CELL/2)
+		"stone_drop":
+			mesh_part(o,rock_mesh,Vector3.UP*.12,Vector3(.32,.24,.30),materials["rock"])
+			collider(o,Vector3(.36,.30,.36),Vector3.UP*.15)
 		"log":
 			var log_mesh := cylinder(o,Vector3(0,.18,0),.17,.61,"tree_bark",Color.WHITE)
 			log_mesh.rotation.z = PI/2
@@ -5905,25 +5908,65 @@ func mine_stone(rock: Node3D, tool: int, pos: Vector3, normal: Vector3) -> void:
 	use_tool(tool)
 	apply_mining_hit(rock,tool,1)
 
+var stone_mining_sounds: Dictionary = {}
+
+func play_stone_mining_effect(pos: Vector3, broken: bool) -> void:
+	impact(pos,Vector3.UP,false)
+	if not stone_mining_sounds.has(broken):
+		var rate := 22050
+		var duration := 0.34 if broken else 0.14
+		var samples := PackedByteArray()
+		samples.resize(int(rate*duration)*2)
+		for i in range(int(rate*duration)):
+			var t := float(i)/float(rate)
+			var envelope := exp(-t*(15.0 if broken else 32.0))
+			var tone := sin(TAU*860.0*t)*0.22+sin(TAU*1730.0*t)*0.12
+			var noise := randf_range(-1.0,1.0)*0.55
+			var rumble := sin(TAU*115.0*t)*0.22 if broken else 0.0
+			var value := clampf((tone+noise+rumble)*envelope,-1.0,1.0)
+			samples.encode_s16(i*2,int(value*30000.0))
+		var stream := AudioStreamWAV.new()
+		stream.format = AudioStreamWAV.FORMAT_16_BITS
+		stream.mix_rate = rate
+		stream.data = samples
+		stone_mining_sounds[broken] = stream
+	var sound := AudioStreamPlayer3D.new()
+	add_child(sound)
+	sound.global_position = pos
+	sound.stream = stone_mining_sounds[broken]
+	sound.unit_size = 5.0
+	sound.max_distance = 30.0
+	sound.pitch_scale = randf_range(0.93,1.07)
+	sound.finished.connect(sound.queue_free)
+	sound.play()
+
+@rpc("authority","call_remote","unreliable")
+func net_stone_mining_effect(pos: Vector3, broken: bool) -> void:
+	if net_role=="client" and multiplayer.get_remote_sender_id()==1:
+		play_stone_mining_effect(pos,broken)
+
 func apply_mining_hit(rock: Node3D, tool: int, miner_peer: int) -> void:
 	if not is_instance_valid(rock) or str(rock.get_meta("kind","")) not in ["stone","block"]:
 		return
 	var count: int = int(rock.get_meta("mine_hits",0))+1
 	var required: int = 8 if tool==STONE_PICKAXE else 12
 	rock.set_meta("mine_hits",count)
-	impact(rock.global_position+Vector3.UP*0.4,Vector3.UP,true)
+	var hit_pos := rock.global_position+Vector3.UP*0.4
+	play_stone_mining_effect(hit_pos,count>=required)
+	if net_role=="host":
+		net_stone_mining_effect.rpc(hit_pos,count>=required)
 	if count<required:
 		if miner_peer==1:
 			notice("Minerando pedra: %d/%d golpes" % [count,required])
 		else:
 			net_mining_feedback.rpc_id(miner_peer,false,count,required)
 		return
+	var drop_pos := rock.global_position
+	drop_pos.y = ground(drop_pos.x,drop_pos.z)+0.008
 	remove_object(rock)
+	store_object("stone_drop",drop_pos)
 	if miner_peer==1:
-		stock[2] += 1
-		item_received(2)
-		sync_hotbar()
-		notice("Pedra minerada! +1 pedra.")
+		notice("Pedra quebrada! Recolha o fragmento no chão.")
 	else:
 		net_mining_feedback.rpc_id(miner_peer,true,count,required)
 	save_game()
@@ -5945,10 +5988,7 @@ func net_mining_feedback(completed: bool, hits: int, required: int) -> void:
 	if net_role!="client" or multiplayer.get_remote_sender_id()!=1:
 		return
 	if completed:
-		stock[2] += 1
-		item_received(2)
-		sync_hotbar()
-		notice("Pedra minerada! +1 pedra.")
+		notice("Pedra quebrada! Recolha o fragmento no chão.")
 	else:
 		notice("Minerando pedra: %d/%d golpes" % [hits,required])
 
@@ -6060,6 +6100,8 @@ func net_request_uproot_vegetation(id: String, tool: int) -> void:
 	save_game()
 
 func collectible_item_for_kind(kind: String) -> int:
+	if kind=="stone_drop":
+		return 2
 	if kind in ["meat_wolf","meat_rabbit"]:
 		return 3
 	if kind=="vine_bush":
@@ -6177,7 +6219,7 @@ func drop_selected() -> void:
 		return
 	var p := player.position-player.basis.z*1.2
 	p.y = construction_surface(p,player.position.y+.35)
-	store_object(ITEM_KINDS[item],p)
+	store_object("stone_drop" if item==2 else ITEM_KINDS[item],p)
 	stock[item] -= 1
 
 func eat_tomato() -> void:
