@@ -53,6 +53,19 @@ func _ready() -> void:
 		var path: String = str(last_path.get_value("asset", "path", ""))
 		if FileAccess.file_exists(path):
 			_load_model(path)
+			if is_instance_valid(model):
+				return
+	# O ZIP licenciado permanece no computador do jogador.
+	var dirs := PackedStringArray([OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS), OS.get_executable_path().get_base_dir(), "user://"])
+	for folder in dirs:
+		if folder.is_empty():
+			continue
+		for filename in ["Dire_Wolf_Lite_v1.0.0.zip", "Dire_Wolf_Lite.glb"]:
+			var local_path := folder.path_join(filename)
+			if FileAccess.file_exists(local_path):
+				_load_model(local_path)
+				if is_instance_valid(model):
+					return
 
 func _build_controls() -> void:
 	var layer := CanvasLayer.new()
@@ -79,7 +92,7 @@ func _build_controls() -> void:
 	info = Label.new()
 	info.custom_minimum_size = Vector2(290, 0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "Selecione o ZIP oficial ou o arquivo GLB."
+	info.text = "ZIP nao localizado automaticamente. Selecione o pacote oficial na pasta Downloads."
 	controls.add_child(info)
 	picker = FileDialog.new()
 	picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -100,7 +113,7 @@ func _load_model(path: String) -> void:
 	var extension := path.get_extension().to_lower()
 	var doc := GLTFDocument.new()
 	var state := GLTFState.new()
-	var error: Error = ERR_INVALID_PARAMETER
+	var import_error: Error = ERR_INVALID_PARAMETER
 	if extension == "zip":
 		var zip := ZIPReader.new()
 		if zip.open(path) != OK:
@@ -113,14 +126,14 @@ func _load_model(path: String) -> void:
 			return
 		var data := zip.read_file(asset_name)
 		zip.close()
-		error = doc.append_from_buffer(data, "", state)
+		import_error = doc.append_from_buffer(data, "", state)
 	elif extension == "glb":
-		error = doc.append_from_file(path, state)
+		import_error = doc.append_from_file(path, state)
 	else:
 		info.text = "Selecione ZIP ou GLB."
 		return
-	if error != OK:
-		info.text = "Falha ao ler GLB: " + str(error)
+	if import_error != OK:
+		info.text = "Falha ao ler GLB: " + str(import_error)
 		return
 	var candidate := doc.generate_scene(state)
 	if not (candidate is Node3D):
