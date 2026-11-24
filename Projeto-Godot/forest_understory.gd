@@ -2,6 +2,7 @@ extends RefCounted
 ## Vegetacao de floresta por chunk: desenho em lotes MultiMesh, sem colisores.
 ## Mudas interativas separadas; plantas decorativas nao entram em saves nem em RPCs.
 const TERRAIN := preload("res://landscape_terrain.gd")
+const BIOMES := preload("res://forest_biomes.gd")
 const WOOD := preload("res://forest_wood_geometry.gd")
 static var meshes: Dictionary = {}
 static var mats: Dictionary = {}
@@ -81,10 +82,13 @@ static func populate_chunk(chunk: Node3D, key: Vector2i, avoid: Array = []) -> v
 	rng.seed = absi(hash("understory-v1-%d-%d" % [key.x,key.y]))
 	var data := {"grass":[],"moss":[],"leaf":[],"pebble":[],"reeds":[],"aquatic":[]}
 	# Baixa densidade fixa por chunk; nenhum Node3D por folha ou pedra.
-	for i in range(116):
+	var dense := BIOMES.dense_forest(float(key.x*16+8),float(key.y*16+8))
+	for i in range(210 if dense else 116):
 		var x := float(key.x*16)+rng.randf_range(.3,15.7)
 		var z := float(key.y*16)+rng.randf_range(.3,15.7)
 		var pos := Vector3(x,TERRAIN.height_at(x,z),z)
+		if BIOMES.is_trail(x,z):
+			continue
 		if Vector2(x,z).length()<7.0 or Vector2(x+0.0,z+6.0).length()<5.5:
 			continue
 		var blocked := false
