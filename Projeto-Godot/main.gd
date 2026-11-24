@@ -1479,6 +1479,8 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 			return direction.normalized() if not npc.is_on_wall() else Vector3.ZERO
 		var face := camp-npc.global_position
 		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(face.x,face.z),minf(dt*5.0,1.0))
+		if absf(angle_difference(npc.rotation.y,atan2(face.x,face.z)))<0.22 and npc_fire_exists(camp):
+			npc.set_meta("camp_warming",true)
 		return Vector3.ZERO
 	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
 		if not night and (int(npc.get_meta("carried_seeds",0))>0 or int(npc.get_meta("carried_tomatoes",0))>=1):
@@ -1538,11 +1540,41 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 			npc.set_meta("next_work",elapsed+1.5)
 	return Vector3.ZERO
 
+func npc_fire_exists(camp: Vector3) -> bool:
+	var original: Node3D = objects.get("fire",null)
+	if is_instance_valid(original) and not original.is_queued_for_deletion():
+		return true
+	for obj in objects.values():
+		if is_instance_valid(obj) and not obj.is_queued_for_deletion() and obj.get_meta("kind","")=="fire" and obj.global_position.distance_to(camp)<0.5:
+			return true
+	return false
+
+func npc_update_camp_pose(npc: CharacterBody3D) -> void:
+	var warming := bool(npc.get_meta("camp_warming",false))
+	var progress := -1.0
+	if warming:
+		var next_stretch := float(npc.get_meta("camp_next_stretch",0.0))
+		if next_stretch<=0.0:
+			npc.set_meta("camp_next_stretch",elapsed+randf_range(12.0,24.0))
+		elif elapsed>=next_stretch:
+			var age := elapsed-next_stretch
+			if age<3.8:
+				progress = age/3.8
+			else:
+				npc.set_meta("camp_next_stretch",elapsed+randf_range(35.0,65.0))
+	else:
+		npc.set_meta("camp_next_stretch",0.0)
+	npc.set_meta("camp_stretch",progress)
+	var rig := npc.get_node_or_null("Visual/GoblinRig")
+	if rig!=null:
+		rig.call("set_camp_warmth",warming,progress)
+
 func update_villagers(dt: float) -> void:
 	var campfire := get_campfire_center()
 	for npc in villagers:
 		if not is_instance_valid(npc) or npc.is_queued_for_deletion():
 			continue
+		npc.set_meta("camp_warming",false)
 		var delta_home := campfire-npc.global_position
 		delta_home.y = 0.0
 		var distance_home := delta_home.length()
@@ -1607,6 +1639,7 @@ func update_villagers(dt: float) -> void:
 			npc.global_position = Vector3(campfire.x+border.x,npc.global_position.y,campfire.z+border.y)
 			npc.velocity.x = 0.0
 			npc.velocity.z = 0.0
+		npc_update_camp_pose(npc)
 		var npc_visual: Node3D = npc.get_node("Visual")
 		walk_pose(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
 		animate_npc_model(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
@@ -5239,6 +5272,12 @@ func _physics_process(dt: float) -> void:
 		for npc in villagers:
 			if is_instance_valid(npc):
 				var net_vel: Vector3 = npc.get_meta("net_animation_velocity",Vector3.ZERO)
+				var progress := float(npc.get_meta("camp_stretch",-1.0))
+				var rig := npc.get_node_or_null("Visual/GoblinRig")
+				if rig!=null:
+					rig.call("set_camp_warmth",bool(npc.get_meta("camp_warming",false)),progress)
+				if progress>=0.0:
+					npc.set_meta("camp_stretch",minf(1.0,progress+dt/3.8))
 				animate_npc_model(npc.get_node("Visual"),net_vel,dt,true)
 				npc.set_meta("net_animation_velocity",net_vel.move_toward(Vector3.ZERO,dt*3.5))
 		for mob in mobs:
@@ -7075,7 +7114,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0))})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -7115,6 +7154,8 @@ func net_apply_entities(states: Array) -> void:
 		obj.rotation.y = angle
 		if kind in ["Bruma","Talo"] and data.has("clock"):
 			npc_world_clock = float(data["clock"])
+			obj.set_meta("camp_warming",bool(data.get("camp_warming",false)))
+			obj.set_meta("camp_stretch",float(data.get("camp_stretch",-1.0)))
 			var serial := int(data.get("attack_serial",0))
 			if serial>int(obj.get_meta("net_attack_serial",0)):
 				obj.set_meta("net_attack_serial",serial)
