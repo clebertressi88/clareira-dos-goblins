@@ -72,6 +72,9 @@ static func _leaf(parent: Node3D, center: Vector3, direction: Vector3, size: flo
 	parent.add_child(leaf)
 
 static func _fruit(parent: Node3D, pos: Vector3, ripe: bool, radius: float) -> void:
+	var cluster := Node3D.new()
+	cluster.name = "Fruto_%d" % parent.get_child_count()
+	parent.add_child(cluster)
 	var sphere := SphereMesh.new()
 	sphere.radius = radius
 	sphere.height = 2.0*radius*0.93
@@ -82,7 +85,7 @@ static func _fruit(parent: Node3D, pos: Vector3, ripe: bool, radius: float) -> v
 	tomato.mesh = sphere
 	tomato.material_override = _fruit_material(ripe)
 	tomato.position = pos
-	parent.add_child(tomato)
+	cluster.add_child(tomato)
 	# Sepalas finas em estrela no topo do tomate.
 	for j in range(5):
 		var angle := TAU*float(j)/5.0
@@ -97,7 +100,7 @@ static func _fruit(parent: Node3D, pos: Vector3, ripe: bool, radius: float) -> v
 		blade.position = pos+Vector3(cos(angle)*radius*0.50,radius*0.87,sin(angle)*radius*0.50)
 		blade.quaternion = Quaternion(Vector3.UP,Vector3(cos(angle),0.18,sin(angle)).normalized())
 		blade.scale = Vector3(0.50,1.0,0.20)
-		parent.add_child(blade)
+		cluster.add_child(blade)
 
 static func build(parent: Node3D, seed: String, harvested_item: bool = false) -> void:
 	if stem_material == null:
