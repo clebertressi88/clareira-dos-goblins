@@ -278,9 +278,9 @@ func _nav_button(text_value: String,page: String,featured: bool = false) -> void
 	_nav_buttons[page] = button
 	if page=="updates":
 		# Pequeno sinal no proprio botao, sem pop-up nem troca de tela.
-		_update_marker = _text("●",19,Color("#91ed81"))
-		_update_marker.position = Vector2(267,11)
-		_update_marker.size = Vector2(27,35)
+		_update_marker = _text("●",23,Color("#91ed81"))
+		_update_marker.position = Vector2(263,9)
+		_update_marker.size = Vector2(31,39)
 		_update_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_update_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_update_marker.visible = false
