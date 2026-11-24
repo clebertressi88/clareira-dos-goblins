@@ -76,6 +76,8 @@ const BUILD_MAX_LEVEL := 3
 const STARTER_CABIN_ID := "starter-cabin"
 const STARTER_CABIN_CENTER := Vector2(0.0,-15.0)
 const WALL_SIZE := CELL * 3.0
+const DOOR_CLEAR_WIDTH := 1.18
+const DOOR_CLEAR_HEIGHT := 2.15
 const HOTBAR_SIZE := 9
 const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
@@ -1941,8 +1943,21 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	var beams := SurfaceTool.new()
 	beams.begin(Mesh.PRIMITIVE_TRIANGLES)
 	beams.set_material(wall_surface_material(true))
-	# Uma malha continua de tabuas nas duas faces; aberturas e colisao originais.
-	for row in range(3):
+	# Porta com abertura mais larga e apenas tres volumes de colisao.
+	# O vao antigo de 85 cm prendia a capsula em abordagens diagonais.
+	if kind=="wood_doorway":
+		var side_width := (WALL_SIZE-DOOR_CLEAR_WIDTH)*.5
+		for side in [-1.0,1.0]:
+			var at := Vector3(float(side)*(DOOR_CLEAR_WIDTH+side_width)*.5,WALL_SIZE*.5,0)
+			var size := Vector3(side_width,WALL_SIZE,.15)
+			wall_surface_box(boards,at,size,false)
+			collider(parent,Vector3(side_width,WALL_SIZE,.15),at)
+		var head_height := WALL_SIZE-DOOR_CLEAR_HEIGHT
+		var head_at := Vector3(0,DOOR_CLEAR_HEIGHT+head_height*.5,0)
+		wall_surface_box(boards,head_at,Vector3(DOOR_CLEAR_WIDTH,head_height,.15),false)
+		collider(parent,Vector3(DOOR_CLEAR_WIDTH,head_height,.15),head_at)
+	# As outras paredes mantem as aberturas e colisoes anteriores.
+	for row in range(3) if kind!="wood_doorway" else range(0):
 		for column in range(3):
 			var opening := column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
 			if opening:
@@ -1966,15 +1981,16 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	else:
 		var window := kind=="wood_window"
 		var low := CELL if window else 0.0
-		var high := CELL*2.0 if window else WALL_SIZE-.40
+		var high := CELL*2.0 if window else DOOR_CLEAR_HEIGHT
+		var half_opening := CELL*.5 if window else DOOR_CLEAR_WIDTH*.5
 		var jamb_height := high-low
 		for side in [-1.0,1.0]:
-			wall_surface_box(beams,Vector3(float(side)*CELL*.5,low+jamb_height*.5,.105),Vector3(.075,jamb_height,.065),true)
+			wall_surface_box(beams,Vector3(float(side)*half_opening,low+jamb_height*.5,.105),Vector3(.075,jamb_height,.065),true)
 		if window:
 			for edge in [CELL,2.0*CELL]:
 				wall_surface_box(beams,Vector3(0,float(edge),.105),Vector3(CELL,.075,.07),true)
 		else:
-			wall_surface_box(beams,Vector3(0,high,.105),Vector3(CELL,.095,.075),true)
+			wall_surface_box(beams,Vector3(0,high,.105),Vector3(DOOR_CLEAR_WIDTH,.095,.075),true)
 	var wall_mesh := boards.commit()
 	beams.commit(wall_mesh)
 	var visual := MeshInstance3D.new()
@@ -2125,6 +2141,8 @@ func add_wall_foundations(parent: StaticBody3D) -> void:
 	# preencher com pilares os vaos deixados pelo terreno irregular.
 	# Paredes nos pavimentos superiores sao apoiadas pelo piso, nao por estacas.
 	for x in [-WALL_SIZE*.45,-WALL_SIZE*.15,WALL_SIZE*.15,WALL_SIZE*.45]:
+		if str(parent.get_meta("kind",""))=="wood_doorway" and absf(float(x))<DOOR_CLEAR_WIDTH*.5+.09:
+			continue
 		var world := parent.to_global(Vector3(x,0,0))
 		var gap := parent.global_position.y - ground(world.x,world.z)
 		if gap <= .13 or gap > WALL_SIZE*.92:
@@ -5113,31 +5131,39 @@ func try_character_step(character: CharacterBody3D, dt: float) -> void:
 	if not character.test_move(start,motion,obstacle):
 		return
 	var body := obstacle.get_collider() as Node3D
-	if body==null or str(body.get_meta("kind","")) not in ["wood_floor","stairs_straight","stairs_l"]:
+	if body==null or str(body.get_meta("kind","")) not in ["wood_floor","stairs_straight","stairs_l","wood_doorway"]:
 		return
-	var rise := Vector3.UP*.32
-	if character.test_move(start,rise):
+	# Tenta a menor elevacao necessaria para evitar bater a cabeca no batente.
+	for amount in [.12,.22,.32]:
+		var rise := Vector3.UP*float(amount)
+		if character.test_move(start,rise):
+			continue
+		var raised := start
+		raised.origin += rise
+		if character.test_move(raised,motion):
+			continue
+		raised.origin += motion
+		var landing := KinematicCollision3D.new()
+		if not character.test_move(raised,Vector3.DOWN*(float(amount)+.06),landing):
+			continue
+		var support := landing.get_collider() as Node3D
+		if support==null or str(support.get_meta("kind","")) not in ["wood_floor","stairs_straight","stairs_l"]:
+			continue
+		if landing.get_normal().dot(Vector3.UP)<.7:
+			continue
+		var step_height := rise.y+landing.get_travel().y
+		if step_height<=.008 or step_height>.32:
+			continue
+		var lift := Vector3.UP*(step_height+.005)
+		if character.test_move(start,lift):
+			continue
+		var lifted := start
+		lifted.origin += lift
+		if character.test_move(lifted,motion):
+			continue
+		character.global_position += lift
+		character.velocity.y = -.05
 		return
-	var raised := start
-	raised.origin += rise
-	if character.test_move(raised,motion):
-		return
-	raised.origin += motion
-	var landing := KinematicCollision3D.new()
-	if not character.test_move(raised,Vector3.DOWN*.38,landing):
-		return
-	var support := landing.get_collider() as Node3D
-	if support==null or str(support.get_meta("kind","")) not in ["wood_floor","stairs_straight","stairs_l"]:
-		return
-	if landing.get_normal().dot(Vector3.UP)<.7:
-		return
-	var step_height := rise.y+landing.get_travel().y
-	if step_height<=.008 or step_height>.32:
-		return
-	# A pequena folga evita prender a capsula na aresta de dois colisores.
-	# O deslocamento horizontal continua a cargo de move_and_slide.
-	character.global_position += Vector3.UP*(step_height+.012)
-	character.velocity.y = 0.0
 
 func nearby_ladder() -> Node3D:
 	for obj in objects.values():
@@ -5170,6 +5196,8 @@ func _physics_process(dt: float) -> void:
 			player.velocity.y -= dt*15
 		elif jump and not crouch:
 			player.velocity.y = 5.2
+		else:
+			player.velocity.y = -.05
 		var ladder := nearby_ladder()
 		if ladder!=null and not in_water and absf(input_axis.y)>.1:
 			player.velocity.y = -input_axis.y*1.8
@@ -5303,18 +5331,22 @@ func _physics_process(dt: float) -> void:
 func update_crouch(requested: bool) -> bool:
 	var col := player.get_node("Corpo") as CollisionShape3D
 	var capsule := col.shape as CapsuleShape3D
-	if not requested and capsule.height < 1.64:
-		var clearance := BoxShape3D.new()
-		clearance.size = Vector3(.52,.59,.52)
+	# Nao agachar automaticamente: apenas manter um agachamento ja solicitado
+	# se a capsula realmente nao couber em pe. Ignorar o proprio jogador.
+	if not requested and capsule.height<1.64:
+		var clearance := CapsuleShape3D.new()
+		clearance.radius = capsule.radius
+		clearance.height = 1.64
 		var query := PhysicsShapeQueryParameters3D.new()
 		query.shape = clearance
-		query.transform.origin = player.global_position+Vector3.UP*1.35
+		query.transform = Transform3D(Basis.IDENTITY,player.global_position+Vector3.UP*.842)
 		query.collision_mask = SOLID
+		query.exclude = [player.get_rid()]
 		requested = not get_world_3d().direct_space_state.intersect_shape(query,1).is_empty()
 	var height := 1.06 if requested else 1.64
 	if not is_equal_approx(capsule.height,height):
 		capsule.height = height
-		col.position.y = height/2
+		col.position.y = height*.5
 	return requested
 
 func update_wolf_spawns(dt: float) -> void:
