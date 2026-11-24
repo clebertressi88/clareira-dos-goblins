@@ -68,7 +68,8 @@ func _test() -> void:
 	var sphere_count := 0
 	for child in shrub.get_children():
 		if child is MeshInstance3D:
-			if child.name=="Folha":
+			# Godot renomeia automaticamente nos irmaos: Folha, Folha2, Folha3...
+			if str(child.name).begins_with("Folha"):
 				leaf_count += 1
 			if child.mesh is SphereMesh:
 				sphere_count += 1
