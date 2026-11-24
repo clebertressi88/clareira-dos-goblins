@@ -146,6 +146,12 @@ static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 	var leaf_alt := _mat(Color("#789950"))
 	var bark := _mat(Color("#72563b"))
 	var tall := kind=="river_reed"
+	# Raizes expostas nas margens, curtas e contidas para nao atrapalhar trilhas.
+	if tall:
+		for root_index in range(4):
+			var root_angle := TAU*float(root_index)/4.0+rng.randf_range(-.16,.16)
+			var root_dir := Vector3(cos(root_angle),0,sin(root_angle))
+			_stem(parent,Vector3.UP*.12,root_dir*rng.randf_range(.16,.28)+Vector3.UP*.012,.033,bark)
 	var count := 7 if tall else 6 if kind=="fern" else 8
 	for i in range(count):
 		var angle := TAU*float(i)/float(count)+rng.randf_range(-.20,.20)
