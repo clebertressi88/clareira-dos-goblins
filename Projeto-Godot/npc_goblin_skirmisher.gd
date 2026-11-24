@@ -90,6 +90,43 @@ func install() -> bool:
 	set_meta("modelo_skirmisher", true)
 	return true
 
+## Prende um acessorio ao osso do tronco, em vez da raiz imovel do jogador.
+## O BoneAttachment3D acompanha a pose calculada pelo AnimationPlayer.
+func attach_backpack(accessory: Node3D) -> bool:
+	if _skeleton == null or not is_instance_valid(_skeleton):
+		return false
+	var bone_index := -1
+	var best_score := -1
+	for index in range(_skeleton.get_bone_count()):
+		var name := _skeleton.get_bone_name(index).to_lower().replace("_","").replace(".","").replace(":","")
+		var score := -1
+		if name.contains("spine"):
+			score = 10
+			if name.contains("2") or name.contains("02"):
+				score = 15
+			elif name.contains("1") or name.contains("01"):
+				score = 13
+		elif name.contains("chest") or name.contains("upperbody"):
+			score = 14
+		elif name.contains("torso"):
+			score = 9
+		if score>best_score:
+			best_score = score
+			bone_index = index
+	if bone_index<0:
+		push_warning("Mochila: nao foi possivel localizar um osso do tronco.")
+		return false
+	var anchor := BoneAttachment3D.new()
+	anchor.name = "MochilaNasCostas"
+	anchor.bone_name = _skeleton.get_bone_name(bone_index)
+	_skeleton.add_child(anchor)
+	accessory.reparent(anchor,false)
+	# Reposiciona o modelo inteiro proximo ao osso do peito. A mochila
+	# original mede de y=0.6 a y=1.4; sua base agora fica abaixo do ombro.
+	accessory.position = Vector3(0.0,-1.02,-0.17)
+	accessory.scale = Vector3.ONE*0.80
+	return true
+
 func set_equipment(sword: bool, shield: bool) -> void:
 	if sword_equipped == sword and shield_equipped == shield and _actor != null:
 		return
