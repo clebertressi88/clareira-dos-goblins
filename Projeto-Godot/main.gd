@@ -2065,25 +2065,36 @@ func build_stairs(parent: StaticBody3D, kind: String) -> void:
 	var end_size := Vector3(1.0,.10,.12) if kind=="stairs_straight" else Vector3(.12,.10,1.0)
 	stair_board(parent,end-direction*.06-Vector3.UP*.05,end_size)
 
-func build_wood_floor(parent: StaticBody3D) -> void:
-	# Base continua impede que apareca grama entre placas e sob as juntas.
-	# A mesma peca funciona como piso no terreo e laje/teto nos andares.
-	var base := box(parent,Vector3(0,-.005,0),Vector3(WALL_SIZE+.035,.14,WALL_SIZE+.035),
-		"floor_solid",Color("#86623e"))
-	base.name = "PainelContinuo"
-	for row in range(3):
-		var z := (float(row)-1.0)*CELL
-		box(parent,Vector3(0,.084,z),Vector3(WALL_SIZE+.035,.038,CELL-.015),
-			"floor_planks_%d" % row,Color("#b58a57").darkened(.045*float(row%2)))
-		for column in range(3):
-			var x := (float(column)-1.0)*CELL
-			box(parent,Vector3(x,.108,z+CELL*.34),Vector3(CELL*.68,.012,.016),
-				"floor_seam",Color("#684328"))
-	for x in [-WALL_SIZE*.39,0.0,WALL_SIZE*.39]:
-		box(parent,Vector3(x,-.15,0),Vector3(.14,.19,WALL_SIZE+.03),
-			"floor_joist",Color("#704c31"))
-	collider(parent,Vector3(WALL_SIZE+.025,.22,WALL_SIZE+.025),Vector3(0,.005,0))
+func floor_surface_material(beam: bool) -> StandardMaterial3D:
+	var key := "floor_dark_joist" if beam else "floor_dark_planks"
+	if not materials.has(key):
+		var mat := wall_surface_material(beam).duplicate() as StandardMaterial3D
+		# Madeira do piso ligeiramente mais escura que as paredes, sem brilho.
+		mat.albedo_color = Color(.76,.73,.69) if beam else Color(.85,.81,.77)
+		mat.roughness = .95
+		materials[key] = mat
+	return materials[key] as StandardMaterial3D
 
+func build_wood_floor(parent: StaticBody3D) -> void:
+	# Painel continuo, com UVs em escala real e a mesma madeira nas duas faces.
+	# O teto visto por baixo tambem recebe a textura, sem alterar o save.
+	var planks := SurfaceTool.new()
+	planks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	planks.set_material(floor_surface_material(false))
+	wall_surface_box(planks,Vector3(0,.014,0),Vector3(WALL_SIZE+.035,.178,WALL_SIZE+.035),false)
+	var joists := SurfaceTool.new()
+	joists.begin(Mesh.PRIMITIVE_TRIANGLES)
+	joists.set_material(floor_surface_material(true))
+	for x in [-WALL_SIZE*.39,0.0,WALL_SIZE*.39]:
+		wall_surface_box(joists,Vector3(float(x),-.15,0),Vector3(.14,.19,WALL_SIZE+.03),true)
+	var floor_mesh := planks.commit()
+	joists.commit(floor_mesh)
+	var visual := MeshInstance3D.new()
+	visual.name = "PainelContinuo"
+	visual.mesh = floor_mesh
+	parent.add_child(visual)
+	# Mantem exatamente a altura e o volume de colisao anteriores.
+	collider(parent,Vector3(WALL_SIZE+.025,.22,WALL_SIZE+.025),Vector3(0,.005,0))
 
 func add_wall_foundations(parent: StaticBody3D) -> void:
 	# Compatibilidade com paredes ja construidas: nao deslocar o save,
