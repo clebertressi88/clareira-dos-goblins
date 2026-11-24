@@ -247,10 +247,10 @@ static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 			var branch_base := root.lerp(tip,t)
 			var branch_mat: Material = bark if woody else stem_green
 			for sign in [-1.0,1.0]:
-				var offset := sideways*sign*rng.randf_range(.075,.17)
-				var branch_end := branch_base+offset+radial*rng.randf_range(.025,.085)+Vector3.UP*rng.randf_range(.015,.09)
+				var offset: Vector3 = sideways*float(sign)*rng.randf_range(.075,.17)
+				var branch_end: Vector3 = branch_base+offset+radial*rng.randf_range(.025,.085)+Vector3.UP*rng.randf_range(.015,.09)
 				_stem(parent,branch_base,branch_end,.005 if woody else .003,branch_mat)
-				var leaf_tip := branch_end+offset.normalized()*rng.randf_range(.065,.11)+Vector3.UP*rng.randf_range(.005,.05)
+				var leaf_tip: Vector3 = branch_end+offset.normalized()*rng.randf_range(.065,.11)+Vector3.UP*rng.randf_range(.005,.05)
 				var leaf_mat: Material = leaf_green if (i+j)%3==0 else leaf_medium if (i+j)%3==1 else leaf_light
 				_leaflet(parent,branch_end,leaf_tip,.060 if woody else .039,leaf_mat)
 		# Uma folha terminal define o contorno sem blocos verdes artificiais.
