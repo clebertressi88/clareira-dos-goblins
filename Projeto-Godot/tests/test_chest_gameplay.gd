@@ -16,11 +16,12 @@ func _run() -> void:
 	root.add_child(game)
 	await physics_frame
 	await physics_frame
-	var kinds: Array = game.get("ITEM_KINDS")
+	var constants: Dictionary = game.get_script().get_script_constant_map()
+	var kinds: Array = constants["ITEM_KINDS"]
 	if kinds.find("chest")!=29:
 		_fail("ID do bau deve ser 29")
 		return
-	var recipes: Dictionary = game.get("STATION_PATTERNS")
+	var recipes: Dictionary = constants["STATION_PATTERNS"]
 	var expected := [7,7,7,7,11,7,7,7,7]
 	if recipes.get("chest",[])!=expected:
 		_fail("Receita de 8 tabuas e cipo incorreta")
