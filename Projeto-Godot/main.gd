@@ -5609,10 +5609,10 @@ func primary() -> void:
 		notice("Muda plantada! A árvore crescerá com o tempo.")
 		return
 	if kind in ["fern","forest_shrub","river_reed"] and held in [SHOVEL_ITEM,STONE_SHOVEL_ITEM]:
-		uproot_vegetation(o)
+		uproot_vegetation(o,held)
 		return
 	if kind in ["tomato_plant","tomato_crop"] and held in [SHOVEL_ITEM,STONE_SHOVEL_ITEM]:
-		uproot_tomato(o)
+		uproot_tomato(o,held)
 		return
 	if kind in ["stone","block"]:
 		mine_stone(o,held,hit["position"],hit["normal"])
@@ -5767,7 +5767,7 @@ func chop_tree(tree: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
 
 
 func dig_stump(stump: Node3D, tool: int, pos: Vector3, normal: Vector3) -> bool:
-	if tool not in [SHOVEL_ITEM,STONE_SHOVEL_ITEM]:
+	if tool not in [SHOVEL_ITEM,STONE_SHOVEL_ITEM] or (net_role!="host" and stock[tool]<=0):
 		notice("Equipe uma pá para desenterrar o toco e liberar espaço.")
 		return false
 	if not is_instance_valid(stump) or str(stump.get_meta("kind",""))!="stump":
@@ -5949,16 +5949,18 @@ func net_vegetation_harvested(id: String, next_time: float) -> void:
 	if objects.has(id):
 		update_vegetation_visual(objects[id])
 
-func uproot_vegetation(plant: Node3D) -> void:
+func uproot_vegetation(plant: Node3D, tool: int = SHOVEL_ITEM) -> void:
+	if tool not in [SHOVEL_ITEM,STONE_SHOVEL_ITEM] or stock[tool]<=0:
+		return
 	if not vegetation_kind(str(plant.get_meta("kind",""))):
 		return
 	var id := str(plant.get_meta("id",""))
 	if net_role=="client":
 		if net_world_ready:
-			use_tool(SHOVEL_ITEM)
-			net_request_uproot_vegetation.rpc_id(1,id,SHOVEL_ITEM)
+			use_tool(tool)
+			net_request_uproot_vegetation.rpc_id(1,id,tool)
 		return
-	use_tool(SHOVEL_ITEM)
+	use_tool(tool)
 	remove_object(plant)
 	save_game()
 	notice("Planta removida com a pa.")
@@ -6323,16 +6325,18 @@ func net_tomato_reward(amount: int) -> void:
 	save_game()
 	notice("Colhido 1 tomate.")
 
-func uproot_tomato(plant: Node3D) -> void:
+func uproot_tomato(plant: Node3D, tool: int = SHOVEL_ITEM) -> void:
+	if tool not in [SHOVEL_ITEM,STONE_SHOVEL_ITEM] or stock[tool]<=0:
+		return
 	if not is_instance_valid(plant) or str(plant.get_meta("kind","")) not in ["tomato_plant","tomato_crop"]:
 		return
 	var id := str(plant.get_meta("id",""))
 	if net_role=="client":
 		if net_world_ready:
-			use_tool(SHOVEL_ITEM)
-			net_request_uproot_tomato.rpc_id(1,id,SHOVEL_ITEM)
+			use_tool(tool)
+			net_request_uproot_tomato.rpc_id(1,id,tool)
 		return
-	use_tool(SHOVEL_ITEM)
+	use_tool(tool)
 	tomato_fruits.erase(id)
 	remove_object(plant)
 	save_game()
