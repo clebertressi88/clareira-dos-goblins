@@ -102,6 +102,15 @@ static func _fruit(parent: Node3D, pos: Vector3, ripe: bool, radius: float) -> v
 		blade.scale = Vector3(0.50,1.0,0.20)
 		cluster.add_child(blade)
 
+## Atualiza apenas a malha do fruto: verde imaturo, vermelho pronto.
+## Materiais compartilhados evitam criar novas texturas a cada atualizacao.
+static func set_fruit_ripe(cluster: Node3D, ripe: bool) -> void:
+	for part in cluster.get_children():
+		if part is MeshInstance3D and str(part.name) in ["TomateMaduro","TomateVerde"]:
+			part.name = "TomateMaduro" if ripe else "TomateVerde"
+			part.material_override = _fruit_material(ripe)
+			break
+
 static func build(parent: Node3D, seed: String, harvested_item: bool = false) -> void:
 	if stem_material == null:
 		stem_material = _material(Color("#496e34"))
@@ -133,4 +142,4 @@ static func build(parent: Node3D, seed: String, harvested_item: bool = false) ->
 				_leaf(parent,leaf_pos,Vector3(direction.x+k*0.44,0.20,direction.z-k*0.44),0.115)
 		if i<4:
 			var fruit_base := far+Vector3(0,-0.055,0)
-			_fruit(parent,fruit_base,i%3!=0,rng.randf_range(0.068,0.096))
+			_fruit(parent,fruit_base,false,rng.randf_range(0.068,0.096))
