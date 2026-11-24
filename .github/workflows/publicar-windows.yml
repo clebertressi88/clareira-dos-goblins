@@ -143,7 +143,8 @@ jobs:
             @{path='res://tests/test_multiplayer_distant_chunks.gd'; message='MULTIPLAYER DISTANT CHUNKS OK'},
             @{path='res://tests/test_game_updater.gd'; message='GAME UPDATE OK'},
             @{path='res://tests/test_forest_understory_biomes.gd'; message='UNDERSTORY BIOMES OK'},
-            @{path='res://tests/test_tomato_regrowth.gd'; message='TOMATO REGROW OK'}
+            @{path='res://tests/test_tomato_regrowth.gd'; message='TOMATO REGROW OK'},
+            @{path='res://tests/test_day_night_persistence.gd'; message='DAY NIGHT SAVE OK'}
           )
           foreach ($test in $tests) {
             Write-Host "Executando $($test.path)"
