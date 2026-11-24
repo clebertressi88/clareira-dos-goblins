@@ -243,14 +243,14 @@ func _switch_motion(new_state: String, rate: float) -> void:
 	var clip: String = CLIPS[new_state]
 	if not _animation_player.has_animation(clip):
 		return
-	if _state != new_state or (_animation_player.current_animation != clip and not (new_state == "idle" and variant != "player")):
+	if _state != new_state or (_animation_player.current_animation != clip and not (new_state == "idle")):
 		if _state == "idle" and _quiet_idle_bone >= 0:
 			_skeleton.set_bone_pose_scale(_quiet_idle_bone, _quiet_idle_base)
 		_quiet_idle_bone = -1
 		_state = new_state
 		_animation_player.speed_scale = 1.0
 		_animation_player.play(clip, 0.14, rate)
-		if new_state == "idle" and variant != "player":
+		if new_state == "idle":
 			_animation_player.seek(0.0, true)
 			_animation_player.pause()
 			_quiet_idle_time = 0.0
@@ -270,7 +270,7 @@ func animate(velocity: Vector3, _dt: float, grounded: bool = true) -> void:
 		target = "walk"
 		rate = clampf(speed / 1.65, 0.7, 1.55)
 	_switch_motion(target, rate)
-	if target == "idle" and variant != "player":
+	if target == "idle":
 		_update_quiet_idle(_dt)
 
 func play_action(action: String) -> void:
@@ -285,7 +285,7 @@ func _on_animation_finished(_name: StringName) -> void:
 			return
 		_action_locked = false
 		_switch_motion("idle", 1.0)
-	elif _state in ["idle", "walk", "run"] and _animation_player != null and not (_state == "idle" and variant != "player"):
+	elif _state in ["idle", "walk", "run"] and _animation_player != null and not (_state == "idle"):
 		_animation_player.play(CLIPS[_state])
 
 func get_animation_player() -> AnimationPlayer:
