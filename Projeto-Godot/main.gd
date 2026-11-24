@@ -61,7 +61,7 @@ const CHEST_SIZE := 16
 const CHEST_STACK_LIMIT := 64
 var chest_storage: Dictionary = {}
 var npc_saved_resources: Dictionary = {}
-const NPC_RESOURCE_KEYS := ["carried_wood","carried_tomatoes","carried_meat","carried_teeth","carried_seeds","axe_item","axe_uses"]
+const NPC_RESOURCE_KEYS := ["carried_wood","carried_tomatoes","carried_meat","carried_teeth","carried_seeds","axe_item","axe_uses","craft_sticks","craft_planks"]
 var open_chest_id := ""
 var chest_selected_item := -1
 var chest_pending := false
@@ -1122,6 +1122,79 @@ func npc_take_axe(npc: CharacterBody3D,id: String) -> bool:
 		return true
 	return false
 
+# NPCs fabricam apenas ferramentas de madeira, em bancadas instaladas pelo jogador.
+# A unica ferramenta de trabalho atualmente usada pela IA e o machado.
+func npc_craft_bench(npc: CharacterBody3D,camp: Vector3) -> Node3D:
+	var best: Node3D
+	var nearest := INF
+	for obj in objects.values():
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+			continue
+		if obj.get_meta("kind","") not in ["bench","bench2"] or not str(obj.get_meta("id","")).begins_with("item-"):
+			continue
+		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or absf(obj.global_position.y-ground(obj.global_position.x,obj.global_position.z))>0.8:
+			continue
+		var d: float = npc.global_position.distance_to(obj.global_position)
+		if d<nearest:
+			nearest = d
+			best = obj
+	return best
+
+func npc_wood_axe_recipe(id: String) -> bool:
+	var sticks := 0
+	var planks := 0
+	for cell in normalized_chest_slots(id):
+		if int(cell[0])==1:
+			sticks += int(cell[1])
+		elif int(cell[0])==7:
+			planks += int(cell[1])
+	return sticks>=3 and planks>=2
+
+func npc_material_chest(npc: CharacterBody3D,camp: Vector3) -> Node3D:
+	var best: Node3D
+	var nearest := INF
+	for obj in objects.values():
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion() or obj.get_meta("kind","")!="chest":
+			continue
+		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or absf(obj.global_position.y-ground(obj.global_position.x,obj.global_position.z))>0.8:
+			continue
+		if not npc_wood_axe_recipe(str(obj.get_meta("id",""))):
+			continue
+		var d: float = npc.global_position.distance_to(obj.global_position)
+		if d<nearest:
+			nearest = d
+			best = obj
+	return best
+
+func npc_take_wood_axe_materials(npc: CharacterBody3D,id: String) -> bool:
+	if not npc_wood_axe_recipe(id) or int(npc.get_meta("craft_sticks",0))!=0 or int(npc.get_meta("craft_planks",0))!=0:
+		return false
+	var slots := normalized_chest_slots(id)
+	for item in [1,7]:
+		var needed := 3 if item==1 else 2
+		for i in range(slots.size()):
+			var cell: Array = slots[i]
+			if int(cell[0])!=item:
+				continue
+			var taken := mini(needed,int(cell[1]))
+			var left := int(cell[1])-taken
+			slots[i] = [item,left] if left>0 else [-1,0]
+			needed -= taken
+			if needed<=0:
+				break
+	chest_storage[id] = slots
+	npc.set_meta("craft_sticks",3)
+	npc.set_meta("craft_planks",2)
+	if net_role=="host":
+		net_chest_snapshot.rpc(id,slots)
+	if open_chest_id==id and not chest_pending:
+		show_chest()
+	save_game()
+	return true
+
+func npc_has_axe_materials(npc: CharacterBody3D) -> bool:
+	return int(npc.get_meta("craft_sticks",0))>=3 and int(npc.get_meta("craft_planks",0))>=2
+
 func npc_planting_spot(npc: CharacterBody3D,camp: Vector3) -> Vector3:
 	var gardens := 0
 	for obj in objects.values():
@@ -1169,6 +1242,48 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	elif not night and task=="warm":
 		npc.set_meta("work_mode","")
 		task = ""
+	if task=="craft_materials":
+		var chest := npc_material_chest(npc,camp)
+		if is_instance_valid(chest) and npc_craft_bench(npc,camp)!=null:
+			var toward := chest.global_position-npc.global_position
+			toward.y = 0.0
+			if toward.length()>1.25 and not npc.is_on_wall():
+				return toward.normalized()
+			if toward.length()<=1.25 and npc_take_wood_axe_materials(npc,str(chest.get_meta("id",""))):
+				npc.set_meta("work_mode","craft_axe")
+				npc.set_meta("craft_ready_at",0.0)
+				return Vector3.ZERO
+		npc.set_meta("work_mode","")
+		npc.set_meta("next_work",elapsed+10.0)
+		return Vector3.ZERO
+	if task=="craft_axe":
+		var station := npc_craft_bench(npc,camp)
+		if not is_instance_valid(station) or not npc_has_axe_materials(npc) or int(npc.get_meta("axe_uses",0))>0:
+			npc.set_meta("work_mode","")
+			npc.set_meta("next_work",elapsed+10.0)
+			return Vector3.ZERO
+		var toward := station.global_position-npc.global_position
+		toward.y = 0.0
+		if toward.length()>1.25:
+			npc.set_meta("craft_ready_at",0.0)
+			if npc.is_on_wall():
+				npc.set_meta("work_mode","")
+				npc.set_meta("next_work",elapsed+10.0)
+				return Vector3.ZERO
+			return toward.normalized()
+		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(toward.x,toward.z),minf(dt*5.0,1.0))
+		if float(npc.get_meta("craft_ready_at",0.0))<=0.0:
+			npc.set_meta("craft_ready_at",elapsed+3.0)
+		elif elapsed>=float(npc.get_meta("craft_ready_at",0.0)):
+			npc.set_meta("craft_sticks",int(npc.get_meta("craft_sticks",0))-3)
+			npc.set_meta("craft_planks",int(npc.get_meta("craft_planks",0))-2)
+			npc.set_meta("axe_item",WOOD_AXE)
+			npc.set_meta("axe_uses",int(TOOL_MAX_DURABILITY[WOOD_AXE]))
+			npc.set_meta("work_mode","")
+			npc.set_meta("craft_ready_at",0.0)
+			npc.set_meta("next_work",elapsed+5.0)
+			save_game()
+		return Vector3.ZERO
 	if task=="supply":
 		var chest := npc_supply_chest(npc,camp)
 		if is_instance_valid(chest):
@@ -1251,6 +1366,14 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		if not night and int(npc.get_meta("axe_uses",0))<=0 and npc_supply_chest(npc,camp)!=null:
 			npc.set_meta("work_mode","supply")
 			return Vector3.ZERO
+		if not night and int(npc.get_meta("axe_uses",0))<=0 and npc_craft_bench(npc,camp)!=null:
+			if npc_has_axe_materials(npc):
+				npc.set_meta("craft_ready_at",0.0)
+				npc.set_meta("work_mode","craft_axe")
+				return Vector3.ZERO
+			if npc_material_chest(npc,camp)!=null:
+				npc.set_meta("work_mode","craft_materials")
+				return Vector3.ZERO
 		var target := npc_work_target(npc,camp)
 		if target==null:
 			npc.set_meta("next_work",elapsed+15.0)
