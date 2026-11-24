@@ -3,7 +3,7 @@ extends SceneTree
 const KEYBINDS := preload("res://control_bindings.gd")
 const MENU := preload("res://medieval_main_menu.gd")
 
-var model: RefCounted
+var model
 var changed_radius := 2
 
 func _initialize() -> void:
