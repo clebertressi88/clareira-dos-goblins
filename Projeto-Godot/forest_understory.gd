@@ -161,59 +161,97 @@ static func populate_chunk(chunk: Node3D, key: Vector2i, avoid: Array = []) -> v
 static func _stem(parent: Node3D, from: Vector3, to: Vector3, radius: float, m: Material) -> void:
 	WOOD.tapered(parent,from,to,radius,radius*0.35,m,5)
 
+## Folha alongada de duas faces com bordas recortadas e nervura central.
+## A malha e reutilizada em todas as plantas; so as instancias variam.
+static func _foliage_mesh() -> Mesh:
+	if meshes.has("foliage_detail"):
+		return meshes["foliage_detail"]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var segments := 8
+	for i in range(segments):
+		var t0 := float(i)/float(segments)
+		var t1 := float(i+1)/float(segments)
+		var width0 := pow(sin(PI*t0),0.75)*(0.91 if i%2==0 else 1.0)
+		var width1 := pow(sin(PI*t1),0.75)*(0.91 if (i+1)%2==0 else 1.0)
+		var p0 := Vector3(0,t0,0.08*sin(t0*PI))
+		var p1 := Vector3(0,t1,0.08*sin(t1*PI))
+		var left0 := p0+Vector3(-width0*.5,0,0)
+		var right0 := p0+Vector3(width0*.5,0,0)
+		var left1 := p1+Vector3(-width1*.5,0,0)
+		var right1 := p1+Vector3(width1*.5,0,0)
+		for v in [p0,left0,left1,p0,left1,p1,p0,right1,right0,p0,p1,right1]:
+			st.set_uv(Vector2(v.x+0.5,v.y))
+			st.add_vertex(v)
+	st.generate_normals()
+	var leaf := st.commit()
+	meshes["foliage_detail"] = leaf
+	return leaf
+
+static func _leaflet(parent: Node3D, start: Vector3, end: Vector3, width: float, mat: Material) -> void:
+	var axis := end-start
+	if axis.length_squared()<0.0001:
+		return
+	var blade := MeshInstance3D.new()
+	blade.name = "Folha"
+	blade.mesh = _foliage_mesh()
+	blade.material_override = mat
+	blade.position = start
+	blade.quaternion = Quaternion(Vector3.UP,axis.normalized())
+	blade.scale = Vector3(width,axis.length(),width)
+	blade.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(blade)
+
 static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = absi(hash(seed))
-	var green := _mat(Color("#476d3c"))
-	var leaf := _mat(Color("#4e803f"))
-	var leaf_alt := _mat(Color("#789950"))
-	var bark := _mat(Color("#72563b"))
-	var tall := kind=="river_reed"
-	# Raizes expostas nas margens, curtas e contidas para nao atrapalhar trilhas.
-	if tall:
+	var stem_green := _mat(Color("#536d35"))
+	var leaf_green := _mat(Color("#42743a"))
+	var leaf_medium := _mat(Color("#638b45"))
+	var leaf_light := _mat(Color("#86a35d"))
+	var bark := _mat(Color("#735b40"))
+	var woody := kind=="forest_shrub"
+	var reed := kind=="river_reed"
+	var count := 6 if woody else 7 if kind=="fern" else 8
+	# Raizes pequenas e visiveis somente na beira do rio.
+	if reed:
 		for root_index in range(4):
-			var root_angle := TAU*float(root_index)/4.0+rng.randf_range(-.16,.16)
+			var root_angle := TAU*float(root_index)/4.0
 			var root_dir := Vector3(cos(root_angle),0,sin(root_angle))
-			_stem(parent,Vector3.UP*.12,root_dir*rng.randf_range(.16,.28)+Vector3.UP*.012,.033,bark)
-	var count := 7 if tall else 6 if kind=="fern" else 8
+			_stem(parent,Vector3.UP*.09,root_dir*.18+Vector3.UP*.018,.014,bark)
 	for i in range(count):
-		var angle := TAU*float(i)/float(count)+rng.randf_range(-.20,.20)
-		var direction := Vector3(cos(angle),0,sin(angle))
-		if tall:
-			var h := rng.randf_range(.55,1.15)
-			var tip := direction*rng.randf_range(.09,.25)+Vector3.UP*h
-			_stem(parent,Vector3.UP*.04,tip,.013,green)
-			var blade := MeshInstance3D.new()
-			blade.mesh = _mesh("reeds")
-			blade.material_override = leaf_alt if i%2==0 else leaf
-			blade.position = direction*.10+Vector3.UP*.1
-			blade.rotation.y = angle
-			blade.scale = Vector3(1.2,1.3,1.2)
-			parent.add_child(blade)
-		else:
-			var length := rng.randf_range(.27,.58) if kind=="fern" else rng.randf_range(.25,.45)
-			var end := direction*length+Vector3.UP*rng.randf_range(.16,.42)
-			_stem(parent,Vector3.UP*.06,end,.016 if kind=="fern" else .024,green if kind=="fern" else bark)
-			for j in range(4 if kind=="fern" else 3):
-				var t := (float(j)+1.0)/5.0
-				var p := Vector3.UP*.06+(end-Vector3.UP*.06)*t
-				for side in [-1.0,1.0]:
-					var blade := MeshInstance3D.new()
-					blade.mesh = _mesh("leaf")
-					blade.material_override = leaf if (i+j)%2==0 else leaf_alt
-					blade.position = p+Vector3(-direction.z,0,direction.x)*side*.07
-					blade.rotation.y = angle+side*.6
-					blade.scale = Vector3(.82,1.0,.95)
-					parent.add_child(blade)
-	if kind=="forest_shrub":
-		for i in range(3):
-			var cap := MeshInstance3D.new()
-			var mesh := SphereMesh.new()
-			mesh.radius = .21
-			mesh.height = .27
-			mesh.radial_segments = 7
-			mesh.rings = 3
-			cap.mesh = mesh
-			cap.material_override = leaf if i%2==0 else leaf_alt
-			cap.position = Vector3(cos(float(i)*TAU/3.0)*.18,.27,sin(float(i)*TAU/3.0)*.18)
-			parent.add_child(cap)
+		var angle := TAU*(float(i)+rng.randf_range(-.23,.23))/float(count)
+		var radial := Vector3(cos(angle),0,sin(angle))
+		var sideways := Vector3(-radial.z,0,radial.x)
+		var root := radial*rng.randf_range(0.015,0.07)+Vector3.UP*.04
+		var reach := rng.randf_range(.27,.53) if woody else rng.randf_range(.34,.60)
+		var height := rng.randf_range(.28,.50) if woody else rng.randf_range(.19,.37)
+		if reed:
+			reach = rng.randf_range(.10,.22)
+			height = rng.randf_range(.64,1.0)
+		var middle := root+radial*(reach*.46)+Vector3.UP*(height*.72)
+		var tip := root+radial*reach+Vector3.UP*height
+		var stem_mat: Material = bark if woody else stem_green
+		_stem(parent,root,middle,.015 if woody else .008,stem_mat)
+		_stem(parent,middle,tip,.011 if woody else .006,stem_mat)
+		if reed:
+			for j in range(3):
+				var t := .2+float(j)*.23
+				var from := root.lerp(tip,t)
+				var point := from+radial*rng.randf_range(.12,.23)+Vector3.UP*rng.randf_range(.13,.31)
+				_leaflet(parent,from,point,.055,leaf_light if j%2==0 else leaf_medium)
+			continue
+		var pairs := 4 if woody else 6
+		for j in range(pairs):
+			var t := .23+float(j)/float(pairs+1)*.68
+			var branch_base := root.lerp(tip,t)
+			var branch_mat: Material = bark if woody else stem_green
+			for sign in [-1.0,1.0]:
+				var offset := sideways*sign*rng.randf_range(.075,.17)
+				var branch_end := branch_base+offset+radial*rng.randf_range(.025,.085)+Vector3.UP*rng.randf_range(.015,.09)
+				_stem(parent,branch_base,branch_end,.005 if woody else .003,branch_mat)
+				var leaf_tip := branch_end+offset.normalized()*rng.randf_range(.065,.11)+Vector3.UP*rng.randf_range(.005,.05)
+				var leaf_mat: Material = leaf_green if (i+j)%3==0 else leaf_medium if (i+j)%3==1 else leaf_light
+				_leaflet(parent,branch_end,leaf_tip,.060 if woody else .039,leaf_mat)
+		# Uma folha terminal define o contorno sem blocos verdes artificiais.
+		_leaflet(parent,tip-radial*.02,tip+radial*.10+Vector3.UP*.055,.073 if woody else .045,leaf_medium)
