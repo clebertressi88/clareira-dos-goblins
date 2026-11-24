@@ -503,9 +503,13 @@ func make_player() -> void:
 	backpack_visual.name = "MochilaVestida"
 	player_model.add_child(backpack_visual)
 	var player_rig := player_model.get_node_or_null("GoblinRig")
+	var attached := false
 	if player_rig != null and player_rig.has_method("attach_backpack"):
-		if not bool(player_rig.call("attach_backpack",backpack_visual)):
-			push_warning("Mochila sem osso de tronco; verifique o rig do personagem.")
+		attached = bool(player_rig.call("attach_backpack",backpack_visual))
+	if not attached:
+		# Fallback: nunca deixar a mochila em (0,0,0), abaixo do personagem.
+		backpack_visual.position = Vector3(0.0,1.05,-0.30)
+		push_warning("Mochila: usando suporte visual do torso porque o osso nao foi localizado.")
 	backpack_visual.visible = backpack_equipped
 	player_model.hide()
 	spear = Node3D.new()
@@ -3275,6 +3279,14 @@ func show_inventory() -> void:
 	var portrait_rig := portrait_goblin.get_node_or_null("GoblinRig")
 	if portrait_rig != null:
 		portrait_rig.call("set_equipment",sword_equipped,shield_equipped)
+		# Retrato do inventario usa uma copia isolada do rig; a mochila precisa
+		# ser equipada nesta copia tambem para aparecer no personagem.
+		if backpack_equipped:
+			var portrait_backpack: Node3D = preload("res://backpack_model.gd").new()
+			portrait_backpack.name = "MochilaRetrato"
+			portrait_goblin.add_child(portrait_backpack)
+			if not bool(portrait_rig.call("attach_backpack",portrait_backpack)):
+				portrait_backpack.position = Vector3(0.0,1.05,-0.30)
 	var portrait_camera := Camera3D.new()
 	portrait_camera.position = Vector3(0,1.12,3.5)
 	portrait_stage.add_child(portrait_camera)
@@ -4754,7 +4766,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					eat()
 			KEY_F: primary()
-			KEY_V: toggle_view()
+			KEY_F5: toggle_view()
 			KEY_PAGEUP:
 				build_level = mini(build_level+1,BUILD_MAX_LEVEL)
 				notice("Altura selecionada: %s" % construction_level_name())
