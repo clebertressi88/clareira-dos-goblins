@@ -131,7 +131,8 @@ func _play(action: String, loop: bool, speed: float = 1.0) -> void:
 	if anim != null:
 		anim.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
 	if current_clip != clip or not animation_player.is_playing():
-		animation_player.play(clip, 0.12, speed)
+		animation_player.speed_scale = speed
+		animation_player.play(clip, 0.12)
 		current_clip = clip
 	else:
 		animation_player.speed_scale = speed
