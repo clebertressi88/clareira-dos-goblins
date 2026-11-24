@@ -42,6 +42,12 @@ func _ready() -> void:
 	camera.size = 4.5
 	camera.current = true
 	_build_controls()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--wolf-asset="):
+			_load_model(arg.trim_prefix("--wolf-asset="))
+			if "--wolf-test" in OS.get_cmdline_user_args():
+				_validate_asset()
+			return
 	var last_path := ConfigFile.new()
 	if last_path.load("user://dire_wolf_lab.cfg") == OK:
 		var path: String = str(last_path.get_value("asset", "path", ""))
@@ -60,7 +66,7 @@ func _build_controls() -> void:
 	var title := Label.new()
 	title.text = "LABORATORIO DIRE WOLF"
 	controls.add_child(title)
-	_button("Carregar GLB do computador", func(): picker.popup_centered_ratio(0.8))
+	_button("Carregar ZIP ou GLB do computador", func(): picker.popup_centered_ratio(0.8))
 	for pair in [["Parado", "idle"], ["Caminhar", "walk"], ["Correr", "run"], ["Morder", "bite"]]:
 		var state: String = str(pair[1])
 		var btn := _button(str(pair[0]), _play.bind(state))
@@ -73,12 +79,13 @@ func _build_controls() -> void:
 	info = Label.new()
 	info.custom_minimum_size = Vector2(290, 0)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "Extraia o ZIP oficial e selecione o arquivo GLB."
+	info.text = "Selecione o ZIP oficial ou o arquivo GLB."
 	controls.add_child(info)
 	picker = FileDialog.new()
 	picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	picker.access = FileDialog.ACCESS_FILESYSTEM
 	picker.add_filter("*.glb", "Modelo GLB")
+	picker.add_filter("*.zip", "Pacote oficial Dire Wolf")
 	picker.file_selected.connect(_load_model)
 	layer.add_child(picker)
 
@@ -90,12 +97,28 @@ func _button(title: String, action: Callable) -> Button:
 	return btn
 
 func _load_model(path: String) -> void:
-	if path.get_extension().to_lower() != "glb":
-		info.text = "Selecione um arquivo GLB."
-		return
+	var extension := path.get_extension().to_lower()
 	var doc := GLTFDocument.new()
 	var state := GLTFState.new()
-	var error := doc.append_from_file(path, state)
+	var error: Error = ERR_INVALID_PARAMETER
+	if extension == "zip":
+		var zip := ZIPReader.new()
+		if zip.open(path) != OK:
+			info.text = "Nao foi possivel abrir o ZIP."
+			return
+		var asset_name := "Dire_Wolf_Lite/Dire_Wolf_Lite.glb"
+		if not zip.file_exists(asset_name):
+			zip.close()
+			info.text = "O ZIP nao contem o GLB oficial esperado."
+			return
+		var data := zip.read_file(asset_name)
+		zip.close()
+		error = doc.append_from_buffer(data, "", state)
+	elif extension == "glb":
+		error = doc.append_from_file(path, state)
+	else:
+		info.text = "Selecione ZIP ou GLB."
+		return
 	if error != OK:
 		info.text = "Falha ao ler GLB: " + str(error)
 		return
@@ -145,6 +168,10 @@ func _find_skeleton(node: Node) -> Skeleton3D:
 func _find_animation(action: String) -> String:
 	if not is_instance_valid(player):
 		return ""
+	var expected: Dictionary = {"idle": "idle_loop", "walk": "walk_loop", "run": "run_loop", "bite": "bite"}
+	for clip in player.get_animation_list():
+		if clip.get_file().to_lower() == str(expected.get(action, action)):
+			return clip
 	for clip in player.get_animation_list():
 		if clip.to_lower().contains(action):
 			return clip
@@ -166,3 +193,20 @@ func _back() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		_back()
+
+func _validate_asset() -> void:
+	var skeleton: Skeleton3D = _find_skeleton(model) if is_instance_valid(model) else null
+	if skeleton == null or skeleton.get_bone_count() != 35 or not is_instance_valid(player):
+		push_error("Dire Wolf: rig ou AnimationPlayer invalido.")
+		get_tree().quit(1)
+		return
+	for action in ["idle", "walk", "run", "bite"]:
+		var clip := _find_animation(action)
+		if clip.is_empty():
+			push_error("Dire Wolf: animacao ausente: " + action)
+			get_tree().quit(1)
+			return
+		_play(action)
+		player.advance(0.1)
+	print("DIRE_WOLF_LAB_OK: 35 ossos e 4 animacoes")
+	get_tree().quit(0)
