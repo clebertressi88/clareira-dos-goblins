@@ -66,6 +66,16 @@ func _run() -> void:
 		printerr("DAY NIGHT SAVE FAIL: Sol nao nasce no lado leste")
 		quit(1)
 		return
+	game.set("npc_world_clock",day_seconds-0.001)
+	game.call("update_npc_daylight",0.0)
+	var sunset: float = sun.rotation_degrees.y
+	game.set("npc_world_clock",full_cycle-0.001)
+	game.call("update_npc_daylight",0.0)
+	var moonset: float = moon.rotation_degrees.y
+	if not (sunset > 0.0) or absf(sunset-moonset)>.01:
+		printerr("DAY NIGHT SAVE FAIL: Sol e Lua nao se poem no mesmo lado")
+		quit(1)
+		return
 	var checkpoint := day_seconds+78.5
 	game.set("npc_world_clock",checkpoint)
 	game.call("update_npc_daylight",0.0)
