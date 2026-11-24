@@ -124,11 +124,16 @@ func attach_backpack(accessory: Node3D) -> bool:
 	anchor.bone_name = _skeleton.get_bone_name(bone_index)
 	_skeleton.add_child(anchor)
 	accessory.reparent(anchor,false)
-	# O modelo novo ja e centrado no osso: nada de -1 metro de offset.
-	# Volume achatado e correias proximas ao torso evitam que pareca flutuar.
-	accessory.position = Vector3(0.0,-0.055,-0.055)
-	accessory.rotation = Vector3.ZERO
-	accessory.scale = Vector3.ONE*0.82
+	# BoneAttachment herda os eixos locais do osso importado. A orientacao
+	# desse osso nem sempre coincide com os eixos da mochila. Compensar a
+	# pose inicial evita que ela atravesse o corpo ou fique invisivel.
+	var chest_pose: Transform3D = _skeleton.get_bone_global_pose(bone_index)
+	var chest_basis: Basis = chest_pose.basis.orthonormalized()
+	var correction: Basis = chest_basis.inverse()
+	accessory.transform = Transform3D(
+		correction.scaled(Vector3.ONE * 0.92),
+		correction * Vector3(0.0,-0.07,-0.21)
+	)
 	return true
 
 func set_equipment(sword: bool, shield: bool) -> void:
