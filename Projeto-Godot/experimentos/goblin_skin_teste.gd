@@ -111,6 +111,7 @@ func _build_controls() -> void:
 	_button(column,"Equipar / retirar espada",_sword)
 	_button(column,"Equipar / retirar escudo",_shield)
 	_button(column,"Testar Goblin Skirmisher",_open_skirmisher)
+	_button(column,"Testar Dire Wolf",_open_dire_wolf)
 	_button(column,"Voltar ao jogo (ESC)",_back)
 	caption=Label.new()
 	caption.text="Estado: Parado"
@@ -202,3 +203,7 @@ func _open_skirmisher() -> void:
 
 func _back() -> void:
 	get_tree().change_scene_to_file("res://main.tscn")
+
+
+func _open_dire_wolf() -> void:
+	get_tree().change_scene_to_file("res://experimentos/dire_wolf_teste.tscn")
