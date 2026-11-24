@@ -9,6 +9,12 @@ const CHUNK := 16
 const TERRAIN := preload("res://landscape_terrain.gd")
 const DISTANT_HORIZON := preload("res://distant_horizon.gd")
 const UNDERSTORY := preload("res://forest_understory.gd")
+const DIRE_WOLF := preload("res://dire_wolf_model.gd")
+const WOLF_MAX_HP := 7
+const WOLF_FLEE_HP := 3
+const WOLF_SAFE_DISTANCE := 12.0
+const WOLF_SAFE_DELAY := 8.0
+const WOLF_HEAL_INTERVAL := 12.0
 const BIOMES := preload("res://forest_biomes.gd")
 const VEGETATION_REGROW_SECONDS := 480.0
 var vegetation_harvest: Dictionary = {} # id -> proximo horario Unix de colheita.
@@ -1202,6 +1208,9 @@ func npc_clear_combat_hit(attacker: CharacterBody3D, target: CharacterBody3D) ->
 	return contact.is_empty() or contact.get("collider",null)==target
 
 func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vector3:
+	if bool(wolf.get_meta("wolf_fleeing",false)):
+		npc.set_meta("attacker_id","")
+		return Vector3.ZERO
 	var direction := wolf.global_position-npc.global_position
 	direction.y = 0.0
 	var distance := direction.length()
@@ -1214,8 +1223,9 @@ func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vecto
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
 			rig.call("play_action","attack")
-		var hp := maxi(0,int(wolf.get_meta("hp",5))-1)
+		var hp := maxi(0,int(wolf.get_meta("hp",WOLF_MAX_HP))-1)
 		wolf.set_meta("hp",hp)
+		wolf_damage_received(wolf)
 		if hp<=0:
 			var pos := wolf.global_position
 			remove_object(wolf)
@@ -2343,6 +2353,10 @@ func move_parts_to_limb(parent: Node3D, pivot: Node3D, start: int) -> void:
 		part.position = local
 
 func walk_pose(model: Node3D, velocity: Vector3, dt: float, grounded := true) -> void:
+	var wolf_rig := model.get_node_or_null("DireWolfRig")
+	if wolf_rig != null:
+		wolf_rig.call("animate",velocity)
+		return
 	if not model.has_meta("gait"):
 		return
 	var speed := minf(Vector2(velocity.x,velocity.z).length(),8.)
@@ -2524,7 +2538,7 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 	body.set_meta("kind",kind)
 	body.set_meta("id",id)
 	objects[id] = body
-	body.set_meta("hp",2 if kind=="rabbit" else 5 if kind=="wolf" else 9)
+	body.set_meta("hp",2 if kind=="rabbit" else WOLF_MAX_HP if kind=="wolf" else 9)
 	mobs.append(body)
 	var visual := Node3D.new()
 	visual.name = "Visual"
@@ -2535,7 +2549,16 @@ func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> Characte
 		return body
 	var rabbit := kind=="rabbit"
 	visual.scale = Vector3.ONE*(.64 if rabbit else 1.13)
-	animal_model(visual,rabbit)
+	if kind=="wolf":
+		var rig: Node3D = DIRE_WOLF.new()
+		rig.name = "DireWolfRig"
+		visual.add_child(rig)
+		if not bool(rig.call("install")):
+			visual.remove_child(rig)
+			rig.free()
+			animal_model(visual,false)
+	else:
+		animal_model(visual,rabbit)
 	collider(body,Vector3(.53,.80,1.26)*visual.scale,Vector3(0,.40,-.09)*visual.scale)
 	return body
 
@@ -5391,9 +5414,12 @@ func _physics_process(dt: float) -> void:
 				animate_npc_model(npc.get_node("Visual"),net_vel,dt,true)
 				npc.set_meta("net_animation_velocity",net_vel.move_toward(Vector3.ZERO,dt*3.5))
 		for mob in mobs:
-			if is_instance_valid(mob) and str(mob.get_meta("kind",""))=="guardian":
+			if is_instance_valid(mob) and str(mob.get_meta("kind","")) in ["guardian","wolf"]:
 				var net_vel: Vector3 = mob.get_meta("net_animation_velocity",Vector3.ZERO)
-				animate_npc_model(mob.get_node("Visual"),net_vel,dt,true)
+				if str(mob.get_meta("kind",""))=="guardian":
+					animate_npc_model(mob.get_node("Visual"),net_vel,dt,true)
+				else:
+					walk_pose(mob.get_node("Visual"),net_vel,dt,true)
 				mob.set_meta("net_animation_velocity",net_vel.move_toward(Vector3.ZERO,dt*3.5))
 	if net_role!="client":
 		update_villagers(dt)
@@ -5548,11 +5574,94 @@ func mob_has_clear_hit(mob: CharacterBody3D) -> bool:
 	return not contact.is_empty() and contact.get("collider",null)==player
 
 
+func wolf_bite_visual(mob: CharacterBody3D) -> void:
+	if str(mob.get_meta("kind",""))!="wolf":
+		return
+	mob.set_meta("wolf_attack_serial",int(mob.get_meta("wolf_attack_serial",0))+1)
+	var rig := mob.get_node_or_null("Visual/DireWolfRig")
+	if rig != null:
+		rig.call("bite")
+
+func wolf_damage_received(mob: Node3D) -> void:
+	if str(mob.get_meta("kind",""))!="wolf":
+		return
+	mob.set_meta("wolf_safe_since",-1.0)
+	mob.set_meta("wolf_next_heal",0.0)
+	var hp := int(mob.get_meta("hp",WOLF_MAX_HP))
+	if hp>0 and hp<=WOLF_FLEE_HP:
+		mob.set_meta("wolf_fleeing",true)
+
+func wolf_retreat(mob: CharacterBody3D,dt: float) -> bool:
+	# So a autoridade executa a fuga e a cura. Todos os alvos contam
+	# para a distancia segura, inclusive jogadores LAN e NPCs.
+	var hp := int(mob.get_meta("hp",WOLF_MAX_HP))
+	if hp<=0:
+		return true
+	if hp<=WOLF_FLEE_HP:
+		mob.set_meta("wolf_fleeing",true)
+	if not bool(mob.get_meta("wolf_fleeing",false)):
+		return false
+	var closest: Vector3 = player.global_position
+	var nearest := mob.global_position.distance_to(closest)
+	for remote in remotes.values():
+		if is_instance_valid(remote):
+			var d: float = mob.global_position.distance_to(remote.global_position)
+			if d<nearest:
+				nearest = d
+				closest = remote.global_position
+	for npc in villagers:
+		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
+			var d: float = mob.global_position.distance_to(npc.global_position)
+			if d<nearest:
+				nearest = d
+				closest = npc.global_position
+	var stride := Vector3.ZERO
+	if nearest<WOLF_SAFE_DISTANCE:
+		mob.set_meta("wolf_safe_since",-1.0)
+		mob.set_meta("wolf_next_heal",0.0)
+		var away := mob.global_position-closest
+		away.y = 0
+		if away.length_squared()<.01:
+			away = Vector3.FORWARD.rotated(Vector3.UP,mob.rotation.y)
+		away = away.normalized()
+		if mob.is_on_wall():
+			if elapsed>=float(mob.get_meta("wolf_escape_turn_at",0.0)):
+				mob.set_meta("wolf_escape_turn",PI*.42 if randf()<.5 else -PI*.42)
+				mob.set_meta("wolf_escape_turn_at",elapsed+1.0)
+		if elapsed<float(mob.get_meta("wolf_escape_turn_at",0.0)):
+			away = away.rotated(Vector3.UP,float(mob.get_meta("wolf_escape_turn",0.0)))
+		if elapsed>=float(mob.get_meta("stagger_until",0.0)):
+			stride = away*3.2
+	else:
+		var safe_since := float(mob.get_meta("wolf_safe_since",-1.0))
+		if safe_since<0.0:
+			mob.set_meta("wolf_safe_since",elapsed)
+			mob.set_meta("wolf_next_heal",elapsed+WOLF_SAFE_DELAY+WOLF_HEAL_INTERVAL)
+		elif elapsed>=float(mob.get_meta("wolf_next_heal",INF)):
+			hp = mini(WOLF_MAX_HP,hp+1)
+			mob.set_meta("hp",hp)
+			mob.set_meta("wolf_next_heal",elapsed+WOLF_HEAL_INTERVAL)
+			if hp>=WOLF_MAX_HP:
+				mob.set_meta("wolf_fleeing",false)
+				mob.set_meta("wolf_safe_since",-1.0)
+				mob.set_meta("wolf_home",mob.position)
+	mob.velocity.x = stride.x
+	mob.velocity.z = stride.z
+	if stride.length_squared()>.01:
+		mob.rotation.y = atan2(-stride.x,-stride.z)
+	if not mob.is_on_floor():
+		mob.velocity.y -= dt*15.0
+	mob.move_and_slide()
+	walk_pose(mob.get_node("Visual"),mob.get_real_velocity(),dt,mob.is_on_floor())
+	return true
+
 func update_mobs(dt: float) -> void:
 	for i in range(mobs.size()-1,-1,-1):
 		var mob := mobs[i]
 		if not is_instance_valid(mob) or mob.is_queued_for_deletion():
 			mobs.remove_at(i)
+			continue
+		if str(mob.get_meta("kind",""))=="wolf" and wolf_retreat(mob,dt):
 			continue
 		var target_id := nearest_player_id(mob.global_position)
 		var target_pos: Vector3 = player.global_position if target_id==1 else (remotes[target_id].global_position if remotes.has(target_id) else player.global_position)
@@ -5596,6 +5705,7 @@ func update_mobs(dt: float) -> void:
 				if is_instance_valid(npc_target):
 					if elapsed>=float(mob.get_meta("npc_bite_at",0.0)) and npc_clear_combat_hit(mob,npc_target):
 						mob.set_meta("npc_bite_at",elapsed+1.0)
+						wolf_bite_visual(mob)
 						npc_target.set_meta("attacker_id",str(mob.get_meta("id","")))
 						var hp := maxi(0,int(npc_target.get_meta("npc_health",100))-15)
 						npc_target.set_meta("npc_health",hp)
@@ -5605,11 +5715,13 @@ func update_mobs(dt: float) -> void:
 							npc_target.set_meta("attacker_id","")
 				elif target_id==1 and elapsed>next_hurt and mob_has_clear_hit(mob):
 					next_hurt = elapsed+1.0
+					wolf_bite_visual(mob)
 					health -= 15 if kind=="wolf" else 23
 					if health<=0:
 						respawn()
 				elif target_id>1 and elapsed-float(net_last_hurt_by_peer.get(target_id,-100.0))>1.0:
 					net_last_hurt_by_peer[target_id] = elapsed
+					wolf_bite_visual(mob)
 					net_receive_damage.rpc_id(target_id,15 if kind=="wolf" else 23)
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
@@ -5842,6 +5954,7 @@ func primary() -> void:
 		var hp := maxi(0, int(o.get_meta("hp"))-(3 if held==SPIKED_CLUB else 2 if held==STONE_AXE else 1))
 		use_tool(held)
 		o.set_meta("hp",hp)
+		wolf_damage_received(o)
 		impact(hit["position"],hit["normal"],false)
 		stagger(o,-camera.global_basis.z)
 		o.set_meta("stagger_until",elapsed+.20)
@@ -7269,7 +7382,7 @@ func net_capture_entities() -> Array:
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
-				"p":mob.global_position,"r":mob.rotation.y,"hp":int(mob.get_meta("hp",1))})
+				"p":mob.global_position,"r":mob.rotation.y,"hp":int(mob.get_meta("hp",1)),"wolf_attack_serial":int(mob.get_meta("wolf_attack_serial",0)),"wolf_fleeing":bool(mob.get_meta("wolf_fleeing",false))})
 	return result
 
 func net_apply_entities(states: Array) -> void:
@@ -7313,6 +7426,14 @@ func net_apply_entities(states: Array) -> void:
 				var rig := obj.get_node_or_null("Visual/GoblinRig")
 				if rig!=null:
 					rig.call("play_action","attack")
+		if kind=="wolf":
+			obj.set_meta("wolf_fleeing",bool(data.get("wolf_fleeing",false)))
+			var bite_serial := int(data.get("wolf_attack_serial",0))
+			if bite_serial>int(obj.get_meta("net_wolf_attack_serial",0)):
+				obj.set_meta("net_wolf_attack_serial",bite_serial)
+				var wolf_rig := obj.get_node_or_null("Visual/DireWolfRig")
+				if wolf_rig != null:
+					wolf_rig.call("bite")
 		if int(data.get("hp",-1))>=0:
 			obj.set_meta("hp",int(data["hp"]))
 	for mob in mobs:
@@ -7354,6 +7475,7 @@ func net_request_hit_mob(id: String,damage: int) -> void:
 	target.set_meta("last_hit_"+str(peer_id),elapsed)
 	var hp := maxi(0,int(target.get_meta("hp",1))-clampi(damage,1,3))
 	target.set_meta("hp",hp)
+	wolf_damage_received(target)
 	if hp<=0:
 		var p := target.global_position
 		var kind := str(target.get_meta("kind",""))
