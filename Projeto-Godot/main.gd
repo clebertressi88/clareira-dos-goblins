@@ -81,6 +81,8 @@ var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
 var placed: Array = []
+var construction_ghost: Node3D
+var construction_preview: Dictionary = {}
 var build_level := 0 # 0=terreo; 1=segundo; 2=terceiro; 3=teto terceiro
 var build_rotation := 0 # incrementos de 90 graus
 var objects: Dictionary = {}
@@ -1124,7 +1126,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 	# encostas e ao restaurar partidas antigas ou sincronizar multiplayer.
 	if kind in ["meat","meat_wolf","meat_rabbit","hide","foot","wolf_tooth"]:
 		var floor_pos: Vector3 = o.global_position
-		floor_pos.y = ground(floor_pos.x,floor_pos.z) + 0.008
+		floor_pos.y = maxf(floor_pos.y,ground(floor_pos.x,floor_pos.z) + 0.008)
 		o.global_position = floor_pos
 	objects[id] = o
 	match kind:
@@ -1434,76 +1436,11 @@ func floor_height_near_door(door: StaticBody3D) -> float:
 
 
 func build_door_transitions(door: StaticBody3D) -> void:
-	# Antes havia duas rampas, uma delas invadia o piso interno.
-	# O jogador batia na face inferior ao passar pela porta.
-	# Agora a rampa exterior sobe ate 30 cm DENTRO do piso, suavemente.
 	for part in door.get_children():
-		var is_ramp_shape: bool = false
-		if part is CollisionShape3D:
-			var existing_shape := (part as CollisionShape3D).shape as BoxShape3D
-			is_ramp_shape = existing_shape!=null and existing_shape.size.z>1.0
-		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta") or part.name.begins_with("LimiarPorta") or is_ramp_shape:
+		if part.name.begins_with("RampaPorta") or part.name.begins_with("ColisaoRampaPorta") or part.name.begins_with("LimiarPorta"):
 			if part is CollisionShape3D:
-				part.disabled = true
+				part.set_deferred("disabled",true)
 			part.queue_free()
-	var floor_side := 0.0
-	var nearest := WALL_SIZE*1.2
-	for entry in placed:
-		if str(entry.get("kind",""))!="wood_floor" or int(entry.get("level",0))!=0:
-			continue
-		var p: Array = entry["p"]
-		var at := Vector3(float(p[0]),float(p[1]),float(p[2]))
-		var dist := Vector2(at.x-door.global_position.x,at.z-door.global_position.z).length()
-		if dist<nearest:
-			var local_point := door.to_local(at)
-			if absf(local_point.z)>.15:
-				nearest = dist
-				floor_side = signf(local_point.z)
-	var y_top := floor_height_near_door(door)
-	# Sem piso: duas rampas baixas para paredes antigas no relevo.
-	# Com piso: so UMA rampa na entrada externa. Nunca sob o piso interno.
-	var sides := [-floor_side] if floor_side!=0.0 else [-1.0,1.0]
-	for side in sides:
-		var outside_distance := 1.65
-		var inside_distance := .30 if floor_side!=0.0 else .08
-		var far_z := float(side)*outside_distance
-		# Com piso, a rampa termina ANTES da borda vertical do piso.
-		# Um patamar horizontal cobre a soleira e entra sobre o painel.
-		var near_z := float(side)*inside_distance if floor_side!=0.0 else -float(side)*inside_distance
-		var span := absf(far_z-near_z)
-		var outside := door.to_global(Vector3(0,0,far_z))
-		var end_y := ground(outside.x,outside.z)+.06
-		if absf(y_top-end_y)<.035:
-			continue
-		var center_z := (far_z+near_z)*.5
-		var ramp := box(door,Vector3(0,(y_top+end_y)*.5-door.global_position.y-.055,
-			center_z),Vector3(.72,.11,span),
-			"door_transition_wood",Color("#986f46"))
-		ramp.name = "RampaPorta"
-		ramp.rotation.x = float(side)*atan2(y_top-end_y,span)
-		var shape := BoxShape3D.new()
-		shape.size = Vector3(.72,.12,span)
-		var col := CollisionShape3D.new()
-		col.name = "ColisaoRampaPorta"
-		col.shape = shape
-		col.position = ramp.position
-		col.rotation = ramp.rotation
-		door.add_child(col)
-		if floor_side!=0.0:
-			# A soleira resolve o impacto contra a quina do piso.
-			var sill_center := (near_z-float(side)*.45)*.5
-			var sill_length := absf(near_z+float(side)*.45)
-			var sill := box(door,Vector3(0,y_top-door.global_position.y-.06,sill_center),
-				Vector3(.72,.12,sill_length+.05),"door_sill",Color("#a88050"))
-			sill.name = "LimiarPorta"
-			var sill_shape := BoxShape3D.new()
-			sill_shape.size = Vector3(.72,.12,sill_length+.05)
-			var sill_collision := CollisionShape3D.new()
-			sill_collision.name = "LimiarPortaColisao"
-			sill_collision.shape = sill_shape
-			sill_collision.position = sill.position
-			door.add_child(sill_collision)
-
 
 func refresh_door_transitions(at: Vector3) -> void:
 	for obj in objects.values():
@@ -3795,54 +3732,149 @@ func upper_build_supported(point: Vector3) -> bool:
 	return false
 
 
-func place_craft(kind: String) -> bool:
+func construction_surface(point: Vector3, ceiling: float) -> float:
+	var height := ground(point.x,point.z)+.008
+	for entry in placed:
+		if entry.get("kind","")!="wood_floor":
+			continue
+		var p: Array = entry["p"]
+		var top := float(p[1])+.116
+		if top<=ceiling and absf(float(p[0])-point.x)<=WALL_SIZE*.5 and absf(float(p[2])-point.z)<=WALL_SIZE*.5:
+			height = maxf(height,top)
+	return height
+
+func construction_candidate(kind: String) -> Dictionary:
 	var is_wall := kind in ["wood_wall","wood_doorway","wood_window"]
 	var is_floor := kind=="wood_floor"
-	if is_wall and build_level>=BUILD_MAX_LEVEL:
-		notice("O terceiro pavimento é o último. Neste nível coloque apenas o teto.")
-		return false
 	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else 0.0
-	var forward := -Basis(Vector3.UP,snappedf(player.rotation.y,PI/2.0)).z
-	var point := player.position+forward*(2.15 if is_wall or is_floor else 1.65)
+	var point := player.position-player.basis.z*2.15
+	var hit := ray(5.8)
+	build_level = 0
+	var support: CollisionObject3D = null
+	if not hit.is_empty():
+		point = hit["position"]
+		support = hit["collider"] as CollisionObject3D
+	var support_kind := str(support.get_meta("kind","")) if support!=null else ""
+	var support_level := 0
+	if support!=null:
+		for entry in placed:
+			if str(entry.get("id",""))==str(support.get_meta("id","")):
+				support_level = int(entry.get("level",0))
+				break
 	if is_wall or is_floor:
-		var base := build_base_ground(point,yaw,is_wall)
-		base = build_reference_base(point,base)
-		point.y = base+float(build_level)*WALL_SIZE
-		if is_wall:
-			point = find_wall_snap(point,yaw)
-			if wall_intersects_other_wall(point,yaw):
-				notice("Esta posição já tem uma parede nesse pavimento.")
-				return false
+		if support_kind=="wood_floor":
+			build_level = support_level
+			var center := support.global_position
+			var delta := point-center
+			var side := Vector3(signf(delta.x),0,0) if absf(delta.x)>absf(delta.z) else Vector3(0,0,signf(delta.z))
+			if side==Vector3.ZERO:
+				side = Vector3.FORWARD
+			point = center+side*WALL_SIZE*(.5 if is_wall else 1.0)
+			if is_wall:
+				yaw = PI*.5 if absf(side.x)>.5 else 0.0
+				yaw += float(build_rotation)*PI*.5
+		elif support_kind in ["wood_wall","wood_doorway","wood_window"]:
+			var center := support.global_position
+			var upper := point.y-center.y>WALL_SIZE*.65
+			build_level = mini(support_level+(1 if upper else 0),BUILD_MAX_LEVEL)
+			if is_floor:
+				var normal: Vector3 = hit["normal"]
+				var side := support.global_basis.z
+				if absf(normal.dot(side))>.2:
+					side *= signf(normal.dot(side))
+				elif (player.position-center).dot(side)<0:
+					side = -side
+				point = center+side*WALL_SIZE*.5
+				point.y = center.y+float(build_level-support_level)*WALL_SIZE
+				point = find_floor_snap(point)
+			else:
+				point.y = center.y+float(build_level-support_level)*WALL_SIZE
+				point = find_wall_snap(point,yaw)
 		else:
-			point = find_floor_snap(floor_target_from_aim(point))
-			if floor_intersects_other_floor(point):
-				notice("Este quadro já tem piso. Aponte para a borda ou a parede ao lado.")
-				return false
-		if not upper_build_supported(point):
-			notice("Falta apoio: aponte para uma parede ou outro painel para montar o teto.")
-			return false
+			point.y = build_reference_base(point,build_base_ground(point,yaw,is_wall)-.105)
+			if is_wall:
+				point = find_wall_snap(point,yaw)
+			else:
+				point = find_floor_snap(point)
 	else:
-		point.y = ground(point.x,point.z)
+		point.y = construction_surface(point,point.y+.25)
+	var valid := not hit.is_empty()
+	if is_wall:
+		valid = valid and build_level<BUILD_MAX_LEVEL and not wall_intersects_other_wall(point,yaw)
+	if is_floor:
+		valid = valid and not floor_intersects_other_floor(point)
+	if is_wall or is_floor:
+		valid = valid and upper_build_supported(point)
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(WALL_SIZE*.94,WALL_SIZE*.96,.16) if is_wall else (Vector3(WALL_SIZE*.99,.18,WALL_SIZE*.99) if is_floor else Vector3(1.05,.84,.8))
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
 	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else (.01 if is_floor else .48)))
 	query.collision_mask = (TARGET|4) if is_floor and build_level==0 else SOLID|TARGET|4
-	if is_wall or is_floor:
-		# Colisao com modulos de apoio e permitida nas juncoes.
-		# Sobreposicoes reais de pisos/parede sao verificadas acima.
-		var excluded: Array[RID] = []
-		for obj in objects.values():
-			if is_instance_valid(obj) and obj is CollisionObject3D and obj.get_meta("kind","") in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+	var excluded: Array[RID] = []
+	for obj in objects.values():
+		if is_instance_valid(obj) and obj is CollisionObject3D:
+			var object_kind := str(obj.get_meta("kind",""))
+			if (is_wall or is_floor) and object_kind in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
 				excluded.append(obj.get_rid())
-		query.exclude = excluded
-	if not get_world_3d().direct_space_state.intersect_shape(query,12).is_empty():
-		notice("Escolha um espaço livre à sua frente.")
-		return false
-	store_object(kind,point,yaw,build_level if is_wall or is_floor else 0)
-	return true
+			elif not is_wall and not is_floor and object_kind=="wood_floor" and absf(obj.global_position.y+.116-point.y)<.04:
+				excluded.append(obj.get_rid())
+	query.exclude = excluded
+	valid = valid and get_world_3d().direct_space_state.intersect_shape(query,12).is_empty()
+	return {"kind":kind,"point":point,"yaw":yaw,"level":build_level if is_wall or is_floor else 0,"valid":valid}
 
+func update_construction_ghost() -> void:
+	var item: int = bar_items[selected]
+	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM] or stock[item]<=0:
+		if is_instance_valid(construction_ghost):
+			construction_ghost.hide()
+		construction_preview = {}
+		return
+	var kind: String = ITEM_KINDS[item]
+	construction_preview = construction_candidate(kind)
+	if not is_instance_valid(construction_ghost) or construction_ghost.get_meta("kind","")!=kind:
+		if is_instance_valid(construction_ghost):
+			construction_ghost.queue_free()
+		var ghost := StaticBody3D.new()
+		ghost.collision_layer = 0
+		ghost.collision_mask = 0
+		ghost.set_meta("kind",kind)
+		add_child(ghost)
+		ghost.global_position = construction_preview["point"]
+		if kind=="wood_floor":
+			build_wood_floor(ghost)
+		elif kind in ["wood_wall","wood_doorway","wood_window"]:
+			build_wood_wall(ghost,kind)
+		else:
+			box(ghost,Vector3.UP*.45,Vector3(1.05,.84,.8),"construction_preview",Color.WHITE)
+		for child in ghost.get_children():
+			if child is CollisionShape3D:
+				child.disabled = true
+			elif child is MeshInstance3D and child.name.begins_with("wall_foundation"):
+				child.hide()
+		construction_ghost = ghost
+	construction_ghost.show()
+	construction_ghost.global_position = construction_preview["point"]
+	construction_ghost.rotation.y = construction_preview["yaw"]
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(.25,1,.45,.38) if construction_preview["valid"] else Color(1,.22,.18,.38)
+	for child in construction_ghost.get_children():
+		if child is MeshInstance3D:
+			child.material_override = mat
+
+func place_craft(kind: String) -> bool:
+	if net_role=="client" and not net_world_ready:
+		return false
+	var candidate := construction_preview if construction_preview.get("kind","")==kind else construction_candidate(kind)
+	if not candidate.get("valid",false):
+		notice("Escolha uma superfície livre e com apoio.")
+		return false
+	build_level = int(candidate["level"])
+	store_object(kind,candidate["point"],candidate["yaw"],build_level)
+	construction_preview = {}
+	return true
 
 func toggle_stock(i: int) -> void:
 	if reserve[i]:
@@ -3880,7 +3912,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_SPACE: jump = true
 			KEY_Q: drop_selected()
 			KEY_C: show_inventory()
-			KEY_R: eat()
+			KEY_R:
+				if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM]:
+					build_rotation = (build_rotation+1)%4
+				else:
+					eat()
 			KEY_F: primary()
 			KEY_V: toggle_view()
 			KEY_PAGEUP:
@@ -3956,6 +3992,7 @@ func _physics_process(dt: float) -> void:
 		if elapsed>next_save:
 			next_save = elapsed+8
 			save_game()
+	update_construction_ghost()
 	# Animacao continua em idle nos menus; clientes interpolam animacoes recebidas da rede.
 	if not moving:
 		animate_npc_model(player_model,Vector3.ZERO,dt,true)
@@ -4033,7 +4070,7 @@ func _physics_process(dt: float) -> void:
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
 		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
-			interaction_hint = ("%s · T: piso/teto · PgUp/PgDn: altura · Clique: instalar" % construction_level_name()) if bar_items[selected]==FLOOR_ITEM else ("Parede andar %d · T: girar · PgUp/PgDn: altura · Clique: instalar" % (build_level+1))
+			interaction_hint = "Aponte para encaixar · Clique: instalar · R: girar"
 		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
@@ -4678,7 +4715,7 @@ func drop_selected() -> void:
 	if item==BACKPACK_ITEM and backpack_equipped:
 		notice("Retire a mochila antes de largá-la.")
 		return
-	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM]:
+	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 		if place_craft(ITEM_KINDS[item]):
 			stock[item] -= 1
 			if item in [BENCH_ITEM,BENCH2_ITEM]:
@@ -4687,7 +4724,7 @@ func drop_selected() -> void:
 			save_game()
 		return
 	var p := player.position-player.basis.z*1.2
-	p.y = ground(p.x,p.z)
+	p.y = construction_surface(p,player.position.y+.35)
 	store_object(ITEM_KINDS[item],p)
 	stock[item] -= 1
 
