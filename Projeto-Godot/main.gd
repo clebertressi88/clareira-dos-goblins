@@ -22,11 +22,12 @@ var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado p
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate", "Baú", "Escada reta", "Escada em L", "Escada vertical"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed","chest","stairs_straight","stairs_l","ladder"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú","stairs_straight":"Escada reta","stairs_l":"Escada em L","ladder":"Escada vertical"}
-const LEVEL_2_RECIPES := ["stone_pickaxe","spiked_club","spear"]
-const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"wood_wall":[7,7,7,7,7,7,7,7,7],"wood_doorway":[7,7,7,7,-1,7,7,-1,7],"wood_window":[7,7,7,7,-1,7,7,7,7],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"wood_floor":[7,7,7,7,6,7,7,7,7],"chest":[7,7,7,7,11,7,7,7,7],"stairs_straight":[7,7,1,7,1,7,7,7,7],"stairs_l":[7,7,7,1,7,1,7,7,1],"ladder":[1,11,1,1,-1,1,1,11,1]}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate", "Baú", "Escada reta", "Escada em L", "Escada vertical", "Bancada de marcenaria"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed","chest","stairs_straight","stairs_l","ladder","carpentry_bench"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú","stairs_straight":"Escada reta","stairs_l":"Escada em L","ladder":"Escada vertical","carpentry_bench":"Bancada de marcenaria"}
+const LEVEL_2_RECIPES := ["stone_pickaxe","spiked_club","spear","carpentry_bench"]
+const CARPENTRY_PATTERNS := {"wood_wall":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_doorway":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,-1,7,-1,-1,-1,-1,-1,-1],"wood_window":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_floor":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,6,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"chest":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,11,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"ladder":[-1,-1,-1,-1,-1,-1,1,11,1,-1,-1,1,-1,1,-1,-1,1,11,1,-1,-1,-1,-1,-1,-1],"stairs_straight":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,7,7,-1,-1,7,7,-1,-1,-1,1,-1,-1,-1,-1],"stairs_l":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,1,7,7,7,-1,7,7,7,1,7,7,1,-1,-1]}
+const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"carpentry_bench":[7,7,7,7,10,7,6,7,6]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
 const TOOL_MAX_DURABILITY := {0:100,8:40,9:60,10:150,20:70,24:110,25:80,26:200}
@@ -50,6 +51,7 @@ const SPIKED_CLUB := 24
 const WOOD_PICKAXE := 25
 const STONE_PICKAXE := 26
 const CHEST_ITEM := 29
+const CARPENTRY_ITEM := 33
 const STAIR_ITEMS := [30,31,32]
 const STAIR_KINDS := ["stairs_straight","stairs_l","ladder"]
 const CHEST_SIZE := 16
@@ -86,7 +88,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 10 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
+const NET_PROTOCOL := 11 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
 const NET_SHARED_KINDS := ITEM_KINDS + ["block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -129,7 +131,7 @@ var crosshair: Label
 var hud: Label
 var hint: Label
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg"),preload("res://icones/22.svg"),preload("res://icones/22.svg"),preload("res://icones/21.svg")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg"),preload("res://icones/stairs_straight.svg"),preload("res://icones/stairs_l.svg"),preload("res://icones/ladder.svg"),preload("res://icones/carpentry_bench.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -1337,6 +1339,9 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			o.collision_layer |= SOLID
 			preload("res://chest_model.gd").build(o)
 			collider(o,Vector3(1.05,0.78,0.67),Vector3.UP*0.39)
+		"carpentry_bench":
+			o.collision_layer |= SOLID
+			build_carpentry_bench(o)
 		"bench","bench2":
 			o.collision_layer |= SOLID
 			var advanced_workbench := kind=="bench2"
@@ -1529,6 +1534,31 @@ func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
 	add_wall_foundations(parent)
 	if kind=="wood_doorway":
 		build_door_transitions(parent)
+
+func build_carpentry_bench(parent: StaticBody3D) -> void:
+	# Mesa robusta com tampo de tabuas, prateleira, morsa e serrote.
+	for x in [-.64,.64]:
+		for z in [-.32,.32]:
+			box(parent,Vector3(float(x),.48,float(z)),Vector3(.14,.96,.14),"carpentry_leg",Color("#805431"))
+	for i in range(5):
+		box(parent,Vector3(0,.99,(float(i)-2.0)*.17),Vector3(1.58,.12,.165),"carpentry_top_%d" % i,Color("#b18a5b").darkened(float(i%3)*.06))
+	box(parent,Vector3(0,.27,0),Vector3(1.39,.10,.62),"carpentry_shelf",Color("#95653d"))
+	for z in [-.32,.32]:
+		box(parent,Vector3(0,.54,float(z)),Vector3(1.36,.13,.11),"carpentry_brace",Color("#77502e"))
+	for x in [-.66,-.40]:
+		box(parent,Vector3(float(x),1.11,.39),Vector3(.14,.17,.24),"carpentry_vise",Color("#68462b"))
+	var screw := cylinder(parent,Vector3(-.53,1.08,.51),.027,.38,"carpentry_iron",Color("#60636a"))
+	screw.rotation.z = PI*.5
+	box(parent,Vector3(.29,1.065,-.09),Vector3(.52,.025,.17),"carpentry_saw_blade",Color("#91969a"))
+	for i in range(10):
+		box(parent,Vector3(.06+float(i)*.046,1.068,.005),Vector3(.026,.027,.032),"carpentry_saw_tooth",Color("#70767a"))
+	box(parent,Vector3(.61,1.085,-.09),Vector3(.15,.055,.18),"carpentry_saw_handle",Color("#704726"))
+	var hammer := box(parent,Vector3(.10,1.075,.21),Vector3(.31,.045,.045),"carpentry_hammer_handle",Color("#885a35"))
+	hammer.rotation.y = .30
+	box(parent,Vector3(.24,1.09,.17),Vector3(.10,.07,.15),"carpentry_hammer_head",Color("#5b6064"))
+	for i in range(3):
+		box(parent,Vector3(.15,.37+float(i)*.05,-.03),Vector3(.86,.045,.24),"carpentry_stock",Color("#ba9261"))
+	collider(parent,Vector3(1.58,1.07,.86),Vector3.UP*.535)
 
 func stair_board(parent: StaticBody3D, at: Vector3, size: Vector3, solid: bool = true) -> void:
 	box(parent,at,size,"stair_rustic_wood",Color("#9d7045"))
@@ -2830,7 +2860,7 @@ func open_craft(mode: String) -> void:
 	inventory = true
 	craft_mode = mode
 	craft_material = -1
-	craft_cells.resize(4 if mode=="basic" else 9)
+	craft_cells.resize(4 if mode=="basic" else (25 if mode=="carpentry" else 9))
 	craft_cells.fill(Vector2i(-1,0))
 	show_inventory()
 
@@ -2882,7 +2912,7 @@ func show_inventory() -> void:
 	var title := Label.new()
 	title.text = "Inventário e fabricação"
 	var station_label := Label.new()
-	station_label.text = "Bancada de trabalho · Nível %d" % station_level if craft_mode=="station" else "Inventário e fabricação básica"
+	station_label.text = "Bancada de marcenaria · 5 × 5" if craft_mode=="carpentry" else ("Bancada de trabalho · Nível %d" % station_level if craft_mode=="station" else "Inventário e fabricação básica")
 	station_label.modulate = Color("#cfb791")
 	menu.add_child(station_label)
 	title.add_theme_font_size_override("font_size",23)
@@ -3041,7 +3071,7 @@ func show_inventory() -> void:
 	crafting_panel.custom_minimum_size = Vector2(400,390)
 	columns.add_child(crafting_panel)
 	var craft_caption := Label.new()
-	craft_caption.text = "Fabricação"
+	craft_caption.text = "Marcenaria · 25 espaços" if craft_mode=="carpentry" else "Fabricação"
 	craft_caption.add_theme_font_size_override("font_size",20)
 	craft_caption.modulate = Color("#ffe29c")
 	crafting_panel.add_child(craft_caption)
@@ -3051,12 +3081,15 @@ func show_inventory() -> void:
 	craft_side.alignment = BoxContainer.ALIGNMENT_CENTER
 	crafting_panel.add_child(craft_side)
 	var grid := GridContainer.new()
-	grid.columns = 2 if craft_mode=="basic" else 3
+	grid.columns = 2 if craft_mode=="basic" else (5 if craft_mode=="carpentry" else 3)
 	craft_side.add_child(grid)
 	for i in range(craft_cells.size()):
 		var slot := Button.new()
 		var cell := craft_cells[i]
-		slot.custom_minimum_size = Vector2(68,68)
+		slot.custom_minimum_size = Vector2(48,48) if craft_mode=="carpentry" else Vector2(68,68)
+		if craft_mode=="carpentry":
+			slot.expand_icon = true
+			slot.add_theme_constant_override("icon_max_width",30)
 		slot.tooltip_text = "Clique com o botão direito para retirar uma unidade"
 		slot.text = "" if cell.y==0 else "×%d" % cell.y
 		if cell.y>0:
@@ -3097,7 +3130,7 @@ func show_inventory() -> void:
 	var recipes := GridContainer.new()
 	recipes.columns = 4
 	crafting_panel.add_child(recipes)
-	var names: Array = ["plank","fire","bench","rope"]
+	var names: Array = CARPENTRY_PATTERNS.keys() if craft_mode=="carpentry" else ["plank","fire","bench","rope"]
 	if craft_mode=="station":
 		for station_recipe: String in STATION_PATTERNS.keys():
 			if station_level>=2 or station_recipe not in LEVEL_2_RECIPES:
@@ -3145,7 +3178,7 @@ func show_inventory() -> void:
 		shortcut_row.add_child(shortcut)
 	label("Clique: colocar 1 · Arraste: mover pilha · Direito: retirar 1 / alternar reserva")
 	# A mochila e os seus 12 espacos ficam integrados ao painel esquerdo.
-	if craft_mode=="station":
+	if craft_mode in ["station","carpentry"]:
 		button("Fabricação básica",open_craft.bind("basic"),true)
 	if not feedback.is_empty():
 		label(feedback)
@@ -3408,8 +3441,10 @@ func craft_status(recipe: String) -> String:
 	if craft_mode=="station" and not bench_near():
 		return "Aproxime-se da bancada para fabricar os itens."
 	match craft_mode:
+		"carpentry":
+			return "Paredes, pisos, escadas e móveis · grade 5 × 5."
 		"station":
-			return "Lanças, machados, picaretas, pá, porrete de espinhos, paredes e piso/teto."
+			return "Ferramentas e armas · nível 2 libera a bancada de marcenaria."
 		_:
 			var kinds: Array = []
 			for cell in craft_cells:
@@ -3480,12 +3515,18 @@ func fill_craft_cell(index: int, single := false) -> void:
 	show_inventory()
 
 func prepare_recipe(kind: String) -> void:
+	if craft_mode=="carpentry" and (not CARPENTRY_PATTERNS.has(kind) or not carpentry_near()):
+		return
+	if craft_mode!="carpentry" and CARPENTRY_PATTERNS.has(kind):
+		return
 	if kind in LEVEL_2_RECIPES and not can_craft_level_two():
 		notice("Esta receita exige a bancada de trabalho nível 2.")
 		show_inventory()
 		return
 	var pattern: Array = {"plank":[6,-1,-1,-1],"fire":FIRE_PATTERN,
 		"bench":BENCH_PATTERN,"rope":[VINE,VINE,-1,-1]}.get(kind,STATION_PATTERNS.get(kind,[]))
+	if craft_mode=="carpentry":
+		pattern = CARPENTRY_PATTERNS.get(kind,[])
 	if pattern.size()==4 and craft_mode=="station":
 		pattern = expand_basic_pattern(pattern,0,0)
 	if pattern.size()!=craft_cells.size():
@@ -3533,6 +3574,13 @@ func basic_recipe() -> String:
 	for i in range(ITEMS.size()):
 		if counts[i]>stock[i]:
 			return ""
+	if craft_mode=="carpentry":
+		if not carpentry_near():
+			return ""
+		for kind: String in CARPENTRY_PATTERNS:
+			if matches_recipe(CARPENTRY_PATTERNS[kind]):
+				return kind
+		return ""
 	if craft_mode=="station" and not bench_near():
 		return ""
 	if matches_basic_recipe(BENCH_PATTERN):
@@ -3577,8 +3625,11 @@ func craft_basic() -> void:
 		notice("Esta receita exige a bancada de trabalho nível 2.")
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1},"stairs_straight":{7:7,1:2},"stairs_l":{7:6,1:3},"ladder":{1:6,VINE:2}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1},"stairs_straight":{7:8,1:2},"stairs_l":{7:12,1:4},"ladder":{1:6,VINE:2},"carpentry_bench":{7:6,6:2,10:1}
 	}[kind]
+	for index: int in costs:
+		if stock[index]<int(costs[index]):
+			return
 	for index: int in costs:
 		stock[index] -= costs[index]
 	for i in range(craft_cells.size()):
@@ -4193,7 +4244,7 @@ func construction_candidate(kind: String) -> Dictionary:
 	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else (player.rotation.y+float(build_rotation)*PI*.5 if kind=="chest" else 0.0)
 	# O lado frontal do bau (fechadura, +Z local) aponta para o jogador por padrao.
 	# R gira a pre-visualizacao em passos de 90 graus sem perder essa orientacao inicial.
-	if is_stair:
+	if is_stair or kind=="carpentry_bench":
 		yaw = snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5
 	var point := player.position-player.basis.z*2.15
 	var hit := ray(5.8)
@@ -4260,6 +4311,9 @@ func construction_candidate(kind: String) -> Dictionary:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
 	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else (.01 if is_floor else .48)))
+	if kind=="carpentry_bench":
+		shape.size = Vector3(1.56,1.02,.84)
+		query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*.54)
 	if is_stair:
 		shape.size = Vector3(.95,.18,.23)
 		query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*.15)
@@ -4278,7 +4332,7 @@ func construction_candidate(kind: String) -> Dictionary:
 
 func update_construction_ghost() -> void:
 	var item: int = bar_items[selected]
-	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32] or stock[item]<=0:
+	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM] or stock[item]<=0:
 		if is_instance_valid(construction_ghost):
 			construction_ghost.hide()
 		construction_preview = {}
@@ -4294,7 +4348,9 @@ func update_construction_ghost() -> void:
 		ghost.set_meta("kind",kind)
 		add_child(ghost)
 		ghost.global_position = construction_preview["point"]
-		if kind in STAIR_KINDS:
+		if kind=="carpentry_bench":
+			build_carpentry_bench(ghost)
+		elif kind in STAIR_KINDS:
 			build_stairs(ghost,kind)
 			ghost.collision_layer = 0
 		elif kind=="chest":
@@ -4371,7 +4427,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_Q: drop_selected()
 			KEY_C: show_inventory()
 			KEY_R:
-				if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32]:
+				if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
 					build_rotation = (build_rotation+1)%4
 					notice("Rotação: %d°" % (build_rotation*90))
 				else:
@@ -4583,11 +4639,12 @@ func _physics_process(dt: float) -> void:
 		next_interaction_hint = elapsed+.12
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
-		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32]:
+		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
 			interaction_hint = "Aponte para posicionar · Clique: instalar · R: girar"
 		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
 				"bench","bench2": interaction_hint = "Botão direito · Usar bancada de trabalho"
+				"carpentry_bench": interaction_hint = "Botão direito · Usar marcenaria 5 × 5"
 				"chest": interaction_hint = "Botão direito · Abrir baú"
 				"vine_bush": interaction_hint = "Botão direito · Colher cipó"
 				"tomato_plant","tomato_crop": interaction_hint = "Botão direito · Colher tomates"
@@ -4836,7 +4893,7 @@ func primary() -> void:
 		return
 	next_attack = elapsed+.46
 	var held: int = bar_items[selected]
-	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32] and stock[held]>0:
+	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM] and stock[held]>0:
 		if place_craft(ITEM_KINDS[held]):
 			stock[held] -= 1
 			if held in [BENCH_ITEM,BENCH2_ITEM]:
@@ -4913,7 +4970,7 @@ func primary() -> void:
 		if chest_has_items(str(o.get_meta("id",""))):
 			notice("Esvazie o baú antes de desmontar.")
 			return
-	if kind in ["chest","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+	if kind in ["chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
@@ -4924,7 +4981,7 @@ func primary() -> void:
 			return
 		use_tool(held)
 		var hits: int = int(o.get_meta("break_hits",0))+(2 if held==STONE_AXE else 1)
-		var needed := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2))
+		var needed := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2","carpentry_bench"] else (3 if kind=="bench" else 2))
 		if hits<needed:
 			o.set_meta("break_hits",hits)
 			impact(hit["position"],hit["normal"],true)
@@ -5167,7 +5224,7 @@ func collectible_item_for_kind(kind: String) -> int:
 	if kind=="vine_bush":
 		return VINE
 	# Bancadas, estruturas, arvores e rochas exigem mecanicas proprias.
-	if kind in ["tree","stump","stone","block","chest","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","tomato_plant","tomato_crop"]:
+	if kind in ["tree","stump","stone","block","chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","tomato_plant","tomato_crop"]:
 		return -1
 	return ITEM_KINDS.find(kind)
 
@@ -5188,6 +5245,9 @@ func secondary() -> void:
 			return
 		if kind=="chest":
 			open_chest(o)
+			return
+		if kind=="carpentry_bench":
+			open_craft("carpentry")
 			return
 		if kind in ["bench","bench2"]:
 			station_level = 2 if kind=="bench2" else 1
@@ -5263,7 +5323,7 @@ func drop_selected() -> void:
 	if item==BACKPACK_ITEM and backpack_equipped:
 		notice("Retire a mochila antes de largá-la.")
 		return
-	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32]:
+	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
 		if place_craft(ITEM_KINDS[item]):
 			stock[item] -= 1
 			if item in [BENCH_ITEM,BENCH2_ITEM]:
@@ -5442,6 +5502,14 @@ func can_craft_level_two() -> bool:
 		if str(entry.get("kind",""))=="bench2":
 			var p: Array = entry["p"]
 			if player.position.distance_to(Vector3(float(p[0]),float(p[1]),float(p[2])))<=4.0:
+				return true
+	return false
+
+func carpentry_near() -> bool:
+	for entry in placed:
+		if str(entry.get("kind",""))=="carpentry_bench":
+			var p: Array = entry["p"]
+			if player.global_position.distance_to(Vector3(float(p[0]),float(p[1]),float(p[2])))<=4.0:
 				return true
 	return false
 
@@ -5952,7 +6020,7 @@ func net_request_dismantle(id: String,tool: int) -> void:
 	if not is_instance_valid(obj) or not remote_can_interact(peer_id,obj.global_position,5.5):
 		return
 	var kind := str(obj.get_meta("kind",""))
-	if kind not in ["chest","bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+	if kind not in ["chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
 		return
 	if kind=="chest" and chest_has_items(id):
 		net_dismantle_feedback.rpc_id(peer_id,-2,0,-1)
@@ -5962,7 +6030,7 @@ func net_request_dismantle(id: String,tool: int) -> void:
 		return
 	obj.set_meta("net_last_dismantle_"+str(peer_id),elapsed)
 	var hits := int(obj.get_meta("break_hits",0))+(2 if tool==STONE_AXE else 1)
-	var required := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2"] else (3 if kind=="bench" else 2))
+	var required := 12 if kind=="hut" else (4 if kind in ["wood_wall","wood_doorway","wood_window","wood_floor","bench2","carpentry_bench"] else (3 if kind=="bench" else 2))
 	if hits<required:
 		obj.set_meta("break_hits",hits)
 		net_dismantle_feedback.rpc_id(peer_id,hits,required,-1)
@@ -6027,7 +6095,7 @@ func net_request_remove(id: String) -> void:
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
 		return
 	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj) or str(obj.get_meta("kind","")) not in ["bench","bench2","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+	if not is_instance_valid(obj) or str(obj.get_meta("kind","")) not in ["bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
 		return
 	if not remote_can_interact(peer_id,obj.global_position,6.5):
 		return
