@@ -244,7 +244,7 @@ func _switch_motion(new_state: String, rate: float) -> void:
 	var clip: String = CLIPS[new_state]
 	if not _animation_player.has_animation(clip):
 		return
-	if _state != new_state or (_animation_player.current_animation != clip and not (new_state == "idle")):
+	if _state != new_state or _animation_player.current_animation != clip:
 		if _state == "idle" and _quiet_idle_bone >= 0:
 			_skeleton.set_bone_pose_scale(_quiet_idle_bone, _quiet_idle_base)
 		_quiet_idle_bone = -1
@@ -253,10 +253,12 @@ func _switch_motion(new_state: String, rate: float) -> void:
 		_animation_player.play(clip, 0.14, rate)
 		if new_state == "idle":
 			_animation_player.seek(0.0, true)
-			_animation_player.pause()
+			# Manter a animacao idle ativa e congelada no quadro inicial.
+			# pause() pode limpar current_animation e romper os testes do Skirmisher.
+			_animation_player.speed_scale = 0.0
 			_quiet_idle_time = 0.0
 	else:
-		_animation_player.speed_scale = rate
+		_animation_player.speed_scale = 0.0 if new_state == "idle" else rate
 
 func animate(velocity: Vector3, _dt: float, grounded: bool = true) -> void:
 	if _animation_player == null or _action_locked:
