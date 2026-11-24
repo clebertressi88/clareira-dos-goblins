@@ -381,11 +381,13 @@ func setup_world() -> void:
 	sun.rotation_degrees = Vector3(-47,-32,0)
 	sun.light_color = Color("#fff0d6")
 	sun.light_energy = .81
+	# Discos discretamente maiores, sem acrescentar malhas ou objetos ao ceu.
+	sun.light_angular_distance = 1.2
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 38
 	add_child(sun)
 	# Discos celestes visiveis diretamente no ceu, alem dos reflexos.
-	sky_material.sun_angle_max = 5.0
+	sky_material.sun_angle_max = 6.5
 	sky_material.sun_curve = 0.18
 	environment.fog_sky_affect = 0.12
 	npc_sun = sun
@@ -393,8 +395,9 @@ func setup_world() -> void:
 	npc_sky = sky_material
 	npc_moon = DirectionalLight3D.new()
 	npc_moon.name = "Lua"
-	npc_moon.light_color = Color("#b9d3ff")
+	npc_moon.light_color = Color("#dae5ff")
 	npc_moon.light_energy = 0.0
+	npc_moon.light_angular_distance = 1.5
 	npc_moon.shadow_enabled = false
 	add_child(npc_moon)
 	update_npc_daylight(0.0)
@@ -949,7 +952,15 @@ var npc_environment: Environment
 var npc_sky: ProceduralSkyMaterial
 var npc_world_clock := 0.0 # Tempo decorrido somente durante a sessao; salvo por mundo.
 const NPC_DAY_SECONDS := 1200.0
-const NPC_NIGHT_SECONDS := 300.0
+const NPC_NIGHT_SECONDS := 1200.0
+
+# Sol e Lua fazem a mesma travessia: nascem a leste e se poem a oeste.
+# O sentido nao e invertido na troca entre dia e noite.
+static func celestial_arc(progress: float) -> Vector3:
+	var t := clampf(progress,0.0,1.0)
+	var altitude := lerpf(4.0,68.0,sin(t*PI))
+	var azimuth := lerpf(-95.0,95.0,t)
+	return Vector3(-altitude,azimuth,0.0)
 
 func npc_is_night() -> bool:
 	return fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS)>=NPC_DAY_SECONDS
@@ -962,14 +973,15 @@ func update_npc_daylight(dt: float) -> void:
 	var dark := smoothstep(NPC_DAY_SECONDS-25.0,NPC_DAY_SECONDS,phase)*(1.0-smoothstep(NPC_DAY_SECONDS+NPC_NIGHT_SECONDS-25.0,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS,phase))
 	var day_progress := clampf(phase/NPC_DAY_SECONDS,0.0,1.0)
 	var night_progress := clampf((phase-NPC_DAY_SECONDS)/NPC_NIGHT_SECONDS,0.0,1.0)
-	# Cada astro percorre seu arco acima do horizonte na fase correspondente.
-	var sun_altitude := lerpf(4.0,70.0,sin(day_progress*PI)) if phase<NPC_DAY_SECONDS else -12.0
-	var moon_altitude := lerpf(4.0,65.0,sin(night_progress*PI)) if phase>=NPC_DAY_SECONDS else -12.0
-	npc_sun.rotation_degrees = Vector3(-sun_altitude,lerpf(-95.0,95.0,day_progress),0.0)
+	# Os dois astros avancam no mesmo sentido, no seu proprio periodo.
+	# Ao anoitecer a Lua surge no lado de onde o Sol nasceu.
+	var sun_arc := celestial_arc(day_progress)
+	var moon_arc := celestial_arc(night_progress)
+	npc_sun.rotation_degrees = sun_arc
 	npc_sun.light_energy = lerpf(.81,0.0,dark) if phase<NPC_DAY_SECONDS else 0.0
-	npc_sun.light_color = Color("#ffc27c").lerp(Color("#fff0d6"),clampf(sun_altitude/40.0,0.0,1.0))
+	npc_sun.light_color = Color("#ffc27c").lerp(Color("#fff0d6"),clampf(-sun_arc.x/40.0,0.0,1.0))
 	if is_instance_valid(npc_moon):
-		npc_moon.rotation_degrees = Vector3(-moon_altitude,lerpf(85.0,275.0,night_progress),0.0)
+		npc_moon.rotation_degrees = moon_arc
 		npc_moon.light_energy = .32*dark if phase>=NPC_DAY_SECONDS else 0.0
 	npc_environment.ambient_light_energy = lerpf(.52,.23,dark)
 	npc_environment.fog_light_color = Color("#98ada0").lerp(Color("#172539"),dark)
