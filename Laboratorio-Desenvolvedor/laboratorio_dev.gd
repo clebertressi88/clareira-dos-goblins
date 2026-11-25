@@ -242,6 +242,7 @@ func _create_developer_ui() -> void:
 	for label_value in ["Lobo predador","Coelho","Goblin guardiao","Bruma (NPC)","Talo (NPC)"]:
 		mob_selector.add_item(label_value)
 	dev_body.add_child(mob_selector)
+	_lab_button("Importar skin Dire Wolf (ZIP/GLB)",_select_lab_wolf_skin)
 	_lab_button("Criar criatura a 5 metros",_spawn_selected_mob)
 	_lab_button("Remover todas as criaturas",_remove_mobs)
 	dev_body.add_child(HSeparator.new())
@@ -324,6 +325,38 @@ func _place_test_bench(kind: String) -> void:
 	var at: Vector3 = player.position-player.global_basis.z*1.8+player.global_basis.x*1.6
 	at.y = ground(at.x,at.z)
 	store_object(kind,at,player.rotation.y)
+
+func _select_lab_wolf_skin() -> void:
+	var dialog := FileDialog.new()
+	dialog.title = "Selecionar modelo Dire Wolf original"
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.filters = PackedStringArray(["*.zip ; Pacote Dire Wolf","*.glb ; Modelo Dire Wolf"])
+	add_child(dialog)
+	dialog.file_selected.connect(func(path: String):
+		if DIRE_WOLF.select_asset(path):
+			for mob in mobs:
+				if not is_instance_valid(mob) or mob.get_meta("kind","") != "wolf":
+					continue
+				var visual := mob.get_node_or_null("Visual") as Node3D
+				if visual == null:
+					continue
+				var replacement: Node3D = DIRE_WOLF.new()
+				replacement.name = "DireWolfRig"
+				if replacement.call("install"):
+					for child in visual.get_children():
+						visual.remove_child(child)
+						child.queue_free()
+					visual.add_child(replacement)
+				else:
+					replacement.free()
+			lab_note.text = "Skin Dire Wolf carregada."
+		else:
+			lab_note.text = "Arquivo invalido ou incompatível. Selecione o ZIP/GLB original."
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func(): dialog.queue_free())
+	dialog.popup_centered_ratio(0.75)
 
 func _spawn_selected_mob() -> void:
 	if not is_instance_valid(player):
