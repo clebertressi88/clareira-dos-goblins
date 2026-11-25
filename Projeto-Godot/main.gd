@@ -1305,6 +1305,7 @@ func npc_deposit(id: String,item: int,amount: int) -> int:
 		if remaining<=0:
 			break
 	if remaining<amount:
+		npc_chest_interaction(id)
 		chest_storage[id] = slots
 		if net_role=="host":
 			net_chest_snapshot.rpc(id,slots)
@@ -1387,6 +1388,7 @@ func npc_take_axe(npc: CharacterBody3D,id: String) -> bool:
 			continue
 		var amount := int(cell[1])-1
 		slots[i] = [item,amount] if amount>0 else [-1,0]
+		npc_chest_interaction(id)
 		chest_storage[id] = slots
 		npc.set_meta("axe_item",item)
 		npc.set_meta("axe_uses",int(TOOL_MAX_DURABILITY[item]))
@@ -1458,6 +1460,7 @@ func npc_take_wood_axe_materials(npc: CharacterBody3D,id: String) -> bool:
 			needed -= taken
 			if needed<=0:
 				break
+	npc_chest_interaction(id)
 	chest_storage[id] = slots
 	npc.set_meta("craft_sticks",3)
 	npc.set_meta("craft_planks",2)
@@ -1585,6 +1588,7 @@ func village_take_supplies(npc: CharacterBody3D,chest: Node3D,cost: Dictionary) 
 			slots[i] = [item,left] if left>0 else [-1,0]
 			village_add_carried(npc,item,taken)
 			need -= taken
+	npc_chest_interaction(id)
 	chest_storage[id] = slots
 	village_convert_planks(npc,cost)
 	if net_role=="host":
@@ -5615,6 +5619,39 @@ func play_chest_lid_sound(at: Vector3, opening: bool) -> void:
 	audio.finished.connect(audio.queue_free)
 	audio.play()
 
+# Animacao compartilhada de uso por NPC, sem abrir a interface do jogador.
+func npc_chest_interaction(id: String) -> void:
+	npc_chest_lid_visual(id)
+	if net_role=="host":
+		net_npc_chest_lid.rpc(id)
+
+@rpc("authority","call_remote","reliable")
+func net_npc_chest_lid(id: String) -> void:
+	if net_role=="client" and multiplayer.get_remote_sender_id()==1:
+		npc_chest_lid_visual(id)
+
+func npc_chest_lid_visual(id: String) -> void:
+	var chest := objects.get(id,null) as Node3D
+	if not is_instance_valid(chest) or chest.is_queued_for_deletion() or open_chest_id==id:
+		return
+	var lid := chest.get_node_or_null("Tampa") as Node3D
+	if lid==null:
+		return
+	var previous: Tween = lid.get_meta("npc_lid_tween",null)
+	if previous!=null and previous.is_valid():
+		previous.kill()
+	var animation := lid.create_tween()
+	lid.set_meta("npc_lid_tween",animation)
+	if absf(lid.rotation.x)<.1:
+		play_chest_lid_sound(chest.global_position,true)
+	animation.tween_property(lid,"rotation:x",-1.15,.28)
+	animation.tween_interval(.85)
+	animation.tween_property(lid,"rotation:x",0.0,.23)
+	animation.tween_callback(func():
+		if is_instance_valid(chest) and open_chest_id!=id:
+			play_chest_lid_sound(chest.global_position,false)
+	)
+
 func close_chest_visual() -> void:
 	if open_chest_id.is_empty():
 		return
@@ -5638,6 +5675,9 @@ func open_chest(o: Node3D) -> void:
 	chest_storage[open_chest_id] = normalized_chest_slots(open_chest_id)
 	var lid := o.get_node_or_null("Tampa") as Node3D
 	if lid!=null:
+		var npc_animation: Tween = lid.get_meta("npc_lid_tween",null)
+		if npc_animation!=null and npc_animation.is_valid():
+			npc_animation.kill()
 		lid.create_tween().tween_property(lid,"rotation:x",-1.15,0.28)
 		play_chest_lid_sound(o.global_position,true)
 	show_chest()
