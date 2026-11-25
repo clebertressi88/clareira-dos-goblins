@@ -15,7 +15,10 @@ const WOLF_FLEE_HP := 3
 const WOLF_SAFE_DISTANCE := 12.0
 const WOLF_SAFE_DELAY := 8.0
 const WOLF_HEAL_INTERVAL := 12.0
-const WOLF_BODY_LAYER := 8 # Camada exclusiva: jogadores e lobos nao se atravessam.
+const HOSTILE_BODY_LAYER := 8 # Camada exclusiva de inimigos solidos.
+const GUARDIAN_STOP_DISTANCE := .95
+const GUARDIAN_ATTACK_DISTANCE := 1.35
+const GUARDIAN_BACKOFF_DISTANCE := .78
 const WOLF_STOP_DISTANCE := 1.28
 const WOLF_ATTACK_DISTANCE := 1.46
 const WOLF_BACKOFF_DISTANCE := 1.10
@@ -519,7 +522,7 @@ func make_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Jogador"
 	player.collision_layer = 4
-	player.collision_mask = SOLID|WOLF_BODY_LAYER
+	player.collision_mask = SOLID|HOSTILE_BODY_LAYER
 	player.floor_snap_length = .25
 	add_child(player)
 	var spawn: Array = get_meta("spawn", [0,1,0])
@@ -970,7 +973,7 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	npc.name = kind
 	npc.set_meta("villager",true)
 	npc.collision_layer = SOLID|TARGET
-	npc.collision_mask = SOLID|4|WOLF_BODY_LAYER # Obstaculos, goblins, jogador e lobos.
+	npc.collision_mask = SOLID|4|HOSTILE_BODY_LAYER # Obstaculos, goblins, jogador e lobos.
 	npc.floor_snap_length = .34
 	add_child(npc)
 	npc.position = Vector3(at.x,ground(at.x,at.z)+.08,at.z)
@@ -3693,8 +3696,8 @@ func protagonist_details(o: Node3D) -> void:
 
 func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> CharacterBody3D:
 	var body := CharacterBody3D.new()
-	body.collision_layer = (TARGET|WOLF_BODY_LAYER) if kind=="wolf" else TARGET
-	body.collision_mask = (SOLID|4|WOLF_BODY_LAYER) if kind=="wolf" else SOLID
+	body.collision_layer = (TARGET|HOSTILE_BODY_LAYER) if kind in ["wolf","guardian"] else TARGET
+	body.collision_mask = (SOLID|4|HOSTILE_BODY_LAYER) if kind in ["wolf","guardian"] else SOLID
 	body.floor_snap_length = .38
 	parent.add_child(body)
 	# Os mapas antigos criavam o guardiao em y=0 mesmo com o solo mais alto.
@@ -6847,6 +6850,13 @@ func mob_has_clear_hit(mob: CharacterBody3D) -> bool:
 
 
 func wolf_bite_visual(mob: CharacterBody3D) -> void:
+	if str(mob.get_meta("kind",""))=="guardian":
+		mob.set_meta("guardian_attack_hold_until",elapsed+.55)
+		mob.set_meta("guardian_attack_serial",int(mob.get_meta("guardian_attack_serial",0))+1)
+		var guardian_rig := mob.get_node_or_null("Visual/GoblinRig")
+		if guardian_rig!=null:
+			guardian_rig.call("play_action","attack")
+		return
 	if str(mob.get_meta("kind",""))!="wolf":
 		return
 	mob.set_meta("wolf_attack_serial",int(mob.get_meta("wolf_attack_serial",0))+1)
@@ -6929,23 +6939,27 @@ func wolf_retreat(mob: CharacterBody3D,dt: float) -> bool:
 	return true
 
 # A rotacao e independente da locomocao: recuar nao vira o focinho para tras.
-func wolf_attack_heading(mob: CharacterBody3D, direction: Vector3, dt: float) -> bool:
+func wolf_attack_heading(mob: CharacterBody3D, direction: Vector3, dt: float, guardian: bool = false) -> bool:
 	if direction.length_squared()<.0001:
 		return false
-	var desired := atan2(-direction.x,-direction.z)
+	var desired := atan2(direction.x,direction.z) if guardian else atan2(-direction.x,-direction.z)
 	mob.rotation.y = rotate_toward(mob.rotation.y,desired,dt*8.0)
-	var forward := -mob.global_basis.z.normalized()
+	var forward := mob.global_basis.z.normalized() if guardian else -mob.global_basis.z.normalized()
 	return forward.dot(direction.normalized())>=WOLF_ATTACK_FACING
 
-func wolf_combat_stride(mob: CharacterBody3D, direction: Vector3, distance: float, dt: float, aligned: bool) -> Vector3:
-	# Se o alvo correr para dentro do lobo (inclusive LAN), recua sem girar.
-	if distance<WOLF_BACKOFF_DISTANCE:
-		var away := -direction.normalized() if distance>.02 else mob.global_basis.z.normalized()
-		return away*minf(1.8,(WOLF_STOP_DISTANCE-distance)/maxf(dt,.001))
-	if not aligned or elapsed<float(mob.get_meta("wolf_bite_hold_until",0.0)):
+func wolf_combat_stride(mob: CharacterBody3D, direction: Vector3, distance: float, dt: float, aligned: bool, guardian: bool = false) -> Vector3:
+	var stop_distance := GUARDIAN_STOP_DISTANCE if guardian else WOLF_STOP_DISTANCE
+	var backoff_distance := GUARDIAN_BACKOFF_DISTANCE if guardian else WOLF_BACKOFF_DISTANCE
+	var hold_key := "guardian_attack_hold_until" if guardian else "wolf_bite_hold_until"
+	# Se o alvo correr para dentro do inimigo (inclusive LAN), recua sem girar.
+	if distance<backoff_distance:
+		var fallback := -mob.global_basis.z.normalized() if guardian else mob.global_basis.z.normalized()
+		var away := -direction.normalized() if distance>.02 else fallback
+		return away*minf(1.8,(stop_distance-distance)/maxf(dt,.001))
+	if not aligned or elapsed<float(mob.get_meta(hold_key,0.0)):
 		return Vector3.ZERO
 	# Limita o ultimo passo para nao cruzar a posicao do alvo.
-	return direction.normalized()*minf(2.25,maxf(0.0,distance-WOLF_STOP_DISTANCE)/maxf(dt,.001))
+	return direction.normalized()*minf(2.25,maxf(0.0,distance-stop_distance)/maxf(dt,.001))
 
 func wolf_remote_clear_hit(mob: CharacterBody3D, target_pos: Vector3) -> bool:
 	# Avatares LAN nao possuem corpo fisico no anfitriao; verifica a parede
@@ -6996,13 +7010,19 @@ func update_mobs(dt: float) -> void:
 			wander = mob.get_meta("wander_direction",Vector3.FORWARD)
 			speed = 1.15
 		var wolf_aligned := false
-		if kind=="wolf" and distance<10.0:
-			wolf_aligned = wolf_attack_heading(mob,direction,dt)
+		var melee_enemy := kind in ["wolf","guardian"]
+		if melee_enemy and distance<10.0:
+			wolf_aligned = wolf_attack_heading(mob,direction,dt,kind=="guardian")
 		if distance<10:
 			speed = 2.25
 			# Inimigos soterrados, em outro nivel ou atras de objetos
 			# nao devem causar dano apenas pela distancia horizontal.
-			var attack_in_range := distance<1.35 if kind!="wolf" else (distance>=WOLF_BACKOFF_DISTANCE and distance<=WOLF_ATTACK_DISTANCE and wolf_aligned and elapsed>=float(mob.get_meta("stagger_until",0.0)) and elapsed>=float(mob.get_meta("wolf_bite_hold_until",0.0)))
+			var attack_in_range := distance<1.35
+			if melee_enemy:
+				var minimum := GUARDIAN_BACKOFF_DISTANCE if kind=="guardian" else WOLF_BACKOFF_DISTANCE
+				var maximum := GUARDIAN_ATTACK_DISTANCE if kind=="guardian" else WOLF_ATTACK_DISTANCE
+				var hold_key := "guardian_attack_hold_until" if kind=="guardian" else "wolf_bite_hold_until"
+				attack_in_range = distance>=minimum and distance<=maximum and wolf_aligned and elapsed>=float(mob.get_meta("stagger_until",0.0)) and elapsed>=float(mob.get_meta(hold_key,0.0))
 			if attack_in_range and absf(target_pos.y-mob.global_position.y)<1.35:
 				if is_instance_valid(npc_target):
 					if elapsed>=float(mob.get_meta("npc_bite_at",0.0)) and npc_clear_combat_hit(mob,npc_target):
@@ -7021,23 +7041,23 @@ func update_mobs(dt: float) -> void:
 					health -= 15 if kind=="wolf" else 23
 					if health<=0:
 						respawn()
-				elif target_id>1 and elapsed-float(net_last_hurt_by_peer.get(target_id,-100.0))>1.0 and (kind!="wolf" or wolf_remote_clear_hit(mob,target_pos)):
+				elif target_id>1 and elapsed-float(net_last_hurt_by_peer.get(target_id,-100.0))>1.0 and (not melee_enemy or wolf_remote_clear_hit(mob,target_pos)):
 					net_last_hurt_by_peer[target_id] = elapsed
 					wolf_bite_visual(mob)
 					net_receive_damage.rpc_id(target_id,15 if kind=="wolf" else 23)
 		if elapsed<float(mob.get_meta("stagger_until",0.0)):
 			speed = 0.0
 		var stride: Vector3 = (wander if kind=="wolf" and distance>=10.0 else direction.normalized())*speed
-		if kind=="wolf" and distance<10.0:
-			stride = wolf_combat_stride(mob,direction,distance,dt,wolf_aligned) if speed>0.0 else Vector3.ZERO
+		if melee_enemy and distance<10.0:
+			stride = wolf_combat_stride(mob,direction,distance,dt,wolf_aligned,kind=="guardian") if speed>0.0 else Vector3.ZERO
 		mob.velocity.x = stride.x
 		mob.velocity.z = stride.z
-		if stride.length_squared()>.01 and not (kind=="wolf" and distance<10.0):
+		if stride.length_squared()>.01 and not (melee_enemy and distance<10.0):
 			# Em combate o lobo ja esta orientado para o alvo, mesmo ao recuar.
 			mob.rotation.y = atan2(stride.x,stride.z) if kind=="guardian" else atan2(-stride.x,-stride.z)
 		if not mob.is_on_floor():
 			mob.velocity.y -= dt*15
-		if kind=="guardian":
+		if kind=="guardian" and distance>GUARDIAN_ATTACK_DISTANCE:
 			try_character_step(mob,dt)
 		mob.move_and_slide()
 		if kind=="guardian" and mob.velocity.y<=0.0:
@@ -8772,7 +8792,7 @@ func net_capture_entities() -> Array:
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
-				"p":mob.global_position,"r":mob.rotation.y,"hp":int(mob.get_meta("hp",1)),"wolf_attack_serial":int(mob.get_meta("wolf_attack_serial",0)),"wolf_fleeing":bool(mob.get_meta("wolf_fleeing",false))})
+				"p":mob.global_position,"r":mob.rotation.y,"hp":int(mob.get_meta("hp",1)),"guardian_attack_serial":int(mob.get_meta("guardian_attack_serial",0)),"wolf_attack_serial":int(mob.get_meta("wolf_attack_serial",0)),"wolf_fleeing":bool(mob.get_meta("wolf_fleeing",false))})
 	return result
 
 func net_apply_entities(states: Array) -> void:
@@ -8836,6 +8856,13 @@ func net_apply_entities(states: Array) -> void:
 				var rig := obj.get_node_or_null("Visual/GoblinRig")
 				if rig!=null:
 					rig.call("play_action","attack")
+		if kind=="guardian":
+			var guardian_serial := int(data.get("guardian_attack_serial",0))
+			if guardian_serial>int(obj.get_meta("net_guardian_attack_serial",0)):
+				obj.set_meta("net_guardian_attack_serial",guardian_serial)
+				var guardian_rig := obj.get_node_or_null("Visual/GoblinRig")
+				if guardian_rig!=null:
+					guardian_rig.call("play_action","attack")
 		if kind=="wolf":
 			obj.set_meta("wolf_fleeing",bool(data.get("wolf_fleeing",false)))
 			var bite_serial := int(data.get("wolf_attack_serial",0))
