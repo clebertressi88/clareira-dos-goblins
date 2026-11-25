@@ -2683,7 +2683,7 @@ func npc_menu_action(action: String, value: String = "") -> void:
 				data.erase("bed")
 			else:
 				var bed := objects.get(value,null) as Node3D
-				var free := is_instance_valid(bed) and bed.get_meta("kind","")=="bed" and village_bed_sheltered(bed)
+				var free: bool = is_instance_valid(bed) and bed.get_meta("kind","")=="bed" and village_bed_sheltered(bed)
 				for id in village_population:
 					if id!=npc_menu_id and str(village_population[id].get("bed",""))==value:
 						free = false
@@ -2721,7 +2721,7 @@ func show_npc_menu(npc: CharacterBody3D) -> void:
 	npc_menu_meter(info,"Energia",float(data.get("energy",100.0)),Color("#599b59"))
 	var status := Label.new()
 	var axe_item := int(npc.get_meta("axe_item",-1))
-	var equipment := ITEMS[axe_item] if axe_item>=0 and axe_item<ITEMS.size() else "Nenhum"
+	var equipment: String = str(ITEMS[axe_item]) if axe_item>=0 and axe_item<ITEMS.size() else "Nenhum"
 	status.text = "Profissão: "+str(data.get("job","Filhote"))+"\nAtividade: "+str(npc.get_meta("work_mode",""))+"\nEquipamento: "+equipment+"\nCama: "+("Atribuída" if not str(data.get("bed","")).is_empty() else "Não atribuída")
 	info.add_child(status)
 	var actions := VBoxContainer.new()
