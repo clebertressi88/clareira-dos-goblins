@@ -1909,8 +1909,91 @@ func npc_hunt_rabbit(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3:
 	npc.set_meta("next_work",elapsed)
 	return Vector3.ZERO
 
+func npc_sleep_pose(npc: CharacterBody3D, sleeping: bool) -> void:
+	var visual := npc.get_node_or_null("Visual") as Node3D
+	if visual==null:
+		return
+	visual.rotation.x = -PI*.5 if sleeping else 0.0
+	visual.position = Vector3(0,.62,-.65) if sleeping else Vector3.ZERO
+	npc.set_meta("sleeping",sleeping)
+
+func npc_sleep_bed(npc: CharacterBody3D,camp: Vector3) -> Node3D:
+	var id := str(npc.get_meta("id",""))
+	var data: Dictionary = village_population.get(id,{})
+	var candidates: Array[Node3D] = village_objects("bed",camp)
+	for cabin in village_cabins(camp):
+		for obj in objects.values():
+			if is_instance_valid(obj) and not obj.is_queued_for_deletion() and obj.get_meta("kind","")=="bed" and cabin.global_position.distance_to(obj.global_position)<3.0 and not candidates.has(obj):
+				candidates.append(obj)
+	var best: Node3D
+	var nearest := INF
+	for bed in candidates:
+		if not village_bed_sheltered(bed):
+			continue
+		var bed_id := str(bed.get_meta("id",""))
+		var occupied := false
+		for other_id in village_population:
+			if other_id!=id and str(village_population[other_id].get("bed",""))==bed_id:
+				occupied = true
+		if occupied:
+			continue
+		if bed_id==str(data.get("bed","")):
+			return bed
+		var distance := npc.global_position.distance_to(bed.global_position)
+		if distance<nearest:
+			best = bed
+			nearest = distance
+	if is_instance_valid(best):
+		data["bed"] = str(best.get_meta("id",""))
+		village_population[id] = data
+		save_game()
+	return best
+
+func npc_bed_route(npc: CharacterBody3D,bed: Node3D,camp: Vector3) -> Vector3:
+	for cabin in village_cabins(camp):
+		var local_bed := cabin.to_local(bed.global_position)
+		if absf(local_bed.x)>2.4 or absf(local_bed.z)>2.4:
+			continue
+		var local_npc := cabin.to_local(npc.global_position)
+		if absf(local_npc.x)<2.4 and absf(local_npc.z)<2.4:
+			break
+		var waypoint := Vector3(0,0,1.8)
+		var side := 1.0 if local_npc.x>=0.0 else -1.0
+		if local_npc.z< -2.9 and absf(local_npc.x)<3.3:
+			waypoint = Vector3(side*3.5,0,-3.6)
+		elif local_npc.z<3.3 and absf(local_npc.x)>.65:
+			waypoint = Vector3(side*3.5,0,3.8)
+		elif local_npc.z>=3.3 and absf(local_npc.x)>.35:
+			waypoint = Vector3(0,0,3.8)
+		var direction := cabin.to_global(waypoint)-npc.global_position
+		direction.y = 0.0
+		return direction.normalized()
+	var toward := bed.global_position-npc.global_position
+	toward.y = 0.0
+	if toward.length()>.85:
+		return toward.normalized()
+	npc.rotation.y = bed.global_rotation.y
+	npc.global_position = bed.global_position
+	npc.velocity = Vector3.ZERO
+	npc_sleep_pose(npc,true)
+	return Vector3.ZERO
+
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
+	if not night:
+		npc.set_meta("warm_seconds",0.0)
+		if str(npc.get_meta("work_mode","")) in ["sleep","bed_walk"]:
+			npc_sleep_pose(npc,false)
+			npc.set_meta("work_mode","")
+			npc.set_meta("next_work",elapsed)
+	elif float(npc.get_meta("warm_seconds",0.0))>=60.0:
+		var bed := npc_sleep_bed(npc,camp)
+		if is_instance_valid(bed):
+			if bool(npc.get_meta("sleeping",false)):
+				npc.set_meta("work_mode","sleep")
+				return Vector3.ZERO
+			npc.set_meta("work_mode","bed_walk")
+			return npc_bed_route(npc,bed,camp)
 	if not night and str(npc.get_meta("work_mode",""))=="":
 		var hunting := npc_hunt_rabbit(npc,camp,dt)
 		if hunting.is_finite():
@@ -2060,6 +2143,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		npc.rotation.y = lerp_angle(npc.rotation.y,atan2(face.x,face.z),minf(dt*5.0,1.0))
 		if absf(angle_difference(npc.rotation.y,atan2(face.x,face.z)))<0.22 and npc_fire_exists(camp):
 			npc.set_meta("camp_warming",true)
+			npc.set_meta("warm_seconds",float(npc.get_meta("warm_seconds",0.0))+dt)
 		return Vector3.ZERO
 	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
 		if not night and elapsed>=float(npc.get_meta("next_plant",0.0)) and (int(npc.get_meta("carried_seeds",0))>0 or int(npc.get_meta("carried_tomatoes",0))>=4):
@@ -2184,7 +2268,7 @@ func npc_sync_axe_visual(npc: CharacterBody3D, item: int) -> void:
 
 func npc_update_camp_pose(npc: CharacterBody3D) -> void:
 	var equipped := int(npc.get_meta("axe_item",-1))
-	if bool(npc.get_meta("camp_warming",false)):
+	if bool(npc.get_meta("camp_warming",false)) or bool(npc.get_meta("sleeping",false)):
 		equipped = -1
 	npc_sync_axe_visual(npc,equipped)
 	var warming := bool(npc.get_meta("camp_warming",false))
@@ -2319,7 +2403,7 @@ func village_update(dt: float,camp: Vector3) -> void:
 		var age := float(data.get("age",VILLAGE_ADULT_AGE))
 		var satiety := maxf(0.0,float(data.get("satiety",100.0))-step*.035)
 		var resting := npc_is_night() and npc.velocity.length()<.3
-		var energy := clampf(float(data.get("energy",100.0))+step*(.25 if resting else -.025),0.0,100.0)
+		var energy := clampf(float(data.get("energy",100.0))+step*(.45 if bool(npc.get_meta("sleeping",false)) else .10 if resting else -.025),0.0,100.0)
 		if satiety<65.0 and int(npc.get_meta("carried_tomatoes",0))>0:
 			npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))-1)
 			satiety = minf(100.0,satiety+25.0)
@@ -2401,6 +2485,10 @@ func update_villagers(dt: float) -> void:
 		if not is_instance_valid(npc) or npc.is_queued_for_deletion():
 			continue
 		npc.set_meta("camp_warming",false)
+		if not npc_is_night() and bool(npc.get_meta("sleeping",false)):
+			npc_sleep_pose(npc,false)
+			npc.set_meta("work_mode","")
+			npc.set_meta("warm_seconds",0.0)
 		npc_restore_ground(npc)
 		if not npc_has_loaded_ground(npc.global_position):
 			npc.velocity = Vector3.ZERO
@@ -2442,6 +2530,8 @@ func update_villagers(dt: float) -> void:
 			heading = toward.normalized() if toward.length()>.6 and not npc.is_on_wall() else Vector3.ZERO
 			walking = not heading.is_zero_approx()
 		elif pursuing:
+			if bool(npc.get_meta("sleeping",false)):
+				npc_sleep_pose(npc,false)
 			heading = npc_defend(npc,attacker,dt)
 			walking = not heading.is_zero_approx()
 		elif elapsed<float(npc.get_meta("recover_until",0.0)):
@@ -2458,6 +2548,9 @@ func update_villagers(dt: float) -> void:
 			walking = not heading.is_zero_approx()
 		elif str(village_population.get(str(npc.get_meta("id","")),{}).get("order","auto"))=="guard":
 			heading = delta_home.normalized() if distance_home>4.0 else Vector3.ZERO
+			walking = not heading.is_zero_approx()
+		elif npc_is_night() and (bool(npc.get_meta("sleeping",false)) or str(npc.get_meta("work_mode",""))=="bed_walk"):
+			heading = npc_routine(npc,campfire,dt)
 			walking = not heading.is_zero_approx()
 		elif distance_home>NPC_PATROL_RADIUS-.85 and not (str(npc.get_meta("work_mode",""))=="infra" and str(npc.get_meta("infra_kind",""))=="bed"):
 			heading = delta_home.normalized()
@@ -2504,7 +2597,7 @@ func update_villagers(dt: float) -> void:
 		npc_restore_ground(npc)
 		# O limite é aplicado após a física, mesmo quando há empurrões.
 		var displacement := Vector2(npc.global_position.x-campfire.x,npc.global_position.z-campfire.z)
-		var movement_limit := NPC_COMBAT_RADIUS if pursuing or distance_home>NPC_PATROL_RADIUS or (str(npc.get_meta("work_mode",""))=="infra" and str(npc.get_meta("infra_kind",""))=="bed") else NPC_PATROL_RADIUS
+		var movement_limit := NPC_COMBAT_RADIUS if pursuing or distance_home>NPC_PATROL_RADIUS or str(npc.get_meta("work_mode",""))=="bed_walk" or (str(npc.get_meta("work_mode",""))=="infra" and str(npc.get_meta("infra_kind",""))=="bed") else NPC_PATROL_RADIUS
 		if displacement.length()>movement_limit:
 			var border := displacement.normalized()*(movement_limit-.04)
 			npc.global_position = Vector3(campfire.x+border.x,npc.global_position.y,campfire.z+border.y)
@@ -2513,6 +2606,8 @@ func update_villagers(dt: float) -> void:
 		npc_restore_ground(npc)
 		npc_update_camp_pose(npc)
 		var npc_visual: Node3D = npc.get_node("Visual")
+		if bool(npc.get_meta("sleeping",false)):
+			continue
 		walk_pose(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
 		animate_npc_model(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
 
@@ -8800,7 +8895,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"npc_health":int(npc.get_meta("npc_health",100)),"resident":true,"axe_item":int(npc.get_meta("axe_item",-1)),"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"npc_health":int(npc.get_meta("npc_health",100)),"resident":true,"axe_item":int(npc.get_meta("axe_item",-1)),"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"sleeping":bool(npc.get_meta("sleeping",false)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -8860,6 +8955,7 @@ func net_apply_entities(states: Array) -> void:
 			obj.set_meta("axe_item",int(data.get("axe_item",-1)))
 			npc_sync_axe_visual(obj as CharacterBody3D,-1 if bool(data.get("camp_warming",false)) else int(data.get("axe_item",-1)))
 			npc_world_clock = float(data["clock"])
+			npc_sleep_pose(obj as CharacterBody3D,bool(data.get("sleeping",false)))
 			obj.set_meta("camp_warming",bool(data.get("camp_warming",false)))
 			obj.set_meta("camp_stretch",float(data.get("camp_stretch",-1.0)))
 			var serial := int(data.get("attack_serial",0))
