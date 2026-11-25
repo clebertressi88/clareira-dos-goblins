@@ -134,8 +134,15 @@ jobs:
             Write-Host 'Compilacao superada por uma atualizacao mais recente. Publicacao ignorada.'
             exit 0
           }
-          gh release view laboratorio-dev-windows *> $null
-          if ($LASTEXITCODE -ne 0) {
+          # A Release ainda nao existe no primeiro build. O GitHub CLI escreve
+          # 'release not found' no stderr; PS 5.1 transforma isso em excecao
+          # quando ErrorActionPreference='Stop', mesmo com redirecionamento.
+          $ErrorActionPreference = 'Continue'
+          try {
+            gh release view laboratorio-dev-windows --json tagName 2>$null | Out-Null
+            $releaseCode = $LASTEXITCODE
+          } finally { $ErrorActionPreference = 'Stop' }
+          if ($releaseCode -ne 0) {
             gh release create laboratorio-dev-windows --title 'Laboratorio de Desenvolvedor - Clareira dos Goblins' --notes 'Programa Windows separado do jogo; mundo plano, catalogo de itens e teste de criaturas.' --latest=false
             if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar release do laboratorio.' }
           }
