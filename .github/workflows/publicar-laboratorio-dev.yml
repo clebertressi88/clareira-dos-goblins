@@ -1,0 +1,148 @@
+name: Compilar Laboratorio Dev Windows (programa separado)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Laboratorio-Desenvolvedor/**'
+      - '.github/workflows/publicar-laboratorio-dev.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: laboratorio-dev-windows
+  cancel-in-progress: true
+
+jobs:
+  laboratorio-dev:
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar projeto standalone sem alterar o projeto do jogo
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP "clareira-lab-$env:GITHUB_RUN_ID"
+          if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+          Copy-Item 'Projeto-Godot' $stage -Recurse
+          Copy-Item 'Laboratorio-Desenvolvedor/laboratorio_dev.gd' (Join-Path $stage 'laboratorio_dev.gd')
+          Copy-Item 'Laboratorio-Desenvolvedor/laboratorio_dev.tscn' (Join-Path $stage 'laboratorio_dev.tscn')
+          $project = Join-Path $stage 'project.godot'
+          $source = [System.IO.File]::ReadAllText($project)
+          if (-not $source.Contains('run/main_scene="res://main.tscn"')) { throw 'Cena principal do jogo mudou; revise o build isolado do laboratorio.' }
+          $source = $source.Replace('config/name="Clareira dos Goblins"','config/name="Laboratorio Dev da Clareira"')
+          $source = $source.Replace('run/main_scene="res://main.tscn"','run/main_scene="res://laboratorio_dev.tscn"')
+          [System.IO.File]::WriteAllText($project,$source,(New-Object System.Text.UTF8Encoding($false)))
+          "LAB_PROJECT=$stage" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Laboratorio usa somente uma copia temporaria em $stage"
+
+      - name: Usar Godot do runner ou preparar ferramentas
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '4.7.2'
+          $cacheDir = "C:\ProgramData\ClareiraGodot\$version"
+          $exe = Join-Path $cacheDir "Godot_v$version-stable_win64_console.exe"
+          $toolsDir = Join-Path $env:RUNNER_TEMP 'clareira-lab-tools'
+          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+          $templates = Join-Path $env:APPDATA "Godot/export_templates/$version.stable"
+          $release = Join-Path $templates 'windows_release_x86_64.exe'
+          if (-not (Test-Path $exe)) {
+            $exe = Join-Path $toolsDir "Godot_v$version-stable_win64_console.exe"
+            if (-not (Test-Path $exe)) {
+              $archive = Join-Path $toolsDir 'godot.zip'
+              Invoke-WebRequest -Uri "https://github.com/godotengine/godot/releases/download/$version-stable/Godot_v$version-stable_win64.exe.zip" -OutFile $archive
+              Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
+            }
+          }
+          if (-not (Test-Path $release)) {
+            New-Item -ItemType Directory -Path $templates -Force | Out-Null
+            $cachedTemplates = Join-Path $cacheDir 'templates'
+            $cachedRelease = Join-Path $cachedTemplates 'windows_release_x86_64.exe'
+            if (Test-Path $cachedRelease) {
+              Copy-Item (Join-Path $cachedTemplates 'windows_*_x86_64.exe') -Destination $templates -Force
+            } else {
+              $archive = Join-Path $toolsDir 'templates.zip'
+              Invoke-WebRequest -Uri "https://github.com/godotengine/godot/releases/download/$version-stable/Godot_v$version-stable_export_templates.tpz" -OutFile $archive
+              $extracted = Join-Path $toolsDir 'template-files'
+              Expand-Archive -Path $archive -DestinationPath $extracted -Force
+              Get-ChildItem $extracted -Filter 'windows_*_x86_64.exe' -Recurse -File | ForEach-Object {
+                Copy-Item $_.FullName -Destination $templates -Force
+              }
+            }
+          }
+          if (-not (Test-Path $exe)) { throw 'Executavel Godot indisponivel.' }
+          if (-not (Test-Path $release)) { throw 'Template de exportacao nao encontrado.' }
+          "LAB_GODOT=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw 'Godot nao iniciou.' }
+
+      - name: Importar recursos e validar programa isolado
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $importLog = & $env:LAB_GODOT --headless --path $env:LAB_PROJECT --import 2>&1 | Out-String
+          $importCode = $LASTEXITCODE
+          Write-Host $importLog
+          if ($importCode -ne 0 -or $importLog -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+            throw 'Falha na importacao dos modelos, scripts ou texturas do laboratorio.'
+          }
+          $checkLog = & $env:LAB_GODOT --headless --path $env:LAB_PROJECT --check-only --script res://laboratorio_dev.gd 2>&1 | Out-String
+          $checkCode = $LASTEXITCODE
+          Write-Host $checkLog
+          if ($checkCode -ne 0 -or $checkLog -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') {
+            throw 'Erro de compilacao no laboratorio.'
+          }
+          $smokeLog = & $env:LAB_GODOT --headless --path $env:LAB_PROJECT --quit-after 15 2>&1 | Out-String
+          $smokeCode = $LASTEXITCODE
+          Write-Host $smokeLog
+          if ($smokeCode -ne 0 -or $smokeLog -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Invalid|ERROR:.*Parse Error)') {
+            throw 'Falha na inicializacao do laboratorio.'
+          }
+
+      - name: Gerar EXE e ZIP independentes
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist-laboratorio'
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          $exe = Join-Path $dist 'Clareira-Laboratorio-Dev.exe'
+          $log = & $env:LAB_GODOT --headless --path $env:LAB_PROJECT --export-release 'Windows Desktop' $exe 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $log
+          if ($code -ne 0 -or -not (Test-Path $exe) -or (Get-Item $exe).Length -le 0) { throw 'Exportacao do laboratorio falhou.' }
+          $checksum = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$checksum  Clareira-Laboratorio-Dev.exe" | Set-Content (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii
+          $env:GITHUB_SHA | Set-Content (Join-Path $dist 'versao-github.txt') -Encoding ascii
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'Clareira-Laboratorio-Dev-Windows.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path $exe,(Join-Path $dist 'SHA256SUMS.txt'),(Join-Path $dist 'versao-github.txt') -DestinationPath $zip -CompressionLevel Optimal
+          if (-not (Test-Path $zip)) { throw 'Pacote ZIP nao foi criado.' }
+
+      - name: Publicar laboratorio em release separada
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (gh api "repos/$env:GITHUB_REPOSITORY/commits/main" | ConvertFrom-Json).sha
+          if ($LASTEXITCODE -ne 0 -or -not $head) { throw 'Nao foi possivel conferir a branch principal.' }
+          if ($head -ne $env:GITHUB_SHA) {
+            Write-Host 'Compilacao superada por uma atualizacao mais recente. Publicacao ignorada.'
+            exit 0
+          }
+          gh release view laboratorio-dev-windows *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create laboratorio-dev-windows --title 'Laboratorio de Desenvolvedor - Clareira dos Goblins' --notes 'Programa Windows separado do jogo; mundo plano, catalogo de itens e teste de criaturas.' --latest=false
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar release do laboratorio.' }
+          }
+          gh release upload laboratorio-dev-windows 'Clareira-Laboratorio-Dev-Windows.zip' --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao enviar laboratorio.' }
+          $assets = @(gh release view laboratorio-dev-windows --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0 -or $assets -notcontains 'Clareira-Laboratorio-Dev-Windows.zip') {
+            throw 'O ZIP do laboratorio nao foi confirmado na release.'
+          }
+          Write-Host 'Publicacao separada confirmada.'
