@@ -68,13 +68,17 @@ func _create_flat_arena() -> void:
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(LAB_WIDTH,1.0,LAB_WIDTH)
 	floor_shape.shape = shape
-	floor_shape.position.y = -0.5
+	# O topo da caixa fisica fica exatamente em Y=0, igual a ground().
+	floor_shape.position.y = -shape.size.y * 0.5
 	floor_body.add_child(floor_shape)
 	var mesh := MeshInstance3D.new()
+	mesh.name = "SuperficieVisual"
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(LAB_WIDTH,LAB_WIDTH)
 	mesh.mesh = plane
-	mesh.position.y = .5
+	# Usar a mesma altura do topo da colisao, sem deslocamento de 0,5 m.
+	mesh.position.y = floor_shape.position.y + shape.size.y * 0.5
+	assert(is_equal_approx(mesh.position.y, ground(0.0,0.0)))
 	var surface := StandardMaterial3D.new()
 	surface.albedo_color = Color("#78846b")
 	surface.roughness = 1.0
