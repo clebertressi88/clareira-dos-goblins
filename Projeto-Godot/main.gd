@@ -1646,12 +1646,53 @@ func npc_update_camp_pose(npc: CharacterBody3D) -> void:
 	if rig!=null:
 		rig.call("set_camp_warmth",warming,progress)
 
+# NPCs persistem mesmo quando a regiao visual/fisica e descarregada.
+# Suspender a fisica fora dos chunks ativos evita queda infinita sem manter
+# terreno adicional em memoria. Restaurar apenas posicoes abaixo do relevo.
+func npc_restore_ground(npc: CharacterBody3D) -> void:
+	var pos := npc.global_position
+	if not pos.is_finite():
+		pos = npc.get_meta("home",Vector3(-2,0,-4))
+		pos.y = ground(pos.x,pos.z)+0.12
+		npc.global_position = pos
+		npc.velocity = Vector3.ZERO
+		return
+	var floor_y := ground(pos.x,pos.z)
+	if pos.y<floor_y-0.45:
+		pos.y = floor_y+0.16
+		npc.global_position = pos
+		npc.velocity = Vector3.ZERO
+
+func npc_has_loaded_ground(pos: Vector3) -> bool:
+	var key := chunk_from_position(pos)
+	var chunk: Node3D = chunks.get(key,null)
+	return is_instance_valid(chunk) and not chunk.is_queued_for_deletion() and chunk.has_node("TerrenoFisico")
+
 func update_villagers(dt: float) -> void:
 	var campfire := get_campfire_center()
+	# Recuperar referencias sem duplicar moradores ou recriar inventarios.
+	for i in range(villagers.size()-1,-1,-1):
+		if not is_instance_valid(villagers[i]) or villagers[i].is_queued_for_deletion():
+			villagers.remove_at(i)
+	for id in ["Bruma","Talo"]:
+		var resident: CharacterBody3D
+		for existing in villagers:
+			if str(existing.get_meta("id",""))==id:
+				resident = existing
+				break
+		if not is_instance_valid(resident):
+			spawn_friendly_goblin(id,campfire+Vector3(-2.0 if id=="Bruma" else 2.0,0,1.5))
+		else:
+			objects[id] = resident
 	for npc in villagers:
 		if not is_instance_valid(npc) or npc.is_queued_for_deletion():
 			continue
 		npc.set_meta("camp_warming",false)
+		npc_restore_ground(npc)
+		if not npc_has_loaded_ground(npc.global_position):
+			npc.velocity = Vector3.ZERO
+			npc_update_camp_pose(npc)
+			continue
 		var delta_home := campfire-npc.global_position
 		delta_home.y = 0.0
 		var distance_home := delta_home.length()
@@ -1705,10 +1746,15 @@ func update_villagers(dt: float) -> void:
 			npc.velocity.y -= 15.0*dt
 		else:
 			npc.velocity.y = -0.1
+		var projected := npc.global_position+Vector3(npc.velocity.x,0,npc.velocity.z)*dt
+		if not npc_has_loaded_ground(projected):
+			npc.velocity.x = 0.0
+			npc.velocity.z = 0.0
 		try_character_step(npc,dt)
 		npc.move_and_slide()
 		if npc.velocity.y<=0.0:
 			npc.apply_floor_snap()
+		npc_restore_ground(npc)
 		# O limite é aplicado após a física, mesmo quando há empurrões.
 		var displacement := Vector2(npc.global_position.x-campfire.x,npc.global_position.z-campfire.z)
 		if displacement.length()>NPC_PATROL_RADIUS:
@@ -1716,6 +1762,7 @@ func update_villagers(dt: float) -> void:
 			npc.global_position = Vector3(campfire.x+border.x,npc.global_position.y,campfire.z+border.y)
 			npc.velocity.x = 0.0
 			npc.velocity.z = 0.0
+		npc_restore_ground(npc)
 		npc_update_camp_pose(npc)
 		var npc_visual: Node3D = npc.get_node("Visual")
 		walk_pose(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
@@ -7473,11 +7520,22 @@ func net_apply_entities(states: Array) -> void:
 			continue
 		visible_ids[id] = true
 		var obj: Node3D = objects.get(id,null)
-		if not is_instance_valid(obj):
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
 			if kind in ["Bruma","Talo"]:
-				continue
-			obj = creature(kind,id,pos,self)
-			obj.set_meta("net_mob",true)
+				for existing in villagers:
+					if is_instance_valid(existing) and not existing.is_queued_for_deletion() and str(existing.get_meta("id",""))==id:
+						obj = existing
+						break
+				if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+					spawn_friendly_goblin(kind,pos)
+					obj = objects.get(id,null)
+				else:
+					objects[id] = obj
+				if not is_instance_valid(obj):
+					continue
+			else:
+				obj = creature(kind,id,pos,self)
+				obj.set_meta("net_mob",true)
 		var angle := float(data.get("r",0.0))
 		if obj.has_meta("net_mob"):
 			var delta := (pos as Vector3)-obj.global_position
