@@ -117,7 +117,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 12 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
-const NET_SHARED_KINDS := ITEM_KINDS + ["stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["village_cabin","stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -1154,6 +1154,9 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 			var owner := str(obj.get_meta("npc_owner",""))
 			if not owner.is_empty() and owner!=str(npc.get_meta("id","")):
 				continue
+		elif vegetation_kind(kind):
+			if not bool(obj.get_meta("ready",true)):
+				continue
 		elif kind=="tomato_crop":
 			if not bool(obj.get_meta("ready",false)) or tomato_available(obj)<=0:
 				continue
@@ -1220,6 +1223,14 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		return
 	if npc_loose_item(obj)>=0:
 		npc_collect_loose(npc,obj)
+	elif vegetation_kind(kind) and bool(obj.get_meta("ready",true)) and npc_delivery_count(npc)<32:
+		var item := 1 if kind=="forest_shrub" else VINE
+		village_add_carried(npc,item,1)
+		vegetation_harvest[id] = Time.get_unix_time_from_system()+VEGETATION_REGROW_SECONDS
+		update_vegetation_visual(obj)
+		if net_role=="host":
+			net_vegetation_harvested.rpc(id,float(vegetation_harvest[id]))
+		save_game()
 	elif kind=="tomato_plant" or (kind=="tomato_crop" and bool(obj.get_meta("ready",false))):
 		if npc_delivery_count(npc)<32 and take_one_tomato(obj):
 			npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+1)
@@ -1463,9 +1474,308 @@ func npc_planting_spot(npc: CharacterBody3D,camp: Vector3) -> Vector3:
 			return pos
 	return Vector3.INF
 
+
+# Infraestrutura: usa apenas inventario do morador e depositos fisicamente visitados.
+const VILLAGE_BUILD_COST := {"bench":{1:2,7:2},"chest":{7:8,11:1},"bed":{7:6,1:4,4:3,11:2},"village_cabin":{7:16,6:4,11:4},"fire":{1:2,2:1},"wood_axe":{1:3,7:2}}
+
+func village_carried(npc: CharacterBody3D,item: int) -> int:
+	if item==6:
+		return int(npc.get_meta("carried_wood",0))
+	return int(npc_extra_items(npc).get(str(item),0))
+
+func village_add_carried(npc: CharacterBody3D,item: int,delta: int) -> void:
+	if item==6:
+		npc.set_meta("carried_wood",maxi(0,village_carried(npc,item)+delta))
+		return
+	var bag := npc_extra_items(npc)
+	var key := str(item)
+	var amount := maxi(0,int(bag.get(key,0))+delta)
+	if amount==0:
+		bag.erase(key)
+	else:
+		bag[key] = amount
+	npc.set_meta("extra_items",bag)
+
+func village_local_cost(npc: CharacterBody3D,cost: Dictionary) -> bool:
+	for item in cost:
+		if village_carried(npc,int(item))<int(cost[item]):
+			return false
+	return true
+
+func village_convert_planks(npc: CharacterBody3D,cost: Dictionary) -> void:
+	var logs := int(cost.get(6,0))
+	var planks := int(cost.get(7,0))
+	while village_carried(npc,7)<planks and village_carried(npc,6)>logs:
+		village_add_carried(npc,6,-1)
+		village_add_carried(npc,7,4)
+
+func village_material_total(npc: CharacterBody3D,camp: Vector3,item: int) -> int:
+	var amount := village_carried(npc,item)
+	for chest in village_objects("chest",camp):
+		for cell in normalized_chest_slots(str(chest.get_meta("id",""))):
+			if int(cell[0])==item:
+				amount += int(cell[1])
+	return amount
+
+func village_can_build(npc: CharacterBody3D,camp: Vector3,cost: Dictionary) -> bool:
+	var logs := village_material_total(npc,camp,6)
+	var planks := village_material_total(npc,camp,7)
+	if logs<int(cost.get(6,0)) or planks+maxi(0,logs-int(cost.get(6,0)))*4<int(cost.get(7,0)):
+		return false
+	for item in cost:
+		if int(item) not in [6,7] and village_material_total(npc,camp,int(item))<int(cost[item]):
+			return false
+	return true
+
+func village_supply_target(npc: CharacterBody3D,camp: Vector3,cost: Dictionary) -> Node3D:
+	var best: Node3D
+	var distance := INF
+	var missing: Dictionary = {}
+	for item in cost:
+		missing[int(item)] = maxi(0,int(cost[item])-village_carried(npc,int(item)))
+	if int(missing.get(7,0))>0:
+		missing[6] = int(missing.get(6,0))+ceili(float(missing[7])/4.0)
+	for chest in village_objects("chest",camp):
+		var useful := false
+		for cell in normalized_chest_slots(str(chest.get_meta("id",""))):
+			if int(cell[1])>0 and int(missing.get(int(cell[0]),0))>0:
+				useful = true
+				break
+		var d := npc.global_position.distance_to(chest.global_position)
+		if useful and d<distance:
+			distance = d
+			best = chest
+	return best
+
+func village_take_supplies(npc: CharacterBody3D,chest: Node3D,cost: Dictionary) -> void:
+	var id := str(chest.get_meta("id",""))
+	var slots := normalized_chest_slots(id)
+	# Prioriza tabuas existentes. Troncos extras so sao retirados se faltarem tabuas.
+	for item in [7,6,1,4,11,2]:
+		var need := maxi(0,int(cost.get(item,0))-village_carried(npc,item))
+		if item==6:
+			need += ceili(float(maxi(0,int(cost.get(7,0))-village_carried(npc,7)))/4.0)
+		for i in range(slots.size()):
+			var cell: Array = slots[i]
+			if int(cell[0])!=item or need<=0:
+				continue
+			var taken := mini(need,int(cell[1]))
+			if taken<=0:
+				continue
+			var left := int(cell[1])-taken
+			slots[i] = [item,left] if left>0 else [-1,0]
+			village_add_carried(npc,item,taken)
+			need -= taken
+	chest_storage[id] = slots
+	village_convert_planks(npc,cost)
+	if net_role=="host":
+		net_chest_snapshot.rpc(id,slots)
+	if open_chest_id==id and not chest_pending:
+		show_chest()
+	save_game()
+
+func village_cabins(camp: Vector3) -> Array[Node3D]:
+	var cabins := village_objects("village_cabin",camp)
+	var starter: Node3D = objects.get(STARTER_CABIN_ID,null)
+	if is_instance_valid(starter) and not starter.is_queued_for_deletion() and starter.global_position.distance_to(camp)<NPC_PATROL_RADIUS:
+		cabins.append(starter)
+	return cabins
+
+func village_bed_site(camp: Vector3) -> Vector3:
+	for cabin in village_cabins(camp):
+		for x in [-1.60,1.60]:
+			for z in [-1.12,1.12]:
+				var pos := cabin.to_global(Vector3(x,.25,z))
+				var free := true
+				for bed in village_objects("bed",camp):
+					if bed.global_position.distance_to(pos)<1.9:
+						free = false
+						break
+				if free:
+					var shape := BoxShape3D.new()
+					shape.size = Vector3(.96,.62,1.88)
+					var query := PhysicsShapeQueryParameters3D.new()
+					query.shape = shape
+					query.transform = Transform3D(Basis(Vector3.UP,cabin.rotation.y),pos+Vector3.UP*.34)
+					query.collision_mask = TARGET|4
+					query.exclude = [cabin.get_rid()]
+					if get_world_3d().direct_space_state.intersect_shape(query,1).is_empty():
+						return pos
+	return Vector3.INF
+
+func village_build_site(kind: String,camp: Vector3) -> Vector3:
+	if kind=="bed":
+		return village_bed_site(camp)
+	var large := kind=="village_cabin"
+	var margin := 3.2 if large else 1.0
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(6.4,3.8,6.8) if large else Vector3(1.6,1.4,1.6)
+	for attempt in range(32):
+		var angle := TAU*float(attempt)/32.0+randf_range(-.12,.12)
+		var radius := randf_range(6.0,8.5) if large else randf_range(2.8,6.5)
+		var pos := camp+Vector3(cos(angle)*radius,0,sin(angle)*radius)
+		pos.y = ground(pos.x,pos.z)+.015
+		if TERRAIN.is_river(pos.x,pos.z) or not npc_has_loaded_ground(pos):
+			continue
+		var flat := true
+		for x in [-margin,margin]:
+			for z in [-margin,margin]:
+				if TERRAIN.is_river(pos.x+x,pos.z+z) or absf(ground(pos.x+x,pos.z+z)-pos.y)>(.65 if large else .25):
+					flat = false
+		if not flat:
+			continue
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = shape
+		query.transform = Transform3D(Basis.IDENTITY,pos+Vector3.UP*(1.95 if large else .75))
+		query.collision_mask = TARGET|4
+		if get_world_3d().direct_space_state.intersect_shape(query,1).is_empty():
+			return pos
+	return Vector3.INF
+
+func village_storage_needed(camp: Vector3) -> bool:
+	var chests := village_objects("chest",camp)
+	if chests.is_empty():
+		return true
+	if chests.size()>=6:
+		return false
+	var used := 0
+	for chest in chests:
+		for cell in normalized_chest_slots(str(chest.get_meta("id",""))):
+			if int(cell[0])>=0 and int(cell[1])>=CHEST_STACK_LIMIT:
+				used += 1
+	return used>=ceili(float(chests.size()*CHEST_SIZE)*.80)
+
+func village_plan_build(npc: CharacterBody3D,camp: Vector3) -> bool:
+	if elapsed<float(npc.get_meta("next_infra",0.0)):
+		return false
+	npc.set_meta("next_infra",elapsed+5.0)
+	for other in villagers:
+		if is_instance_valid(other) and other!=npc and str(other.get_meta("work_mode","")).begins_with("infra"):
+			return false
+	var choices: Array[String] = []
+	var station := npc_craft_bench(npc,camp)
+	if station==null:
+		choices.append("bench")
+	else:
+		if int(npc.get_meta("axe_uses",0))<=0 and not npc_has_axe_materials(npc):
+			choices.append("wood_axe")
+		if village_storage_needed(camp):
+			choices.append("chest")
+		var sheltered := 0
+		for bed in village_objects("bed",camp):
+			if village_bed_sheltered(bed):
+				sheltered += 1
+		if sheltered<mini(VILLAGE_MAX,village_population.size()+1):
+			if village_bed_site(camp).is_finite():
+				choices.append("bed")
+			elif village_cabins(camp).size()<3:
+				choices.append("village_cabin")
+	if not npc_fire_exists(camp):
+		choices.append("fire")
+	for kind in choices:
+		var cost: Dictionary = VILLAGE_BUILD_COST[kind]
+		if not village_can_build(npc,camp,cost):
+			continue
+		var site := npc.global_position if kind=="wood_axe" else village_build_site(kind,camp)
+		if not site.is_finite():
+			continue
+		npc.set_meta("infra_kind",kind)
+		npc.set_meta("infra_site",site)
+		npc.set_meta("infra_station_ready",false)
+		npc.set_meta("infra_ready_at",0.0)
+		npc.set_meta("infra_deadline",elapsed+75.0)
+		npc.set_meta("work_mode","infra")
+		return true
+	return false
+
+func village_cancel_build(npc: CharacterBody3D) -> Vector3:
+	npc.set_meta("work_mode","")
+	npc.set_meta("next_work",elapsed+3.0)
+	npc.set_meta("next_infra",elapsed+8.0)
+	return Vector3.ZERO
+
+func village_build_step(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3:
+	var kind := str(npc.get_meta("infra_kind",""))
+	if not VILLAGE_BUILD_COST.has(kind) or elapsed>float(npc.get_meta("infra_deadline",0.0)):
+		return village_cancel_build(npc)
+	var cost: Dictionary = VILLAGE_BUILD_COST[kind]
+	village_convert_planks(npc,cost)
+	if not village_local_cost(npc,cost):
+		var chest := village_supply_target(npc,camp,cost)
+		if not is_instance_valid(chest):
+			return village_cancel_build(npc)
+		var direction := chest.global_position-npc.global_position
+		direction.y = 0.0
+		if direction.length()>1.4:
+			return direction.normalized() if not npc.is_on_wall() else village_cancel_build(npc)
+		village_take_supplies(npc,chest,cost)
+		return Vector3.ZERO
+	if kind not in ["bench","fire"] and not bool(npc.get_meta("infra_station_ready",false)):
+		var station := npc_craft_bench(npc,camp)
+		if not is_instance_valid(station):
+			return village_cancel_build(npc)
+		var direction := station.global_position-npc.global_position
+		direction.y = 0.0
+		if direction.length()>1.4:
+			return direction.normalized() if not npc.is_on_wall() else village_cancel_build(npc)
+		if float(npc.get_meta("infra_ready_at",0.0))<=0.0:
+			npc.set_meta("infra_ready_at",elapsed+3.0)
+			return Vector3.ZERO
+		if elapsed<float(npc.get_meta("infra_ready_at",0.0)):
+			return Vector3.ZERO
+		npc.set_meta("infra_station_ready",true)
+		npc.set_meta("infra_ready_at",0.0)
+		if kind=="wood_axe":
+			if int(npc.get_meta("axe_uses",0))>0:
+				return village_cancel_build(npc)
+			for item in cost:
+				village_add_carried(npc,int(item),-int(cost[item]))
+			npc.set_meta("axe_item",WOOD_AXE)
+			npc.set_meta("axe_uses",int(TOOL_MAX_DURABILITY[WOOD_AXE]))
+			save_game()
+			return village_cancel_build(npc)
+	var site: Vector3 = npc.get_meta("infra_site",Vector3.INF)
+	if not site.is_finite():
+		return village_cancel_build(npc)
+	var toward := site-npc.global_position
+	toward.y = 0.0
+	var reach := 3.5 if kind=="village_cabin" else 1.45
+	if toward.length()>reach:
+		return toward.normalized() if not npc.is_on_wall() else village_cancel_build(npc)
+	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(toward.x,toward.z),minf(dt*5.0,1.0))
+	if float(npc.get_meta("infra_ready_at",0.0))<=0.0:
+		npc.set_meta("infra_ready_at",elapsed+(12.0 if kind=="village_cabin" else 4.0))
+		return Vector3.ZERO
+	if elapsed<float(npc.get_meta("infra_ready_at",0.0)):
+		return Vector3.ZERO
+	# Revalida o local antes de descontar o material e evita sobreposicao.
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(6.0,3.6,6.0) if kind=="village_cabin" else (Vector3(.96,.60,1.88) if kind=="bed" else Vector3(1.25,1.0,1.0))
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis.IDENTITY,site+Vector3.UP*(1.9 if kind=="village_cabin" else .55))
+	query.collision_mask = TARGET|4
+	var exclude: Array[RID] = [npc.get_rid()]
+	if kind=="bed":
+		for cabin in village_cabins(camp):
+			if absf(site.x-cabin.global_position.x)<2.1 and absf(site.z-cabin.global_position.z)<2.1:
+				exclude.append(cabin.get_rid())
+	query.exclude = exclude
+	if not get_world_3d().direct_space_state.intersect_shape(query,1).is_empty():
+		return village_cancel_build(npc)
+	for item in cost:
+		village_add_carried(npc,int(item),-int(cost[item]))
+	store_object(kind,site)
+	save_game()
+	return village_cancel_build(npc)
+
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
 	var task := str(npc.get_meta("work_mode",""))
+	if not night and task=="" and village_plan_build(npc,camp):
+		task = "infra"
+	if task=="infra" and not night:
+		return village_build_step(npc,camp,dt)
 	var loot := npc_work_target(npc,camp) if (task=="" or task=="warm") and elapsed>=float(npc.get_meta("next_loot_scan",0.0)) else null
 	if task=="" or task=="warm":
 		if elapsed>=float(npc.get_meta("next_loot_scan",0.0)):
@@ -1763,7 +2073,7 @@ func village_bed_sheltered(bed: Node3D) -> bool:
 		return true
 	var ray_query := PhysicsRayQueryParameters3D.create(pos+Vector3.UP*.85,pos+Vector3.UP*4.0,SOLID,[bed.get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(ray_query)
-	return not hit.is_empty() and str(hit.get("collider").get_meta("kind","")) in ["wood_floor","hut"]
+	return not hit.is_empty() and str(hit.get("collider").get_meta("kind","")) in ["wood_floor","hut","village_cabin"]
 
 func village_food_count(camp: Vector3) -> int:
 	var amount := 0
@@ -2139,7 +2449,7 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			# A colisao cobre o tampo e o rack, sem bloquear area livre ao redor.
 			collider(o,Vector3(1.36,1.34,0.92) if advanced_workbench else Vector3(1.16,0.89,0.80),
 				Vector3.UP*(0.67 if advanced_workbench else 0.445))
-		"hut":
+		"hut","village_cabin":
 			o.collision_layer |= SOLID
 			preload("res://starter_cabin.gd").build(self,o)
 		"Bruma","Talo":
@@ -5494,6 +5804,10 @@ func construction_candidate(kind: String) -> Dictionary:
 				point = find_floor_snap(point)
 	else:
 		point.y = construction_surface(point,point.y+.25)
+		if kind=="bed" and support_kind in ["hut","village_cabin"]:
+			var inside := support.to_local(point)
+			if absf(inside.x)<1.95 and absf(inside.z)<1.65:
+				point.y = support.global_position.y+.25
 	var valid := not hit.is_empty()
 	if is_stair:
 		valid = valid and (support_kind=="wood_floor" or support_kind=="")
@@ -5523,6 +5837,8 @@ func construction_candidate(kind: String) -> Dictionary:
 		if is_instance_valid(obj) and obj is CollisionObject3D:
 			var object_kind := str(obj.get_meta("kind",""))
 			if (is_wall or is_floor) and object_kind in ["wood_wall","wood_doorway","wood_window","wood_floor"]:
+				excluded.append(obj.get_rid())
+			elif kind=="bed" and object_kind in ["hut","village_cabin"] and absf(point.x-obj.global_position.x)<1.95 and absf(point.z-obj.global_position.z)<1.65:
 				excluded.append(obj.get_rid())
 			elif not is_wall and not is_floor and object_kind=="wood_floor" and absf(obj.global_position.y+.116-point.y)<.04:
 				excluded.append(obj.get_rid())
@@ -7669,7 +7985,7 @@ func net_dismantle_feedback(hits: int,required: int,recovered_item: int) -> void
 
 @rpc("any_peer","call_remote","reliable")
 func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
-	if net_role!="host" or kind in ["hut","tomato_crop"] or kind not in NET_SHARED_KINDS:
+	if net_role!="host" or kind in ["hut","tomato_crop","village_cabin"] or kind not in NET_SHARED_KINDS:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
