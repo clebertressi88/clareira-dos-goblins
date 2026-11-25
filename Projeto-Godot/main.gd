@@ -120,6 +120,9 @@ var build_level := 0 # 0=terreo; 1=segundo; 2=terceiro; 3=teto terceiro
 var build_rotation := 0 # incrementos de 90 graus
 var objects: Dictionary = {}
 var chunks: Dictionary = {}
+var pending_chunks: Array[Vector2i] = []
+var pending_horizon_center := Vector2i.ZERO
+var horizon_pending := false
 var distant_horizon: MeshInstance3D
 var distant_horizon_center := Vector2i(1000000,1000000)
 var distant_horizon_radius := -1
@@ -719,15 +722,50 @@ func load_chunks() -> void:
 			objects.erase(child.get_meta("id",""))
 		chunk.queue_free()
 		chunks.erase(key)
+	# Entrada inicial e troca de mundo continuam sincronas; vizinhanca fisica
+	# imediata e regioes de visitantes tambem, para preservar a jogabilidade.
+	var initial_load := chunks.is_empty()
+	pending_chunks.clear()
 	for key: Vector2i in desired.keys():
+		if chunks.has(key):
+			continue
+		var urgent := initial_load
+		for center: Vector2i in centers:
+			if maxi(absi(key.x-center.x),absi(key.y-center.y))<=1:
+				urgent = true
+				break
+		if urgent:
+			create_chunk(key)
+		else:
+			pending_chunks.append(key)
+	pending_horizon_center = centers[0]
+	horizon_pending = distant_horizon_center!=centers[0] or distant_horizon_radius!=visible_chunk_radius or not is_instance_valid(distant_horizon)
+	if initial_load:
+		refresh_distant_horizon(centers[0])
+		horizon_pending = false
+
+func stream_next_chunk() -> void:
+	# No maximo um setor por quadro de renderizacao, nunca junto ao horizonte.
+	if not pending_chunks.is_empty():
+		var key: Vector2i = pending_chunks.pop_front()
 		if not chunks.has(key):
 			create_chunk(key)
-	refresh_distant_horizon(centers[0])
+	elif horizon_pending:
+		horizon_pending = false
+		refresh_distant_horizon(pending_horizon_center)
+
+func _process(_delta: float) -> void:
+	stream_next_chunk()
 
 func create_chunk(key: Vector2i) -> void:
 	var chunk := Node3D.new()
 	add_child(chunk)
 	chunks[key] = chunk
+	var heights := PackedFloat32Array()
+	heights.resize((CHUNK+1)*(CHUNK+1))
+	for zi in range(CHUNK+1):
+		for xi in range(CHUNK+1):
+			heights[zi*(CHUNK+1)+xi] = ground(float(key.x*CHUNK+xi),float(key.y*CHUNK+zi))
 	var mesh := SurfaceTool.new()
 	mesh.begin(Mesh.PRIMITIVE_TRIANGLES)
 	# A malha visivel e a colisao HeightMap usam a MESMA grade de 1 metro.
@@ -742,7 +780,7 @@ func create_chunk(key: Vector2i) -> void:
 				var px: float = left+corner.x
 				var pz: float = near+corner.y
 				mesh.set_uv(Vector2(px,pz)/2.)
-				mesh.add_vertex(Vector3(px,ground(px,pz),pz))
+				mesh.add_vertex(Vector3(px,heights[(z+int(corner.y))*(CHUNK+1)+x+int(corner.x)],pz))
 	mesh.generate_normals()
 	var geometry := mesh.commit()
 	var land := mesh_part(chunk,geometry,Vector3.ZERO,Vector3.ONE,materials["grass"])
@@ -759,11 +797,6 @@ func create_chunk(key: Vector2i) -> void:
 	var height_shape := HeightMapShape3D.new()
 	height_shape.map_width = CHUNK+1
 	height_shape.map_depth = CHUNK+1
-	var heights := PackedFloat32Array()
-	heights.resize((CHUNK+1)*(CHUNK+1))
-	for zi in range(CHUNK+1):
-		for xi in range(CHUNK+1):
-			heights[zi*(CHUNK+1)+xi] = ground(float(key.x*CHUNK+xi),float(key.y*CHUNK+zi))
 	height_shape.map_data = heights
 	var floor_collision := CollisionShape3D.new()
 	floor_collision.name = "ColisaoTerreno"
