@@ -39,6 +39,24 @@ static func build(game, body: StaticBody3D) -> void:
 	for i in range(11):
 		var x := -2.45+float(i)*.48
 		trim_box(game,body,Vector3(x,.248,0),Vector3(.025,.012,5.25),timber)
+	# Rampa sem degrau, ajustada ao terreno real em cada cabana.
+	var ramp_length := 1.8
+	var outside := body.to_global(Vector3(0,0,2.7+ramp_length))
+	var low := minf(.24,float(game.ground(outside.x,outside.z))-body.global_position.y-.06)
+	var rise := .24-low
+	var angle := atan2(rise,ramp_length)
+	var ramp_size := Vector3(1.46,.12,sqrt(ramp_length*ramp_length+rise*rise))
+	var ramp_pos := Vector3(0,(.24+low)*.5-.06,2.7+ramp_length*.5)
+	var ramp: MeshInstance3D = game.box(body,ramp_pos,ramp_size,"wood",wood)
+	ramp.rotation.x = angle
+	preload("res://cabin_materials.gd").apply(game,ramp,"wood",wood)
+	var ramp_shape := BoxShape3D.new()
+	ramp_shape.size = ramp_size
+	var ramp_collision := CollisionShape3D.new()
+	ramp_collision.shape = ramp_shape
+	ramp_collision.position = ramp_pos
+	ramp_collision.rotation.x = angle
+	body.add_child(ramp_collision)
 	# Estrutura solida: paredes de barro/taipa, madeira aparente e aberturas reais.
 	for x in [-2.65,2.65]:
 		for z in [-2.65,2.65]:
@@ -73,8 +91,9 @@ static func build(game, body: StaticBody3D) -> void:
 	# Montantes e travas da fachada: identidade de construcoes goblins.
 	for x in [-2.48,2.48]:
 		beam(game,body,Vector3(x,.30,2.80),Vector3(x+(.24 if x<0 else -.22),2.85,2.80),.09,timber)
-	for y in [.55,2.72]:
-		beam(game,body,Vector3(-2.68,y,2.78),Vector3(2.67,y+.07,2.78),.065,timber)
+	beam(game,body,Vector3(-2.68,2.72,2.78),Vector3(2.67,2.79,2.78),.065,timber)
+	for side in [-1.0,1.0]:
+		beam(game,body,Vector3(side*.95,.55,2.78),Vector3(side*2.68,.62,2.78),.065,timber)
 	# Telhado alto, duas aguas; base com colisao inclinada.
 	for side in [-1,1]:
 		var s := float(side)
