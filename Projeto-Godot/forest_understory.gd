@@ -188,19 +188,30 @@ static func _foliage_mesh() -> Mesh:
 	meshes["foliage_detail"] = leaf
 	return leaf
 
-static func _leaflet(parent: Node3D, start: Vector3, end: Vector3, width: float, mat: Material) -> void:
+static func _leaflet(batches: Dictionary, start: Vector3, end: Vector3, width: float, mat: Material) -> void:
 	var axis := end-start
 	if axis.length_squared()<0.0001:
 		return
-	var blade := MeshInstance3D.new()
-	blade.name = "Folha"
-	blade.mesh = _foliage_mesh()
-	blade.material_override = mat
-	blade.position = start
-	blade.quaternion = Quaternion(Vector3.UP,axis.normalized())
-	blade.scale = Vector3(width,axis.length(),width)
-	blade.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(blade)
+	var basis := Basis(Quaternion(Vector3.UP,axis.normalized())).scaled_local(Vector3(width,axis.length(),width))
+	if not batches.has(mat):
+		batches[mat] = []
+	batches[mat].append(Transform3D(basis,start))
+
+static func _flush_leaflets(parent: Node3D, batches: Dictionary) -> void:
+	for mat in batches:
+		var transforms: Array = batches[mat]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = _foliage_mesh()
+		mm.instance_count = transforms.size()
+		for i in range(transforms.size()):
+			mm.set_instance_transform(i,transforms[i])
+		var blade := MultiMeshInstance3D.new()
+		blade.name = "FolhasAgrupadas"
+		blade.multimesh = mm
+		blade.material_override = mat
+		blade.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(blade)
 
 static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 	var rng := RandomNumberGenerator.new()
@@ -210,6 +221,7 @@ static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 	var leaf_medium := _mat(Color("#638b45"))
 	var leaf_light := _mat(Color("#86a35d"))
 	var bark := _mat(Color("#735b40"))
+	var batches: Dictionary = {}
 	var woody := kind=="forest_shrub"
 	var reed := kind=="river_reed"
 	var count := 6 if woody else 7 if kind=="fern" else 8
@@ -239,7 +251,7 @@ static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 				var t := .2+float(j)*.23
 				var from := root.lerp(tip,t)
 				var point := from+radial*rng.randf_range(.12,.23)+Vector3.UP*rng.randf_range(.13,.31)
-				_leaflet(parent,from,point,.055,leaf_light if j%2==0 else leaf_medium)
+				_leaflet(batches,from,point,.055,leaf_light if j%2==0 else leaf_medium)
 			continue
 		var pairs := 4 if woody else 6
 		for j in range(pairs):
@@ -252,6 +264,7 @@ static func build_plant(parent: Node3D, kind: String, seed: String) -> void:
 				_stem(parent,branch_base,branch_end,.005 if woody else .003,branch_mat)
 				var leaf_tip: Vector3 = branch_end+offset.normalized()*rng.randf_range(.065,.11)+Vector3.UP*rng.randf_range(.005,.05)
 				var leaf_mat: Material = leaf_green if (i+j)%3==0 else leaf_medium if (i+j)%3==1 else leaf_light
-				_leaflet(parent,branch_end,leaf_tip,.060 if woody else .039,leaf_mat)
+				_leaflet(batches,branch_end,leaf_tip,.060 if woody else .039,leaf_mat)
 		# Uma folha terminal define o contorno sem blocos verdes artificiais.
-		_leaflet(parent,tip-radial*.02,tip+radial*.10+Vector3.UP*.055,.073 if woody else .045,leaf_medium)
+		_leaflet(batches,tip-radial*.02,tip+radial*.10+Vector3.UP*.055,.073 if woody else .045,leaf_medium)
+	_flush_leaflets(parent,batches)
