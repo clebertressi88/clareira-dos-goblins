@@ -217,6 +217,7 @@ var health := 100
 var bench := false
 var hut := false
 var won := false
+var npc_menu_id := ""
 var inventory := false
 var moving := false
 var jump := false
@@ -977,6 +978,7 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	npc.set_meta("talk_count",0)
 	npc.set_meta("next_work",elapsed+randf_range(15.0,35.0))
 	var saved: Dictionary = npc_saved_resources.get(kind,{})
+	npc.set_meta("npc_health",int(saved.get("npc_health",100)))
 	npc.set_meta("extra_items",(saved.get("extra_items",{}) as Dictionary).duplicate(true))
 	for key in NPC_RESOURCE_KEYS:
 		npc.set_meta(key,int(saved.get(key,-1 if key=="axe_item" else 0)))
@@ -2231,6 +2233,15 @@ func village_update(dt: float,camp: Vector3) -> void:
 		var id := str(npc.get_meta("id",""))
 		var data: Dictionary = village_population.get(id,{})
 		var age := float(data.get("age",VILLAGE_ADULT_AGE))
+		var satiety := maxf(0.0,float(data.get("satiety",100.0))-step*.035)
+		var resting := npc_is_night() and npc.velocity.length()<.3
+		var energy := clampf(float(data.get("energy",100.0))+step*(.25 if resting else -.025),0.0,100.0)
+		if satiety<65.0 and int(npc.get_meta("carried_tomatoes",0))>0:
+			npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))-1)
+			satiety = minf(100.0,satiety+25.0)
+		data["satiety"] = satiety
+		data["energy"] = energy
+		village_population[id] = data
 		if age<VILLAGE_ADULT_AGE:
 			data["age"] = minf(age+step,VILLAGE_ADULT_AGE)
 			if float(data["age"])>=VILLAGE_ADULT_AGE:
@@ -2352,6 +2363,18 @@ func update_villagers(dt: float) -> void:
 		elif elapsed<float(npc.get_meta("recover_until",0.0)):
 			heading = delta_home.normalized() if distance_home>2.0 else Vector3.ZERO
 			walking = not heading.is_zero_approx()
+		elif str(village_population.get(str(npc.get_meta("id","")),{}).get("order","auto"))=="return":
+			heading = delta_home.normalized() if distance_home>2.0 else Vector3.ZERO
+			walking = not heading.is_zero_approx()
+			if not walking:
+				var resident: Dictionary = village_population[str(npc.get_meta("id",""))]
+				resident["order"] = "auto"
+		elif str(village_population.get(str(npc.get_meta("id","")),{}).get("order","auto"))=="follow" and distance_home<NPC_PATROL_RADIUS-.85:
+			heading = to_player.normalized() if distance>2.0 else Vector3.ZERO
+			walking = not heading.is_zero_approx()
+		elif str(village_population.get(str(npc.get_meta("id","")),{}).get("order","auto"))=="guard":
+			heading = delta_home.normalized() if distance_home>4.0 else Vector3.ZERO
+			walking = not heading.is_zero_approx()
 		elif distance_home>NPC_PATROL_RADIUS-.85:
 			heading = delta_home.normalized()
 			walking = true
@@ -2408,7 +2431,175 @@ func update_villagers(dt: float) -> void:
 		walk_pose(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
 		animate_npc_model(npc_visual,npc.get_real_velocity(),dt,npc.is_on_floor())
 
+func npc_menu_meter(parent: VBoxContainer, title_text: String, amount: float, color: Color) -> void:
+	var caption := Label.new()
+	caption.text = "%s: %d/100" % [title_text,roundi(amount)]
+	parent.add_child(caption)
+	var bar := ProgressBar.new()
+	bar.max_value = 100
+	bar.value = amount
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(260,14)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = color
+	bar.add_theme_stylebox_override("fill",fill)
+	parent.add_child(bar)
+
+func npc_food_key(item: int) -> String:
+	match item:
+		3: return "carried_meat"
+		TOMATO_ITEM: return "carried_tomatoes"
+		_: return ""
+
+func npc_item_count(npc: CharacterBody3D,item: int) -> int:
+	var key := npc_food_key(item)
+	if item==TOMATO_SEED_ITEM:
+		key = "carried_seeds"
+	return int(npc.get_meta(key,0)) if not key.is_empty() else village_carried(npc,item)
+
+func npc_change_item(npc: CharacterBody3D,item: int,delta: int) -> void:
+	var key := npc_food_key(item)
+	if item==TOMATO_SEED_ITEM:
+		key = "carried_seeds"
+	if not key.is_empty():
+		npc.set_meta(key,maxi(0,int(npc.get_meta(key,0))+delta))
+	else:
+		village_add_carried(npc,item,delta)
+
+func npc_menu_action(action: String, value: String = "") -> void:
+	var npc := objects.get(npc_menu_id,null) as CharacterBody3D
+	if not is_instance_valid(npc) or net_role=="client":
+		return
+	var data: Dictionary = village_population.get(npc_menu_id,{})
+	match action:
+		"feed":
+			var item := TOMATO_ITEM if stock[TOMATO_ITEM]>0 else 3
+			if stock[item]>0 and float(data.get("satiety",100.0))<100.0:
+				stock[item]-=1
+				data["satiety"] = minf(100.0,float(data.get("satiety",100.0))+30.0)
+		"give","take":
+			var item := int(value)
+			if item>=0 and item<ITEMS.size() and not TOOL_MAX_DURABILITY.has(item) and item!=BACKPACK_ITEM:
+				if action=="give" and stock[item]>0 and npc_delivery_count(npc)<32:
+					stock[item]-=1
+					npc_change_item(npc,item,1)
+				elif action=="take" and npc_item_count(npc,item)>0:
+					npc_change_item(npc,item,-1)
+					stock[item]+=1
+					item_received(item)
+		"job":
+			if village_is_adult(npc) and value in ["Agricultor","Lenhador","Coletor","Artesão"]:
+				data["job"] = value
+				npc.set_meta("work_mode","")
+				npc.set_meta("next_work",elapsed)
+		"order":
+			if village_is_adult(npc) and value in ["auto","follow","return","guard"]:
+				data["order"] = value
+				npc.set_meta("work_mode","")
+				npc.set_meta("work_id","")
+				npc.set_meta("next_work",elapsed)
+		"bed":
+			if value.is_empty():
+				data.erase("bed")
+			else:
+				var bed := objects.get(value,null) as Node3D
+				var free := is_instance_valid(bed) and bed.get_meta("kind","")=="bed" and village_bed_sheltered(bed)
+				for id in village_population:
+					if id!=npc_menu_id and str(village_population[id].get("bed",""))==value:
+						free = false
+				if free:
+					data["bed"] = value
+	village_population[npc_menu_id] = data
+	sync_hotbar()
+	save_game()
+	show_npc_menu(npc)
+
+func show_npc_menu(npc: CharacterBody3D) -> void:
+	npc_menu_id = str(npc.get_meta("id",""))
+	inventory = false
+	moving = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	set_hotbar_interactive(false)
+	if is_instance_valid(medieval_menu):
+		medieval_menu.hide()
+	panel.add_theme_stylebox_override("panel",craft_relief(Color("#30291f"),Color("#a88652"),true))
+	panel.show()
+	clear_menu()
+	var data: Dictionary = village_population.get(npc_menu_id,{})
+	var heading := Label.new()
+	heading.text = npc_menu_id+" · "+village_age_label(float(data.get("age",0.0)))
+	heading.add_theme_font_size_override("font_size",26)
+	heading.modulate = Color("#ffe29c")
+	menu.add_child(heading)
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation",22)
+	menu.add_child(columns)
+	var info := VBoxContainer.new()
+	columns.add_child(info)
+	npc_menu_meter(info,"Vida",float(npc.get_meta("npc_health",100)),Color("#b74444"))
+	npc_menu_meter(info,"Alimentação",float(data.get("satiety",100.0)),Color("#c69745"))
+	npc_menu_meter(info,"Energia",float(data.get("energy",100.0)),Color("#599b59"))
+	var status := Label.new()
+	var axe_item := int(npc.get_meta("axe_item",-1))
+	var equipment := ITEMS[axe_item] if axe_item>=0 and axe_item<ITEMS.size() else "Nenhum"
+	status.text = "Profissão: "+str(data.get("job","Filhote"))+"\nAtividade: "+str(npc.get_meta("work_mode",""))+"\nEquipamento: "+equipment+"\nCama: "+("Atribuída" if not str(data.get("bed","")).is_empty() else "Não atribuída")
+	info.add_child(status)
+	var actions := VBoxContainer.new()
+	columns.add_child(actions)
+	var food := Button.new()
+	food.text = "Alimentar (tomate ou carne)"
+	food.disabled = net_role=="client"
+	food.pressed.connect(func(): npc_menu_action("feed"))
+	actions.add_child(food)
+	var jobs := OptionButton.new()
+	for job in ["Agricultor","Lenhador","Coletor","Artesão"]:
+		jobs.add_item(job)
+		if job==str(data.get("job","")):
+			jobs.select(jobs.item_count-1)
+	jobs.disabled = net_role=="client" or not village_is_adult(npc)
+	jobs.item_selected.connect(func(index: int): npc_menu_action("job",jobs.get_item_text(index)))
+	actions.add_child(jobs)
+	for pair in [["Trabalhar autonomamente","auto"],["Seguir jogador","follow"],["Retornar à vila","return"],["Defender a vila","guard"]]:
+		var command := Button.new()
+		command.text = pair[0]
+		command.disabled = net_role=="client" or not village_is_adult(npc)
+		var order: String = pair[1]
+		command.pressed.connect(func(): npc_menu_action("order",order))
+		actions.add_child(command)
+	var beds := OptionButton.new()
+	beds.add_item("Sem cama")
+	beds.set_item_metadata(0,"")
+	for bed in village_objects("bed",get_campfire_center()):
+		if village_bed_sheltered(bed):
+			var id := str(bed.get_meta("id",""))
+			beds.add_item("Cama %d" % beds.item_count)
+			beds.set_item_metadata(beds.item_count-1,id)
+			if id==str(data.get("bed","")):
+				beds.select(beds.item_count-1)
+	beds.disabled = net_role=="client"
+	beds.item_selected.connect(func(index: int): npc_menu_action("bed",str(beds.get_item_metadata(index))))
+	actions.add_child(beds)
+	var items := OptionButton.new()
+	for item in range(ITEMS.size()):
+		if stock[item]>0 or npc_item_count(npc,item)>0:
+			items.add_item("%s · NPC %d / Você %d" % [ITEMS[item],npc_item_count(npc,item),stock[item]],item)
+	actions.add_child(items)
+	for action in ["give","take"]:
+		var transfer := Button.new()
+		transfer.text = "Entregar 1 unidade" if action=="give" else "Retirar 1 unidade"
+		transfer.disabled = net_role=="client" or items.item_count==0
+		var operation: String = action
+		transfer.pressed.connect(func(): npc_menu_action(operation,str(items.get_selected_id())))
+		actions.add_child(transfer)
+	if net_role=="client":
+		label("Consulta multiplayer: alterações disponíveis ao anfitrião.")
+	button("Fechar [Esc]",begin,true)
+
 func speak_to_goblin(npc: Node3D) -> void:
+	if player.global_position.distance_to(npc.global_position)<=3.6 and npc is CharacterBody3D:
+		show_npc_menu(npc)
+		return
+
 	if player.global_position.distance_to(npc.global_position)>3.6:
 		notice("Aproxime-se para conversar.")
 		return
@@ -4514,6 +4705,7 @@ func open_goblin_skin_test() -> void:
 
 
 func begin() -> void:
+	npc_menu_id = ""
 	close_chest_visual()
 	if net_role=="client" and not net_world_ready:
 		notice("Aguarde o anfitrião enviar o mundo antes de começar.")
@@ -7998,6 +8190,7 @@ func save_game() -> bool:
 				var resources: Dictionary = {}
 				for key in NPC_RESOURCE_KEYS:
 					resources[key] = int(npc.get_meta(key,-1 if key=="axe_item" else 0))
+				resources["npc_health"] = int(npc.get_meta("npc_health",100))
 				resources["extra_items"] = npc_extra_items(npc).duplicate(true)
 				npc_saved_resources[str(npc.get_meta("id",""))] = resources
 		file.store_string(JSON.stringify({"world_uid":world_uid,"npc_world_clock":fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS),"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
@@ -8437,7 +8630,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"resident":true,"axe_item":int(npc.get_meta("axe_item",-1)),"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"npc_health":int(npc.get_meta("npc_health",100)),"resident":true,"axe_item":int(npc.get_meta("axe_item",-1)),"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -8493,6 +8686,7 @@ func net_apply_entities(states: Array) -> void:
 		obj.rotation.y = angle
 		if resident and data.has("clock"):
 			village_apply_age(obj as CharacterBody3D)
+			obj.set_meta("npc_health",int(data.get("npc_health",100)))
 			obj.set_meta("axe_item",int(data.get("axe_item",-1)))
 			npc_sync_axe_visual(obj as CharacterBody3D,-1 if bool(data.get("camp_warming",false)) else int(data.get("axe_item",-1)))
 			npc_world_clock = float(data["clock"])
