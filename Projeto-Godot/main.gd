@@ -3140,10 +3140,10 @@ func make_ui() -> void:
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_top = -155
 	bottom.offset_bottom = -34
-	bottom.mouse_filter = Control.MOUSE_FILTER_PASS
+	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var stack := VBoxContainer.new()
 	bottom.add_child(stack)
-	stack.mouse_filter = Control.MOUSE_FILTER_PASS
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var meters := HBoxContainer.new()
 	stack.add_child(meters)
 	meters.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -3153,7 +3153,7 @@ func make_ui() -> void:
 	life_bar = make_meter(meters,life_text,Color("#cf574d"))
 	stamina_bar = make_meter(meters,stamina_text,Color("#d4b85e"))
 	hotbar = HBoxContainer.new()
-	hotbar.mouse_filter = Control.MOUSE_FILTER_PASS
+	hotbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hotbar.alignment = BoxContainer.ALIGNMENT_CENTER
 	stack.add_child(hotbar)
 	hotbar.add_theme_constant_override("separation",5)
@@ -3162,7 +3162,7 @@ func make_ui() -> void:
 	for i in range(HOTBAR_SIZE):
 		var frame := PanelContainer.new()
 		frame.custom_minimum_size = Vector2(66,70)
-		frame.mouse_filter = Control.MOUSE_FILTER_STOP
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		frame.gui_input.connect(hotbar_frame_input.bind(i))
 		frame.set_drag_forwarding(hotbar_drag.bind(frame,i),can_drop_hotbar.bind(i),drop_hotbar.bind(i))
 		hotbar.add_child(frame)
@@ -3527,6 +3527,21 @@ func button(title: String, callback: Callable, use_craft_style: bool = false) ->
 		style_craft_button(b)
 	menu.add_child(b)
 
+func set_hotbar_interactive(enabled: bool) -> void:
+	# So permite cliques e arrastes na hotbar com o inventario aberto.
+	if not is_instance_valid(hotbar):
+		return
+	var mode := Control.MOUSE_FILTER_PASS if enabled else Control.MOUSE_FILTER_IGNORE
+	hotbar.mouse_filter = mode
+	var stack_node := hotbar.get_parent() as Control
+	if stack_node != null:
+		stack_node.mouse_filter = mode
+		var bottom_node := stack_node.get_parent() as Control
+		if bottom_node != null:
+			bottom_node.mouse_filter = mode
+	for frame in hotbar_frames:
+		frame.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+
 func set_gameplay_overlays_visible(visible_now: bool) -> void:
 	for overlay in gameplay_overlays:
 		if is_instance_valid(overlay):
@@ -3683,6 +3698,7 @@ func begin() -> void:
 	if is_instance_valid(medieval_menu):
 		medieval_menu.hide()
 	set_gameplay_overlays_visible(true)
+	set_hotbar_interactive(false)
 	inventory = false
 	moving = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -3723,6 +3739,7 @@ func show_inventory() -> void:
 	if is_instance_valid(medieval_menu):
 		medieval_menu.hide()
 	set_gameplay_overlays_visible(true)
+	set_hotbar_interactive(true)
 	sync_inventory_slots()
 	if not inventory:
 		craft_mode = "basic"
