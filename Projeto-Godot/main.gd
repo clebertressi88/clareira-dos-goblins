@@ -3093,10 +3093,10 @@ func make_ui() -> void:
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_top = -155
 	bottom.offset_bottom = -34
-	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom.mouse_filter = Control.MOUSE_FILTER_PASS
 	var stack := VBoxContainer.new()
 	bottom.add_child(stack)
-	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.mouse_filter = Control.MOUSE_FILTER_PASS
 	var meters := HBoxContainer.new()
 	stack.add_child(meters)
 	meters.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -3106,6 +3106,7 @@ func make_ui() -> void:
 	life_bar = make_meter(meters,life_text,Color("#cf574d"))
 	stamina_bar = make_meter(meters,stamina_text,Color("#d4b85e"))
 	hotbar = HBoxContainer.new()
+	hotbar.mouse_filter = Control.MOUSE_FILTER_PASS
 	hotbar.alignment = BoxContainer.ALIGNMENT_CENTER
 	stack.add_child(hotbar)
 	hotbar.add_theme_constant_override("separation",5)
@@ -3114,7 +3115,9 @@ func make_ui() -> void:
 	for i in range(HOTBAR_SIZE):
 		var frame := PanelContainer.new()
 		frame.custom_minimum_size = Vector2(66,70)
-		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		frame.mouse_filter = Control.MOUSE_FILTER_STOP
+		frame.gui_input.connect(hotbar_frame_input.bind(i))
+		frame.set_drag_forwarding(hotbar_drag.bind(frame,i),can_drop_hotbar.bind(i),drop_hotbar.bind(i))
 		hotbar.add_child(frame)
 		hotbar_frames.append(frame)
 		var content := VBoxContainer.new()
@@ -3166,6 +3169,7 @@ func make_ui() -> void:
 	panel_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	panel.add_child(panel_scroll)
 	menu = VBoxContainer.new()
 	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3385,7 +3389,7 @@ func update_player_hud() -> void:
 		hotbar_icons[i].texture = ITEM_ICONS[item] if item>=0 else null
 		hotbar_slots[i].text = ""
 		hotbar_frames[i].tooltip_text = (ITEMS[item] + (" · Durabilidade %d/%d" % [tool_remaining(item),int(TOOL_MAX_DURABILITY[item])] if TOOL_MAX_DURABILITY.has(item) else "")) if item>=0 else "Atalho vazio"
-		hotbar_counts[i].text = "×%d" % stock[item] if item>=0 else ""
+		hotbar_counts[i].text = str(stock[item]) if item>=0 else ""
 		hotbar_durability_bars[i].visible = item>=0 and TOOL_MAX_DURABILITY.has(item)
 		if item>=0 and TOOL_MAX_DURABILITY.has(item):
 			hotbar_durability_bars[i].value = 100.0*tool_remaining(item)/float(TOOL_MAX_DURABILITY[item])
@@ -3442,14 +3446,15 @@ func center_panel() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var available := Vector2(maxf(320.0,viewport_size.x-24.0),maxf(240.0,viewport_size.y-24.0))
 	if inventory:
-		# Tamanho logico da interface completa; escala uniforme e rolagem interna.
-		var desired := Vector2(1290,710)
-		var fit := minf(1.0,minf(available.x/desired.x,available.y/desired.y))
+		# Grade 6x6, bancada e personagem sempre visiveis numa unica tela.
+		# Reserva a faixa inferior para a hotbar real do jogador.
+		var desired := Vector2(1440,700)
+		var fit := minf(1.0,minf(available.x/desired.x,maxf(240.0,viewport_size.y-105.0)/desired.y))
 		panel.scale = Vector2.ONE*fit
 		panel.offset_left = -desired.x/2.0
 		panel.offset_right = desired.x/2.0
-		panel.offset_top = -desired.y/2.0
-		panel.offset_bottom = desired.y/2.0
+		panel.offset_top = -desired.y/2.0-42.0
+		panel.offset_bottom = desired.y/2.0-42.0
 		panel.pivot_offset = desired/2.0
 	else:
 		var minimum := menu.get_combined_minimum_size()+Vector2(40,40)
@@ -3702,11 +3707,12 @@ func show_inventory() -> void:
 	# A centralizacao responsiva cuida do tamanho final apos montar a interface.
 	center_panel.call_deferred()
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation",10)
+	columns.add_theme_constant_override("separation",12)
+	columns.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	menu.add_child(columns)
 	columns.alignment = BoxContainer.ALIGNMENT_CENTER
 	var equipment_side := VBoxContainer.new()
-	equipment_side.custom_minimum_size = Vector2(350,390)
+	equipment_side.custom_minimum_size = Vector2(340,380)
 	columns.add_child(equipment_side)
 	var equipment_title := Label.new()
 	equipment_title.text = "Equipamento do personagem"
@@ -3801,10 +3807,13 @@ func show_inventory() -> void:
 			style_craft_button(bag_button)
 			bag_grid.add_child(bag_button)
 	var inventory_side := VBoxContainer.new()
-	inventory_side.custom_minimum_size = Vector2(360,390)
+	inventory_side.custom_minimum_size = Vector2(366,380)
 	columns.add_child(inventory_side)
 	var inventory_grid := GridContainer.new()
-	inventory_grid.columns = 5
+	inventory_grid.columns = 6
+	inventory_grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	inventory_grid.add_theme_constant_override("h_separation",3)
+	inventory_grid.add_theme_constant_override("v_separation",3)
 	var caption := Label.new()
 	caption.text = "Inventário"
 	caption.add_theme_font_size_override("font_size",20)
@@ -3827,17 +3836,20 @@ func show_inventory() -> void:
 	for slot_index in range(inventory_slots.size()):
 		var kind: int = inventory_slots[slot_index]
 		var item := Button.new()
-		item.custom_minimum_size = Vector2(66,48)
-		item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item.custom_minimum_size = Vector2(56,52)
+		item.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		item.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		item.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		item.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		item.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+		item.expand_icon = true
+		item.add_theme_constant_override("icon_max_width",31)
 		if kind>=0:
 			var available := craft_available(kind)
 			if kind==BACKPACK_ITEM and backpack_equipped:
 				available = maxi(0,available-1)
-			item.text = "×%d" % available if available>0 else ""
-			if TOOL_MAX_DURABILITY.has(kind) and available>0:
-				item.text += "\n%d%%" % roundi(100.0*tool_remaining(kind)/float(TOOL_MAX_DURABILITY[kind]))
+			# Texto vazio: quantidade e durabilidade aparecem em overlays,
+			# sem aumentar a altura da grade nem deslocar o icone.
+			item.text = ""
 			item.tooltip_text = ITEMS[kind]
 			if TOOL_MAX_DURABILITY.has(kind):
 				item.tooltip_text += " · Durabilidade %d/%d" % [tool_remaining(kind),int(TOOL_MAX_DURABILITY[kind])]
@@ -3854,8 +3866,36 @@ func show_inventory() -> void:
 		item.set_drag_forwarding(inventory_drag.bind(item,slot_index),can_drop_inventory.bind(slot_index),drop_inventory.bind(slot_index))
 		style_craft_button(item)
 		inventory_grid.add_child(item)
+		if kind>=0:
+			var inventory_count := Label.new()
+			inventory_count.text = str(maxi(0,craft_available(kind)-(1 if kind==BACKPACK_ITEM and backpack_equipped else 0)))
+			inventory_count.add_theme_font_size_override("font_size",12)
+			inventory_count.add_theme_color_override("font_color",Color("#f5e5bc"))
+			inventory_count.add_theme_color_override("font_shadow_color",Color("#18130de0"))
+			inventory_count.add_theme_constant_override("shadow_offset_x",1)
+			inventory_count.add_theme_constant_override("shadow_offset_y",1)
+			inventory_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			inventory_count.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+			inventory_count.offset_left = -35.0
+			inventory_count.offset_right = -3.0
+			inventory_count.offset_top = 1.0
+			inventory_count.offset_bottom = 18.0
+			inventory_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			item.add_child(inventory_count)
+			if TOOL_MAX_DURABILITY.has(kind) and craft_available(kind)>0:
+				var inventory_wear := ProgressBar.new()
+				inventory_wear.max_value = 100
+				inventory_wear.value = 100.0*tool_remaining(kind)/float(TOOL_MAX_DURABILITY[kind])
+				inventory_wear.show_percentage = false
+				inventory_wear.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				inventory_wear.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+				inventory_wear.offset_left = 4.0
+				inventory_wear.offset_right = -4.0
+				inventory_wear.offset_top = -7.0
+				inventory_wear.offset_bottom = -3.0
+				item.add_child(inventory_wear)
 	var crafting_panel := VBoxContainer.new()
-	crafting_panel.custom_minimum_size = Vector2(400,390)
+	crafting_panel.custom_minimum_size = Vector2(420,380)
 	columns.add_child(crafting_panel)
 	var craft_caption := Label.new()
 	craft_caption.text = "Marcenaria · 25 espaços" if craft_mode=="carpentry" else "Fabricação"
@@ -3944,32 +3984,31 @@ func show_inventory() -> void:
 	clear_button.pressed.connect(clear_craft)
 	style_craft_button(clear_button)
 	recipes.add_child(clear_button)
-	menu.add_child(HSeparator.new())
-	var hotbar_title := Label.new()
-	hotbar_title.text = "Atalhos 1–9 · arraste ou clique para organizar"
-	menu.add_child(hotbar_title)
-	var shortcut_row := HBoxContainer.new()
-	shortcut_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	menu.add_child(shortcut_row)
-	for slot_index in range(HOTBAR_SIZE):
-		var shortcut := Button.new()
-		shortcut.custom_minimum_size = Vector2(53,39)
-		shortcut.text = str(slot_index+1)
-		var mapped: int = bar_items[slot_index]
-		shortcut.tooltip_text = ITEMS[mapped] if mapped>=0 else "Espaço vazio"
-		if mapped>=0:
-			shortcut.icon = ITEM_ICONS[mapped]
-		shortcut.pressed.connect(assign_hotbar.bind(slot_index))
-		shortcut.set_drag_forwarding(hotbar_drag.bind(shortcut,slot_index),can_drop_hotbar.bind(slot_index),drop_hotbar.bind(slot_index))
-		style_craft_button(shortcut)
-		shortcut_row.add_child(shortcut)
-	label("Clique: colocar 1 · Arraste: mover pilha · Direito: retirar 1 / alternar reserva")
+	# Hotbar duplicada removida: a barra real do HUD permanece interativa.
+	label("Arraste itens para os atalhos 1–9 abaixo · Clique em um atalho para vincular o item selecionado · Direito para limpar")
 	# A mochila e os seus 12 espacos ficam integrados ao painel esquerdo.
 	if craft_mode in ["station","carpentry"]:
 		button("Fabricação básica",open_craft.bind("basic"),true)
 	if not feedback.is_empty():
 		label(feedback)
 	button("Voltar",begin,true)
+
+func hotbar_frame_input(event: InputEvent, slot_index: int) -> void:
+	if not inventory or not event is InputEventMouseButton or not event.pressed:
+		return
+	if event.button_index == MOUSE_BUTTON_RIGHT:
+		hotbar_manual = true
+		bar_items[slot_index] = -1
+		save_game()
+		show_inventory.call_deferred()
+		get_viewport().set_input_as_handled()
+	elif event.button_index == MOUSE_BUTTON_LEFT:
+		if craft_material>=0 and stock[craft_material]>0:
+			assign_hotbar(slot_index)
+		else:
+			selected = slot_index
+			update_player_hud()
+		get_viewport().set_input_as_handled()
 
 func assign_hotbar(slot_index: int) -> void:
 	hotbar_manual = true
