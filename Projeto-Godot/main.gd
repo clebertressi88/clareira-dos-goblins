@@ -2694,6 +2694,52 @@ func npc_menu_action(action: String, value: String = "") -> void:
 	save_game()
 	show_npc_menu(npc)
 
+func npc_inventory_slot(parent: GridContainer,item: int,amount: int,npc: CharacterBody3D) -> void:
+	var slot := Button.new()
+	style_craft_button(slot)
+	slot.custom_minimum_size = Vector2(68,68)
+	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slot.add_theme_constant_override("icon_max_width",48)
+	slot.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	parent.add_child(slot)
+	if item<0:
+		slot.disabled = true
+		return
+	slot.icon = ITEM_ICONS[item]
+	slot.tooltip_text = "%s · %d" % [ITEMS[item],amount]
+	var count := Label.new()
+	count.text = str(amount)
+	count.add_theme_font_size_override("font_size",15)
+	count.add_theme_color_override("font_color",Color("#f5e5bc"))
+	count.add_theme_color_override("font_shadow_color",Color("#18130d"))
+	count.add_theme_constant_override("shadow_offset_x",1)
+	count.add_theme_constant_override("shadow_offset_y",1)
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	count.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	count.offset_left = -35
+	count.offset_right = -5
+	count.offset_top = 1
+	count.offset_bottom = 21
+	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(count)
+	if item==int(npc.get_meta("axe_item",-1)) and int(npc.get_meta("axe_uses",0))>0:
+		var wear := ProgressBar.new()
+		wear.max_value = float(TOOL_MAX_DURABILITY[item])
+		wear.value = float(npc.get_meta("axe_uses",0))
+		wear.show_percentage = false
+		wear.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		wear.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		wear.offset_left = 4
+		wear.offset_right = -4
+		wear.offset_top = -8
+		wear.offset_bottom = -3
+		slot.add_child(wear)
+		slot.tooltip_text += " · Equipado"
+	elif not TOOL_MAX_DURABILITY.has(item) and item!=BACKPACK_ITEM and net_role!="client":
+		slot.tooltip_text += " · Clique para retirar 1"
+		slot.pressed.connect(func(): npc_menu_action("take",str(item)))
+
 func show_npc_menu(npc: CharacterBody3D) -> void:
 	npc_menu_id = str(npc.get_meta("id",""))
 	inventory = false
@@ -2712,7 +2758,7 @@ func show_npc_menu(npc: CharacterBody3D) -> void:
 	heading.modulate = Color("#ffe29c")
 	menu.add_child(heading)
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation",22)
+	columns.add_theme_constant_override("separation",28)
 	menu.add_child(columns)
 	var info := VBoxContainer.new()
 	columns.add_child(info)
@@ -2724,8 +2770,35 @@ func show_npc_menu(npc: CharacterBody3D) -> void:
 	var equipment: String = str(ITEMS[axe_item]) if axe_item>=0 and axe_item<ITEMS.size() else "Nenhum"
 	status.text = "Profissão: "+str(data.get("job","Filhote"))+"\nAtividade: "+str(npc.get_meta("work_mode",""))+"\nEquipamento: "+equipment+"\nCama: "+("Atribuída" if not str(data.get("bed","")).is_empty() else "Não atribuída")
 	info.add_child(status)
+	var bag_title := Label.new()
+	bag_title.text = "INVENTÁRIO DO NPC"
+	bag_title.modulate = Color("#ffe29c")
+	info.add_child(bag_title)
+	var bag_grid := GridContainer.new()
+	bag_grid.columns = 6
+	bag_grid.add_theme_constant_override("h_separation",4)
+	bag_grid.add_theme_constant_override("v_separation",4)
+	info.add_child(bag_grid)
+	var occupied := 0
+	for item in range(ITEMS.size()):
+		var amount := npc_item_count(npc,item)
+		if item==axe_item and int(npc.get_meta("axe_uses",0))>0:
+			amount += 1
+		if amount>0:
+			npc_inventory_slot(bag_grid,item,amount,npc)
+			occupied += 1
+	for index in range(occupied,maxi(12,ceili(float(occupied)/6.0)*6)):
+		npc_inventory_slot(bag_grid,-1,0,npc)
+	var bag_hint := Label.new()
+	bag_hint.text = "%d unidades transportadas · Clique para retirar recursos" % npc_delivery_count(npc)
+	bag_hint.add_theme_font_size_override("font_size",12)
+	info.add_child(bag_hint)
 	var actions := VBoxContainer.new()
 	columns.add_child(actions)
+	var action_title := Label.new()
+	action_title.text = "COMANDOS E CUIDADOS"
+	action_title.modulate = Color("#ffe29c")
+	actions.add_child(action_title)
 	var food := Button.new()
 	food.text = "Alimentar (tomate ou carne)"
 	food.disabled = net_role=="client"
@@ -2759,18 +2832,13 @@ func show_npc_menu(npc: CharacterBody3D) -> void:
 	beds.disabled = net_role=="client"
 	beds.item_selected.connect(func(index: int): npc_menu_action("bed",str(beds.get_item_metadata(index))))
 	actions.add_child(beds)
-	var items := OptionButton.new()
-	for item in range(ITEMS.size()):
-		if stock[item]>0 or npc_item_count(npc,item)>0:
-			items.add_item("%s · NPC %d / Você %d" % [ITEMS[item],npc_item_count(npc,item),stock[item]],item)
-	actions.add_child(items)
-	for action in ["give","take"]:
-		var transfer := Button.new()
-		transfer.text = "Entregar 1 unidade" if action=="give" else "Retirar 1 unidade"
-		transfer.disabled = net_role=="client" or items.item_count==0
-		var operation: String = action
-		transfer.pressed.connect(func(): npc_menu_action(operation,str(items.get_selected_id())))
-		actions.add_child(transfer)
+	var selected_item: int = bar_items[selected]
+	var give := Button.new()
+	give.text = "Entregar item da hotbar: "+str(ITEMS[selected_item]) if selected_item>=0 and selected_item<ITEMS.size() else "Entregar item da hotbar"
+	style_craft_button(give)
+	give.disabled = net_role=="client" or selected_item<0 or selected_item>=ITEMS.size() or stock[selected_item]<=0 or TOOL_MAX_DURABILITY.has(selected_item) or selected_item==BACKPACK_ITEM or npc_delivery_count(npc)>=32
+	give.pressed.connect(func(): npc_menu_action("give",str(selected_item)))
+	actions.add_child(give)
 	if net_role=="client":
 		label("Consulta multiplayer: alterações disponíveis ao anfitrião.")
 	button("Fechar [Esc]",begin,true)
