@@ -86,7 +86,7 @@ const WALL_SIZE := CELL * 3.0
 const DOOR_CLEAR_WIDTH := 1.18
 const DOOR_CLEAR_HEIGHT := 2.15
 const HOTBAR_SIZE := 9
-const NPC_PATROL_RADIUS := 8.0 # Limite da patrulha em metros, medido a partir da fogueira.
+const NPC_PATROL_RADIUS := 12.0 # Limite da patrulha em metros, medido a partir da fogueira.
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
 const NPC_RIG_SCRIPT := preload("res://npc_goblin_skirmisher.gd")
 const GOBLIN_SKIN_TEST_SCENE: PackedScene = preload("res://experimentos/goblin_skin_teste.tscn")
@@ -1119,14 +1119,20 @@ func npc_collect_loose(npc: CharacterBody3D,obj: Node3D) -> void:
 func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 	var best: Node3D
 	var best_distance := INF
+	var carried := npc_delivery_count(npc)
+	if carried>=32:
+		return null
+	var avoid: Dictionary = npc.get_meta("work_avoid",{})
 	for obj in objects.values():
 		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+			continue
+		if elapsed<float(avoid.get(str(obj.get_meta("id","")),0.0)):
 			continue
 		var kind := str(obj.get_meta("kind",""))
 		var loose := npc_loose_item(obj)>=0
 		if loose:
 			var owner := str(obj.get_meta("npc_owner",""))
-			if npc_delivery_count(npc)>=32 or (not owner.is_empty() and owner!=str(npc.get_meta("id",""))):
+			if not owner.is_empty() and owner!=str(npc.get_meta("id","")):
 				continue
 		elif kind=="tomato_crop":
 			if not bool(obj.get_meta("ready",false)) or tomato_available(obj)<=0:
@@ -1134,9 +1140,9 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		elif kind=="tomato_plant":
 			if tomato_available(obj)<=0:
 				continue
-		elif kind!="tree" or int(npc.get_meta("axe_uses",0))<=0:
+		elif kind!="tree" or int(npc.get_meta("axe_uses",0))<=0 or tree_regrowth.has(str(obj.get_meta("id",""))):
 			continue
-		if obj.global_position.distance_to(camp)>NPC_PATROL_RADIUS-1.0 or TERRAIN.is_river(obj.global_position.x,obj.global_position.z):
+		if Vector2(obj.global_position.x-camp.x,obj.global_position.z-camp.z).length()>NPC_PATROL_RADIUS-1.2 or TERRAIN.is_river(obj.global_position.x,obj.global_position.z):
 			continue
 		var reserved := false
 		for other in villagers:
@@ -1148,9 +1154,9 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		if loose:
 			d -= 100.0
 		elif kind=="tree" and str(npc.get_meta("id",""))=="Talo":
-			d -= 2.0
+			d -= 7.0
 		elif kind.begins_with("tomato") and str(npc.get_meta("id",""))=="Bruma":
-			d -= 2.0
+			d -= 7.0+float(tomato_available(obj))*.4
 		if d<best_distance:
 			best_distance = d
 			best = obj
@@ -1165,7 +1171,7 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 	if kind=="tree":
 		var tool := int(npc.get_meta("axe_item",-1))
 		var uses := int(npc.get_meta("axe_uses",0))
-		if tool not in [WOOD_AXE,STONE_AXE] or uses<=0:
+		if tool not in [WOOD_AXE,STONE_AXE] or uses<=0 or tree_regrowth.has(id):
 			return
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
@@ -1195,7 +1201,7 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 	if npc_loose_item(obj)>=0:
 		npc_collect_loose(npc,obj)
 	elif kind=="tomato_plant" or (kind=="tomato_crop" and bool(obj.get_meta("ready",false))):
-		if take_one_tomato(obj):
+		if npc_delivery_count(npc)<32 and take_one_tomato(obj):
 			npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))+1)
 			save_game()
 
@@ -1440,8 +1446,11 @@ func npc_planting_spot(npc: CharacterBody3D,camp: Vector3) -> Vector3:
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
 	var task := str(npc.get_meta("work_mode",""))
-	var loot := npc_work_target(npc,camp) if task=="" or task=="warm" else null
-	if is_instance_valid(loot) and npc_loose_item(loot)>=0 and (not night or str(loot.get_meta("npc_owner",""))==str(npc.get_meta("id",""))) and (npc_delivery_count(npc)<8 or npc_nearest_chest(npc,camp)==null):
+	var loot := npc_work_target(npc,camp) if (task=="" or task=="warm") and elapsed>=float(npc.get_meta("next_loot_scan",0.0)) else null
+	if task=="" or task=="warm":
+		if elapsed>=float(npc.get_meta("next_loot_scan",0.0)):
+			npc.set_meta("next_loot_scan",elapsed+0.75)
+	if is_instance_valid(loot) and npc_loose_item(loot)>=0 and (not night or str(loot.get_meta("npc_owner",""))==str(npc.get_meta("id",""))) and (npc_delivery_count(npc)<10 or npc_nearest_chest(npc,camp)==null):
 		npc.set_meta("work_id",str(loot.get_meta("id","")))
 		npc.set_meta("work_mode","work")
 		npc.set_meta("work_deadline",elapsed+20.0)
@@ -1562,7 +1571,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 				bag.erase(key)
 		npc.set_meta("extra_items",bag)
 		npc.set_meta("work_mode","")
-		npc.set_meta("next_work",elapsed+randf_range(25.0,45.0))
+		npc.set_meta("next_work",elapsed+randf_range(2.0,4.0))
 		save_game()
 		return Vector3.ZERO
 	if task=="warm":
@@ -1578,7 +1587,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 			npc.set_meta("camp_warming",true)
 		return Vector3.ZERO
 	if task=="" and elapsed>=float(npc.get_meta("next_work",0.0)):
-		if not night and (int(npc.get_meta("carried_seeds",0))>0 or int(npc.get_meta("carried_tomatoes",0))>=1):
+		if not night and elapsed>=float(npc.get_meta("next_plant",0.0)) and (int(npc.get_meta("carried_seeds",0))>0 or int(npc.get_meta("carried_tomatoes",0))>=4):
 			var spot := npc_planting_spot(npc,camp)
 			if spot.is_finite():
 				if int(npc.get_meta("carried_seeds",0))==0:
@@ -1586,11 +1595,12 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 					npc.set_meta("carried_tomatoes",int(npc.get_meta("carried_tomatoes",0))-1)
 					npc.set_meta("carried_seeds",3)
 				npc.set_meta("plant_spot",spot)
+				npc.set_meta("next_plant",elapsed+45.0)
 				npc.set_meta("work_mode","plant")
 				npc.set_meta("work_deadline",elapsed+20.0)
 				save_game()
 				return Vector3.ZERO
-		if npc_delivery_count(npc)>0:
+		if npc_delivery_count(npc)>=10 and npc_nearest_chest(npc,camp)!=null:
 			npc.set_meta("work_mode","deliver")
 			return Vector3.ZERO
 		if not night and int(npc.get_meta("axe_uses",0))<=0 and npc_supply_chest(npc,camp)!=null:
@@ -1606,33 +1616,58 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 				return Vector3.ZERO
 		var target := npc_work_target(npc,camp)
 		if target==null:
-			npc.set_meta("next_work",elapsed+15.0)
+			if npc_delivery_count(npc)>0 and npc_nearest_chest(npc,camp)!=null:
+				npc.set_meta("work_mode","deliver")
+			else:
+				npc.set_meta("next_work",elapsed+6.0)
 			return Vector3.ZERO
 		npc.set_meta("work_id",str(target.get_meta("id","")))
 		npc.set_meta("work_mode","work")
-		npc.set_meta("work_deadline",elapsed+20.0)
+		npc.set_meta("work_deadline",elapsed+35.0)
 		task = "work"
 	if task!="work":
 		return Vector3.ZERO
 	var obj: Node3D = objects.get(str(npc.get_meta("work_id","")),null)
-	if not is_instance_valid(obj) or obj.is_queued_for_deletion() or elapsed>float(npc.get_meta("work_deadline",0.0)) or npc.is_on_wall():
+	if not is_instance_valid(obj) or obj.is_queued_for_deletion() or elapsed>float(npc.get_meta("work_deadline",0.0)):
+		if is_instance_valid(obj):
+			var avoid: Dictionary = npc.get_meta("work_avoid",{})
+			avoid[str(obj.get_meta("id",""))] = elapsed+25.0
+			npc.set_meta("work_avoid",avoid)
 		npc.set_meta("work_mode","")
 		npc.set_meta("work_id","")
-		npc.set_meta("next_work",elapsed+8.0)
+		npc.set_meta("next_work",elapsed+2.0)
 		return Vector3.ZERO
 	var direction := obj.global_position-npc.global_position
 	direction.y = 0.0
-	if direction.length()>1.15:
-		return direction.normalized()
+	var kind := str(obj.get_meta("kind",""))
+	var reach := 1.55 if kind=="tree" else 1.25
+	var clear := false
+	if direction.length()<=reach:
+		var ray_query := PhysicsRayQueryParameters3D.create(npc.global_position+Vector3.UP*.65,obj.global_position+Vector3.UP*.45,SOLID|4,[npc.get_rid()])
+		var contact := get_world_3d().direct_space_state.intersect_ray(ray_query)
+		clear = contact.is_empty() or contact.get("collider",null)==obj
+	if not clear:
+		var toward := direction.normalized()
+		if npc.is_on_wall() and elapsed>=float(npc.get_meta("detour_until",0.0)):
+			npc.set_meta("detour_until",elapsed+1.1)
+			npc.set_meta("detour_angle",1.05 if randf()<.5 else -1.05)
+		if elapsed<float(npc.get_meta("detour_until",0.0)):
+			toward = toward.rotated(Vector3.UP,float(npc.get_meta("detour_angle",0.0)))
+		return toward
 	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(direction.x,direction.z),minf(dt*5.0,1.0))
 	if elapsed>=float(npc.get_meta("work_hit_at",0.0)):
-		npc.set_meta("work_hit_at",elapsed+1.4)
-		var kind := str(obj.get_meta("kind",""))
+		npc.set_meta("work_hit_at",elapsed+(1.15 if kind=="tree" else .9))
 		npc_finish_work(npc,obj)
-		if kind!="tree" or int(npc.get_meta("axe_uses",0))<=0 or not is_instance_valid(obj) or obj.get_meta("kind","")!="tree":
+		var continuing := false
+		if is_instance_valid(obj) and not obj.is_queued_for_deletion() and npc_delivery_count(npc)<32:
+			if kind=="tree":
+				continuing = int(npc.get_meta("axe_uses",0))>0 and obj.get_meta("kind","")=="tree"
+			elif kind in ["tomato_plant","tomato_crop"]:
+				continuing = tomato_available(obj)>0
+		if not continuing:
 			npc.set_meta("work_mode","")
 			npc.set_meta("work_id","")
-			npc.set_meta("next_work",elapsed+1.5)
+			npc.set_meta("next_work",elapsed+0.8)
 	return Vector3.ZERO
 
 func npc_fire_exists(camp: Vector3) -> bool:
