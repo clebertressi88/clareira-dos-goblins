@@ -1244,7 +1244,7 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		npc_collect_loose(npc,obj)
 	elif vegetation_kind(kind) and bool(obj.get_meta("ready",true)) and npc_delivery_count(npc)<32:
 		var item := 1 if kind=="forest_shrub" else VINE
-		village_add_carried(npc,item,1)
+		village_add_carried(npc,item,mini(2 if kind=="vine_bush" else 1,32-npc_delivery_count(npc)))
 		vegetation_harvest[id] = Time.get_unix_time_from_system()+VEGETATION_REGROW_SECONDS
 		update_vegetation_visual(obj)
 		if net_role=="host":
@@ -2593,13 +2593,17 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			collider(o,Vector3(.78,1.15,.78),Vector3.UP*.55)
 			update_vegetation_visual(o)
 		"vine_bush":
+			var vine_visual := Node3D.new()
+			vine_visual.name = "Vegetacao"
+			o.add_child(vine_visual)
 			for i in range(5):
 				var a := i*TAU/5.
 				var leaf_color := Color("#5e7936") if i%2==0 else Color("#3e6131")
-				ball(o,Vector3(cos(a)*.23,.22+sin(a)*.09,sin(a)*.23),Vector3(.51,.38,.50),"vine_leaf_%d" % (i%2),leaf_color)
-			make_vine(o,Vector3(0,.28,.39))
-			make_vine(o,Vector3(0,.28,-.39))
+				ball(vine_visual,Vector3(cos(a)*.23,.22+sin(a)*.09,sin(a)*.23),Vector3(.51,.38,.50),"vine_leaf_%d" % (i%2),leaf_color)
+			make_vine(vine_visual,Vector3(0,.28,.39))
+			make_vine(vine_visual,Vector3(0,.28,-.39))
 			collider(o,Vector3(.92,.55,.92),Vector3.UP*.27)
+			update_vegetation_visual(o)
 		"vine":
 			make_vine(o,Vector3.UP*.14)
 			collider(o,Vector3(.55,.25,.30),Vector3.UP*.12)
@@ -7226,7 +7230,7 @@ func net_mining_feedback(completed: bool, hits: int, required: int) -> void:
 		notice("Minerando pedra: %d/%d golpes" % [hits,required])
 
 func vegetation_kind(kind: String) -> bool:
-	return kind in ["fern","forest_shrub","river_reed"]
+	return kind in ["fern","forest_shrub","river_reed","vine_bush"]
 
 func update_vegetation_visual(plant: Node3D) -> void:
 	if not is_instance_valid(plant):
@@ -7267,7 +7271,7 @@ func harvest_vegetation(plant: Node3D) -> void:
 		notice("A planta ainda esta se regenerando.")
 		return
 	var item := 1 if str(plant.get_meta("kind",""))=="forest_shrub" else VINE
-	stock[item] += 1
+	stock[item] += 2 if str(plant.get_meta("kind",""))=="vine_bush" else 1
 	item_received(item)
 	sync_hotbar()
 	vegetation_harvest[id] = Time.get_unix_time_from_system()+VEGETATION_REGROW_SECONDS
@@ -7291,7 +7295,7 @@ func net_request_harvest_vegetation(id: String) -> void:
 	vegetation_harvest[id] = Time.get_unix_time_from_system()+VEGETATION_REGROW_SECONDS
 	update_vegetation_visual(plant)
 	net_vegetation_harvested.rpc(id,float(vegetation_harvest[id]))
-	net_collect_reward.rpc_id(peer,item,1)
+	net_collect_reward.rpc_id(peer,item,2 if str(plant.get_meta("kind",""))=="vine_bush" else 1)
 	save_game()
 
 @rpc("authority","call_remote","reliable")
@@ -7354,7 +7358,7 @@ func secondary() -> void:
 		var o: Node3D = hit["collider"]
 		var kind: String = o.get_meta("kind","")
 		var item := collectible_item_for_kind(kind)
-		if kind in ["fern","forest_shrub","river_reed"]:
+		if vegetation_kind(kind):
 			harvest_vegetation(o)
 			return
 		if kind=="tree_vine":
@@ -7414,6 +7418,8 @@ func net_request_collect(id: String) -> void:
 	if not is_instance_valid(obj) or not remote_can_interact(peer_id,obj.global_position,5.5):
 		return
 	var kind := str(obj.get_meta("kind",""))
+	if vegetation_kind(kind):
+		return
 	var item := collectible_item_for_kind(kind)
 	if item<0:
 		return
@@ -7798,7 +7804,7 @@ func remove_object(o: Node3D) -> void:
 	elif id!="lobo-errante":
 		removed[id] = true
 	objects.erase(id)
-	if removed_kind in ["fern","forest_shrub","river_reed"]:
+	if vegetation_kind(removed_kind):
 		vegetation_harvest.erase(id)
 	if removed_kind=="chest":
 		chest_storage.erase(id)
