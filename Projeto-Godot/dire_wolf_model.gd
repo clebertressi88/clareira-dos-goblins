@@ -127,11 +127,15 @@ func install() -> bool:
 			instance.free()
 			animation_player = null
 			return false
-	add_child(instance)
-	# GLB olha +Z, enquanto os animais do jogo olham -Z.
-	instance.rotation.y += PI
-	# Altura visual aproximada de 1 m; preserva o collider original do lobo.
-	instance.scale *= 0.70
+	# Orientacao fora da arvore animada: o root do GLB nunca pode sobrescrever
+	# a rotacao do controlador. O focinho original aponta +Z (mouth_socket),
+	# enquanto a IA e o collider usam -Z.
+	var orientation := Node3D.new()
+	orientation.name = "OrientacaoFocinho"
+	orientation.rotation.y = PI
+	orientation.scale = Vector3.ONE * 0.70
+	add_child(orientation)
+	orientation.add_child(instance)
 	attack_clip = _clip("bite")
 	_play("idle_loop", true)
 	return true
