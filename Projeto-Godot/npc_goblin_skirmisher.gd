@@ -156,6 +156,23 @@ func _apply_equipment() -> void:
 			if part.mesh.get_blend_shape_name(i) == "WeaponGrip":
 				part.set_blend_shape_value(i, 1.0 if sword_equipped else 0.0)
 
+func attach_right_hand(accessory: Node3D) -> bool:
+	if not is_instance_valid(_skeleton):
+		return false
+	for i in range(_skeleton.get_bone_count()):
+		var n := _skeleton.get_bone_name(i).to_lower().replace("_","").replace(":","").replace(".","")
+		if n.contains("righthand") or n.ends_with("handr") or n.ends_with("rhand") or n == "handright":
+			var anchor := BoneAttachment3D.new()
+			anchor.name = "MaoDireitaMachado"
+			anchor.bone_name = _skeleton.get_bone_name(i)
+			_skeleton.add_child(anchor)
+			anchor.add_child(accessory)
+			var pose := _skeleton.get_bone_global_pose(i)
+			var correction := pose.basis.orthonormalized().inverse()
+			accessory.transform = Transform3D(correction,Vector3.ZERO)
+			return true
+	return false
+
 func _find_left_hand() -> int:
 	for i in range(_skeleton.get_bone_count()):
 		var n := _skeleton.get_bone_name(i).to_lower().replace("_", "").replace(":", "").replace(".", "")
