@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'Laboratorio-Desenvolvedor/**'
+      - 'Projeto-Godot/main.gd'
       - '.github/workflows/publicar-laboratorio-dev.yml'
   workflow_dispatch:
 
