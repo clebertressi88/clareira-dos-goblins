@@ -1199,6 +1199,8 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
 			rig.call("play_action","attack")
+		npc_sync_axe_visual(npc,tool)
+		npc.set_meta("attack_serial",int(npc.get_meta("attack_serial",0))+1)
 		obj.set_meta("fall_from",npc.global_position)
 		var cuts := int(obj.get_meta("cuts",0))+1
 		obj.set_meta("cuts",cuts)
@@ -2009,7 +2011,39 @@ func npc_fire_exists(camp: Vector3) -> bool:
 			return true
 	return false
 
+func npc_sync_axe_visual(npc: CharacterBody3D, item: int) -> void:
+	var rig := npc.get_node_or_null("Visual/GoblinRig")
+	if rig == null:
+		return
+	var previous := int(npc.get_meta("visual_axe_item",-1))
+	if previous == item:
+		return
+	var old := rig.find_child("MachadoNPC",true,false) as Node3D
+	if old != null:
+		old.hide()
+		old.queue_free()
+	npc.set_meta("visual_axe_item",item)
+	if item not in [WOOD_AXE,STONE_AXE]:
+		return
+	var tool := Node3D.new()
+	tool.name = "MachadoNPC"
+	rig.add_child(tool)
+	if not bool(rig.call("attach_right_hand",tool)):
+		tool.position = Vector3(-.35,.8,.2)
+	cylinder(tool,Vector3(0,.14,0),.035,.74,"wood",Color("#855b36"))
+	var head := Node3D.new()
+	tool.add_child(head)
+	head.position.y = .14
+	if item == WOOD_AXE:
+		preload("res://wood_axe_model.gd").build(head)
+	else:
+		make_stone_axe_head(head)
+
 func npc_update_camp_pose(npc: CharacterBody3D) -> void:
+	var equipped := int(npc.get_meta("axe_item",-1))
+	if bool(npc.get_meta("camp_warming",false)):
+		equipped = -1
+	npc_sync_axe_visual(npc,equipped)
 	var warming := bool(npc.get_meta("camp_warming",false))
 	var progress := -1.0
 	if warming:
@@ -8220,7 +8254,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"resident":true,"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"resident":true,"axe_item":int(npc.get_meta("axe_item",-1)),"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -8276,6 +8310,8 @@ func net_apply_entities(states: Array) -> void:
 		obj.rotation.y = angle
 		if resident and data.has("clock"):
 			village_apply_age(obj as CharacterBody3D)
+			obj.set_meta("axe_item",int(data.get("axe_item",-1)))
+			npc_sync_axe_visual(obj as CharacterBody3D,-1 if bool(data.get("camp_warming",false)) else int(data.get("axe_item",-1)))
 			npc_world_clock = float(data["clock"])
 			obj.set_meta("camp_warming",bool(data.get("camp_warming",false)))
 			obj.set_meta("camp_stretch",float(data.get("camp_stretch",-1.0)))
