@@ -117,6 +117,10 @@ func _refresh_wolf() -> void:
 		wolf = null
 	_set_view(group_mode)
 
+func _pick_wolf() -> void:
+	if is_instance_valid(wolf_picker):
+		wolf_picker.popup_centered_ratio(0.75)
+
 func _choose_wolf_file(file: String) -> void:
 	var config := ConfigFile.new()
 	config.set_value("asset","path",file)
