@@ -3,6 +3,10 @@ extends "res://main.gd"
 ## mas nunca carrega nem grava os saves do Clareira dos Goblins.
 
 const LAB_WIDTH := 160.0
+const LAB_SAVE := "user://laboratorio-arena-v1.dat"
+var lab_loaded := false
+var lab_save_clock := 0.0
+var lab_god_mode: CheckButton
 var dev_panel: PanelContainer
 var dev_body: VBoxContainer
 var catalog: ItemList
@@ -60,7 +64,10 @@ func _ready() -> void:
 	for id in [1,2,4,6,7,11,23]:
 		stock[id] = 64
 	sync_hotbar()
-	notice("Laboratorio independente: F6 abre o painel de desenvolvedor.")
+	_restore_lab_arena()
+	lab_loaded = true
+	get_tree().auto_accept_quit = false
+	notice("Laboratório: arena salva automaticamente.")
 
 func ground(_x: float, _z: float) -> float:
 	return 0.0
@@ -129,10 +136,148 @@ func update_wolf_spawns(_dt: float) -> void:
 	pass # Criaturas aparecem APENAS ao clicar em Criar mob.
 
 func save_game() -> bool:
-	return true # NENHUMA escrita no mundo ou inventario principal.
+	if not lab_loaded:
+		return true
+	var residents: Dictionary = {}
+	var resources: Dictionary = {}
+	for npc in villagers:
+		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
+			var id := str(npc.get_meta("id",""))
+			residents[id] = village_population.get(id,{}).duplicate(true)
+			var values: Dictionary = {}
+			for key in NPC_RESOURCE_KEYS:
+				values[key] = npc.get_meta(key,-1 if key=="axe_item" else 0)
+			values["extra_items"] = npc_extra_items(npc).duplicate(true)
+			resources[id] = values
+	var snapshot := capture_net_world()
+	var live_objects: Array = []
+	for entry in placed:
+		var id := str(entry.get("id",""))
+		var obj: Node3D = objects.get(id,null)
+		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
+			continue
+		var record: Dictionary = entry.duplicate(true)
+		record["position"] = obj.global_position
+		record["rotation"] = obj.rotation
+		var metadata: Dictionary = {}
+		for key in ["hp","cuts","hits"]:
+			if obj.has_meta(key):
+				metadata[key] = obj.get_meta(key)
+		record["metadata"] = metadata
+		live_objects.append(record)
+	snapshot["placed"] = live_objects
+	var data := {"format":1,"world":snapshot,"inventory":capture_inventory_state(),
+		"residents":residents,"resources":resources,"birth_clock":village_birth_clock,
+		"sequence":test_mob_sequence,"immortal":immortal,"player_position":player.position,
+		"player_rotation":player.rotation,"camera_rotation":camera.rotation,
+		"third_person":third_person,"saved_at":Time.get_unix_time_from_system()}
+	var path := ProjectSettings.globalize_path(LAB_SAVE)
+	var file := FileAccess.open(path+".tmp",FileAccess.WRITE)
+	if file==null:
+		return false
+	file.store_var(data,false)
+	file.flush()
+	var error := file.get_error()
+	file.close()
+	if error!=OK:
+		return false
+	if FileAccess.file_exists(path):
+		if DirAccess.copy_absolute(path,path+".backup")!=OK:
+			return false
+	if DirAccess.rename_absolute(path+".tmp",path)!=OK:
+		return false
+	return true
+
+func _notification(what: int) -> void:
+	if what==NOTIFICATION_WM_CLOSE_REQUEST:
+		if save_game():
+			get_tree().quit()
+		else:
+			notice("Falha ao salvar a arena. Fechamento cancelado.")
+
+func _restore_lab_arena() -> void:
+	var data: Variant = null
+	for candidate in [LAB_SAVE,LAB_SAVE+".backup"]:
+		if not FileAccess.file_exists(candidate):
+			continue
+		var file := FileAccess.open(candidate,FileAccess.READ)
+		if file==null:
+			continue
+		data = file.get_var(false)
+		file.close()
+		if data is Dictionary and int(data.get("format",0))==1:
+			break
+	if not data is Dictionary or int(data.get("format",0))!=1:
+		return
+	var world: Dictionary = data.get("world",{})
+	removed = world.get("removed",{})
+	cleared_stumps = world.get("cleared_stumps",{})
+	tree_regrowth = world.get("tree_regrowth",{})
+	tree_vines = world.get("tree_vines",{})
+	vegetation_harvest = world.get("vegetation_harvest",{})
+	tomato_crop_times = world.get("tomato_crop_times",{})
+	tomato_fruits = world.get("tomato_fruits",{})
+	chest_storage = world.get("chest_storage",{})
+	npc_saved_resources = data.get("resources",{})
+	village_population = data.get("residents",{})
+	village_birth_clock = float(data.get("birth_clock",0.0))
+	npc_world_clock = float(world.get("npc_world_clock",0.0))
+	test_mob_sequence = int(data.get("sequence",0))
+	immortal = bool(data.get("immortal",true))
+	if is_instance_valid(lab_god_mode):
+		lab_god_mode.set_pressed_no_signal(immortal)
+	# Manter o estagio das plantas durante o tempo em que o programa ficou fechado.
+	var offline := maxf(0.0,Time.get_unix_time_from_system()-float(data.get("saved_at",Time.get_unix_time_from_system())))
+	for timers in [tree_regrowth,tomato_crop_times,vegetation_harvest]:
+		for id in timers:
+			if timers[id] is float or timers[id] is int:
+				timers[id] = float(timers[id])+offline
+	for entry in world.get("placed",[]):
+		if not entry is Dictionary:
+			continue
+		var id := str(entry.get("id",""))
+		var kind := str(entry.get("kind",""))
+		var at: Vector3 = entry.get("position",Vector3.ZERO)
+		if id.is_empty() or kind.is_empty() or not at.is_finite():
+			continue
+		var obj := spawn_object(kind,id,at,self,float(entry.get("r",0.0)))
+		obj.rotation = entry.get("rotation",obj.rotation)
+		for key in entry.get("metadata",{}):
+			obj.set_meta(key,entry["metadata"][key])
+		placed.append({"kind":kind,"id":id,"p":[at.x,at.y,at.z],"r":obj.rotation.y,"level":int(entry.get("level",0))})
+	for entity in world.get("entities",[]):
+		var id := str(entity.get("id",""))
+		var kind := str(entity.get("kind",""))
+		var at: Vector3 = entity.get("p",Vector3.ZERO)
+		if id.is_empty() or not at.is_finite():
+			continue
+		var obj: Node3D
+		if bool(entity.get("resident",false)):
+			spawn_friendly_goblin(id,at)
+			obj = objects.get(id,null)
+		elif kind in ["wolf","rabbit","guardian"]:
+			obj = creature(kind,id,at,self)
+		if is_instance_valid(obj):
+			obj.global_position = at
+			obj.rotation.y = float(entity.get("r",0.0))
+			if int(entity.get("hp",-1))>=0:
+				obj.set_meta("hp",int(entity["hp"]))
+			obj.set_meta("wolf_fleeing",bool(entity.get("wolf_fleeing",false)))
+	apply_inventory_state(data.get("inventory",{}))
+	player.position = data.get("player_position",Vector3(0,1,0))
+	player.rotation = data.get("player_rotation",Vector3.ZERO)
+	camera.rotation = data.get("camera_rotation",Vector3.ZERO)
+	if bool(data.get("third_person",false))!=third_person:
+		toggle_view()
+	update_npc_daylight(0.0)
+
 
 func _physics_process(dt: float) -> void:
 	super._physics_process(dt)
+	lab_save_clock += dt
+	if lab_save_clock >= 10.0:
+		lab_save_clock = 0.0
+		save_game()
 	if immortal:
 		health = 100
 	if is_instance_valid(hud):
@@ -247,7 +392,9 @@ func _create_developer_ui() -> void:
 	_lab_button("Remover todas as criaturas",_remove_mobs)
 	dev_body.add_child(HSeparator.new())
 	_heading("CONTROLES DE TESTE",18)
+	_lab_button("Salvar arena agora",func(): notice("Arena salva." if save_game() else "Falha ao salvar arena."))
 	var god_mode := CheckButton.new()
+	lab_god_mode = god_mode
 	god_mode.text = "Invulnerabilidade do jogador"
 	god_mode.button_pressed = immortal
 	god_mode.toggled.connect(func(value: bool): immortal = value)
@@ -624,7 +771,7 @@ func _create_lab_update_ui() -> void:
 	lab_update_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(lab_update_status)
 	var warning := Label.new()
-	warning.text = "A atualização reinicia somente o laboratório. A arena temporária será perdida."
+	warning.text = "A arena será salva antes da instalação e restaurada ao reiniciar."
 	warning.custom_minimum_size = Vector2(430,48)
 	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(warning)
@@ -660,9 +807,15 @@ func _close_lab_update() -> void:
 func _install_lab_update() -> void:
 	if str(lab_update_state.get("phase",""))!="ready":
 		return
+	if not save_game():
+		updater.abort_install("Falha ao salvar a arena. Atualização cancelada.")
+		return
 	updater.download_and_install()
 
 func _lab_update_verified() -> void:
+	if not save_game():
+		updater.abort_install("Falha ao salvar a arena. Atualização cancelada para proteger seus testes.")
+		return
 	if updater.launch_installer():
 		get_tree().quit()
 
