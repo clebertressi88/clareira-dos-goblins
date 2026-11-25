@@ -34,6 +34,10 @@ jobs:
           Copy-Item 'Projeto-Godot' $stage -Recurse
           Copy-Item 'Laboratorio-Desenvolvedor/laboratorio_dev.gd' (Join-Path $stage 'laboratorio_dev.gd')
           Copy-Item 'Laboratorio-Desenvolvedor/laboratorio_dev.tscn' (Join-Path $stage 'laboratorio_dev.tscn')
+          # Gerar atualizador exclusivo na copia temporaria; nunca modificar o jogo.
+          $updater = [System.IO.File]::ReadAllText((Join-Path $stage 'game_updater.gd'))
+          $updater = $updater.Replace('jogo-windows','laboratorio-dev-windows').Replace('Clareira-dos-Goblins-Windows.zip','Clareira-Laboratorio-Dev-Windows.zip').Replace('Clareira-dos-Goblins.exe','Clareira-Laboratorio-Dev.exe').Replace('clareira-dos-goblins.exe','clareira-laboratorio-dev.exe').Replace('clareira-atualizador','laboratorio-atualizador').Replace('instalar-clareira.ps1','instalar-laboratorio.ps1')
+          [System.IO.File]::WriteAllText((Join-Path $stage 'laboratorio_updater.gd'),$updater,(New-Object System.Text.UTF8Encoding($false)))
           $project = Join-Path $stage 'project.godot'
           $source = [System.IO.File]::ReadAllText($project)
           if (-not $source.Contains('run/main_scene="res://main.tscn"')) { throw 'Cena principal do jogo mudou; revise o build isolado do laboratorio.' }
@@ -152,4 +156,6 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $assets -notcontains 'Clareira-Laboratorio-Dev-Windows.zip') {
             throw 'O ZIP do laboratorio nao foi confirmado na release.'
           }
+          gh release edit laboratorio-dev-windows --notes "Build do laboratorio gerado do commit $env:GITHUB_SHA. Programa separado do jogo." --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao registrar a versao do laboratorio.' }
           Write-Host 'Publicacao separada confirmada.'
