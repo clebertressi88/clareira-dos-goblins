@@ -13,6 +13,13 @@ var test_mob_sequence := 0
 var immortal := true
 var lab_open := false
 var lab_note: Label
+var lab_update_button: Button
+var lab_update_dialog: ConfirmationDialog
+var lab_update_status: Label
+var lab_update_progress: ProgressBar
+var lab_update_state: Dictionary = {}
+var lab_update_resume := false
+const LAB_UPDATER = preload("res://laboratorio_updater.gd")
 var creative_panel: PanelContainer
 var creative_list: ItemList
 var creative_search: LineEdit
@@ -41,6 +48,7 @@ func _ready() -> void:
 	make_ui()
 	_create_developer_ui()
 	_create_creative_inventory()
+	_create_lab_update_ui()
 	health = 100
 	moving = true
 	panel.hide()
@@ -162,6 +170,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			notice("Posicionamento cancelado.")
 			get_viewport().set_input_as_handled()
 			return
+		if event.keycode == KEY_F7:
+			_open_lab_update()
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode == KEY_F6:
 			_toggle_panel(not lab_open)
 			get_viewport().set_input_as_handled()
@@ -191,7 +203,7 @@ func _create_developer_ui() -> void:
 	dev_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	dev_panel.offset_left = -368
 	dev_panel.offset_right = -10
-	dev_panel.offset_top = 14
+	dev_panel.offset_top = 65
 	dev_panel.offset_bottom = -14
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("#1c241fee")
@@ -536,3 +548,92 @@ func primary() -> void:
 		placed.append({"kind":actual,"id":id,"p":[at.x,at.y,at.z],"r":0.0,"level":0})
 		spawn_object(actual,id,at,self)
 	notice("Objeto colocado. Clique novamente ou Esc para cancelar.")
+
+func _create_lab_update_ui() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 12
+	add_child(layer)
+	lab_update_button = Button.new()
+	lab_update_button.text = "↻  ATUALIZAR  [F7]"
+	lab_update_button.add_theme_font_size_override("font_size",18)
+	lab_update_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	layer.add_child(lab_update_button)
+	lab_update_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	lab_update_button.offset_left = -255
+	lab_update_button.offset_right = -12
+	lab_update_button.offset_top = 8
+	lab_update_button.offset_bottom = 53
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#245b39")
+	normal.border_color = Color("#9bd28e")
+	normal.set_border_width_all(2)
+	normal.set_corner_radius_all(8)
+	lab_update_button.add_theme_stylebox_override("normal",normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#337b4e")
+	lab_update_button.add_theme_stylebox_override("hover",hover)
+	lab_update_button.pressed.connect(_open_lab_update)
+	lab_update_dialog = ConfirmationDialog.new()
+	lab_update_dialog.title = "Atualização do Laboratório Dev"
+	lab_update_dialog.min_size = Vector2i(470,180)
+	lab_update_dialog.ok_button_text = "Baixar e instalar"
+	lab_update_dialog.cancel_button_text = "Fechar"
+	layer.add_child(lab_update_dialog)
+	var body := VBoxContainer.new()
+	lab_update_dialog.add_child(body)
+	lab_update_status = Label.new()
+	lab_update_status.custom_minimum_size.x = 430
+	lab_update_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(lab_update_status)
+	var warning := Label.new()
+	warning.text = "A atualização reinicia somente o laboratório. A arena temporária será perdida."
+	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(warning)
+	lab_update_progress = ProgressBar.new()
+	lab_update_progress.show_percentage = true
+	body.add_child(lab_update_progress)
+	lab_update_dialog.confirmed.connect(_install_lab_update)
+	lab_update_dialog.canceled.connect(_close_lab_update)
+	lab_update_dialog.close_requested.connect(_close_lab_update)
+	updater = LAB_UPDATER.new()
+	updater.status_changed.connect(_lab_update_changed)
+	updater.install_ready.connect(_lab_update_verified)
+	add_child(updater)
+	_lab_update_changed(updater.get_state())
+
+func _open_lab_update() -> void:
+	if lab_update_dialog.visible:
+		return
+	lab_update_resume = moving
+	moving = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	lab_update_dialog.popup_centered()
+	_lab_update_changed(updater.get_state())
+	if str(lab_update_state.get("phase","")) not in ["ready","downloading","verified","installing"]:
+		updater.check_updates()
+
+func _close_lab_update() -> void:
+	if lab_update_resume and not creative_visible and not inventory and not lab_open:
+		moving = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func _install_lab_update() -> void:
+	if str(lab_update_state.get("phase",""))!="ready":
+		return
+	lab_update_dialog.popup_centered.call_deferred()
+	updater.download_and_install()
+
+func _lab_update_verified() -> void:
+	if updater.launch_installer():
+		get_tree().quit()
+
+func _lab_update_changed(state: Dictionary) -> void:
+	lab_update_state = state
+	var phase := str(state.get("phase","idle"))
+	lab_update_status.text = str(state.get("message","Verificando versão...")).replace("do jogo","do laboratório").replace("Seu jogo","Seu laboratório")
+	lab_update_progress.value = int(state.get("percent",0))
+	lab_update_progress.visible = phase in ["downloading","verified","installing"]
+	lab_update_dialog.get_ok_button().disabled = phase!="ready"
+	lab_update_button.text = "↻  NOVA VERSÃO  [F7]" if bool(state.get("update_available",false)) else "↻  ATUALIZAR  [F7]"
+	if phase=="downloading":
+		lab_update_button.text = "Baixando %d%%" % int(state.get("percent",0))
