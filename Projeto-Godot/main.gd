@@ -1600,7 +1600,7 @@ func village_take_supplies(npc: CharacterBody3D,chest: Node3D,cost: Dictionary) 
 func village_cabins(camp: Vector3) -> Array[Node3D]:
 	var cabins := village_objects("village_cabin",camp)
 	var starter: Node3D = objects.get(STARTER_CABIN_ID,null)
-	if is_instance_valid(starter) and not starter.is_queued_for_deletion() and starter.global_position.distance_to(camp)<NPC_PATROL_RADIUS:
+	if is_instance_valid(starter) and not starter.is_queued_for_deletion() and starter.global_position.distance_to(camp)<NPC_COMBAT_RADIUS:
 		cabins.append(starter)
 	return cabins
 
@@ -1762,6 +1762,27 @@ func village_build_step(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3
 		return village_cancel_build(npc)
 	var toward := site-npc.global_position
 	toward.y = 0.0
+	if kind=="bed":
+		for cabin in village_cabins(camp):
+			var local_site := cabin.to_local(site)
+			if absf(local_site.x)>2.2 or absf(local_site.z)>2.2:
+				continue
+			var local_npc := cabin.to_local(npc.global_position)
+			var inside := absf(local_npc.x)<2.45 and absf(local_npc.z)<2.45
+			if not inside:
+				var waypoint := Vector3(0,0,3.5)
+				if local_npc.z<3.1 and absf(local_npc.x)>.65:
+					waypoint = Vector3(3.4 if local_npc.x>0 else -3.4,0,3.8)
+					if local_npc.z< -3.0 and absf(local_npc.x)<3.15:
+						waypoint.z = -3.8
+				elif absf(local_npc.x)<.5 and local_npc.z>=3.1:
+					waypoint = Vector3(0,0,1.8)
+				elif absf(local_npc.x)<.65 and local_npc.z<3.1:
+					waypoint = Vector3(0,0,1.8)
+				var approach := cabin.to_global(waypoint)-npc.global_position
+				approach.y = 0.0
+				return approach.normalized()
+			break
 	var reach := 3.5 if kind=="village_cabin" else 1.45
 	if toward.length()>reach:
 		return toward.normalized() if not npc.is_on_wall() else village_cancel_build(npc)
@@ -1795,8 +1816,6 @@ func village_build_step(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3
 func npc_hunt_rabbit(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3:
 	var bag := npc_extra_items(npc)
 	var item := 0 if int(bag.get("0",0))>0 else 8 if int(bag.get("8",0))>0 else -1
-	if item<0:
-		return Vector3.INF
 	var prey: CharacterBody3D
 	var nearest := 9.0
 	for mob in mobs:
@@ -1808,6 +1827,40 @@ func npc_hunt_rabbit(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3:
 			nearest = distance
 	if not is_instance_valid(prey):
 		return Vector3.INF
+	if item<0:
+		var station := npc_craft_bench(npc,camp)
+		if not is_instance_valid(station):
+			return Vector3.INF
+		if village_carried(npc,1)<3:
+			for chest in village_objects("chest",camp):
+				var chest_id := str(chest.get_meta("id",""))
+				var slots := normalized_chest_slots(chest_id)
+				for index in range(slots.size()):
+					var cell: Array = slots[index]
+					if int(cell[0])!=1 or int(cell[1])<3:
+						continue
+					var approach := chest.global_position-npc.global_position
+					approach.y = 0.0
+					if approach.length()>1.35:
+						return approach.normalized() if not npc.is_on_wall() else Vector3.INF
+					var left := int(cell[1])-3
+					slots[index] = [1,left] if left>0 else [-1,0]
+					chest_storage[chest_id] = slots
+					village_add_carried(npc,1,3)
+					npc_chest_interaction(chest_id)
+					if net_role=="host":
+						net_chest_snapshot.rpc(chest_id,slots)
+					save_game()
+					return Vector3.ZERO
+			return Vector3.INF
+		var approach := station.global_position-npc.global_position
+		approach.y = 0.0
+		if approach.length()>1.35:
+			return approach.normalized() if not npc.is_on_wall() else Vector3.INF
+		village_add_carried(npc,1,-3)
+		village_add_carried(npc,8,1)
+		save_game()
+		return Vector3.ZERO
 	var toward := prey.global_position-npc.global_position
 	toward.y = 0
 	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(toward.x,toward.z),minf(dt*8.0,1.0))
@@ -1827,6 +1880,13 @@ func npc_hunt_rabbit(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3:
 		rig.call("play_action","attack")
 	npc.set_meta("attack_serial",int(npc.get_meta("attack_serial",0))+1)
 	resolve_spear_throw(origin,aim.normalized(),item,[npc.get_rid()])
+	var spear_entry: Dictionary = placed.back()
+	var spear_obj := objects.get(str(spear_entry.get("id","")),null) as Node3D
+	if is_instance_valid(spear_obj):
+		spear_obj.set_meta("npc_owner",str(npc.get_meta("id","")))
+		npc.set_meta("work_id",str(spear_obj.get_meta("id","")))
+		npc.set_meta("work_mode","work")
+		npc.set_meta("work_deadline",elapsed+30.0)
 	npc.set_meta("next_work",elapsed)
 	return Vector3.ZERO
 
@@ -1959,7 +2019,8 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		npc.set_meta("carried_teeth",npc_deposit(id,WOLF_TOOTH,int(npc.get_meta("carried_teeth",0))))
 		var bag := npc_extra_items(npc)
 		for key in bag.keys():
-			var left := npc_deposit(id,int(key),int(bag[key]))
+			var retained := 1 if int(key) in [0,8] else 0
+			var left := retained+npc_deposit(id,int(key),maxi(0,int(bag[key])-retained))
 			if left>0:
 				bag[key] = left
 			else:
@@ -2379,7 +2440,7 @@ func update_villagers(dt: float) -> void:
 		elif str(village_population.get(str(npc.get_meta("id","")),{}).get("order","auto"))=="guard":
 			heading = delta_home.normalized() if distance_home>4.0 else Vector3.ZERO
 			walking = not heading.is_zero_approx()
-		elif distance_home>NPC_PATROL_RADIUS-.85:
+		elif distance_home>NPC_PATROL_RADIUS-.85 and not (str(npc.get_meta("work_mode",""))=="infra" and str(npc.get_meta("infra_kind",""))=="bed"):
 			heading = delta_home.normalized()
 			walking = true
 			npc.set_meta("ai_state","idle")
@@ -2423,7 +2484,7 @@ func update_villagers(dt: float) -> void:
 		npc_restore_ground(npc)
 		# O limite é aplicado após a física, mesmo quando há empurrões.
 		var displacement := Vector2(npc.global_position.x-campfire.x,npc.global_position.z-campfire.z)
-		var movement_limit := NPC_COMBAT_RADIUS if pursuing or distance_home>NPC_PATROL_RADIUS else NPC_PATROL_RADIUS
+		var movement_limit := NPC_COMBAT_RADIUS if pursuing or distance_home>NPC_PATROL_RADIUS or (str(npc.get_meta("work_mode",""))=="infra" and str(npc.get_meta("infra_kind",""))=="bed") else NPC_PATROL_RADIUS
 		if displacement.length()>movement_limit:
 			var border := displacement.normalized()*(movement_limit-.04)
 			npc.global_position = Vector3(campfire.x+border.x,npc.global_position.y,campfire.z+border.y)
