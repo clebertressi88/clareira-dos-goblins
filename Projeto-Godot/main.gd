@@ -94,6 +94,7 @@ const WALL_SIZE := CELL * 3.0
 const DOOR_CLEAR_WIDTH := 1.18
 const DOOR_CLEAR_HEIGHT := 2.15
 const HOTBAR_SIZE := 9
+const NPC_COMBAT_RADIUS := 40.0
 const NPC_PATROL_RADIUS := 12.0 # Limite da patrulha em metros, medido a partir da fogueira.
 const NPC_MODEL_PATH := "res://modelos/goblin_npc.glb"
 const NPC_RIG_SCRIPT := preload("res://npc_goblin_skirmisher.gd")
@@ -708,7 +709,7 @@ func permanent_spawn_chunks() -> Dictionary:
 	var camp := get_campfire_center()
 	# O ponto zero e a fogueira original permanecem mesmo se a fogueira mudar.
 	for center in [spawn,Vector3(0,0,-6),camp]:
-		var radius := NPC_PATROL_RADIUS+2.0
+		var radius := NPC_COMBAT_RADIUS+2.0
 		var low := chunk_from_position(center-Vector3(radius,0,radius))
 		var high := chunk_from_position(center+Vector3(radius,0,radius))
 		for z in range(low.y,high.y+1):
@@ -1315,9 +1316,6 @@ func npc_clear_combat_hit(attacker: CharacterBody3D, target: CharacterBody3D) ->
 	return contact.is_empty() or contact.get("collider",null)==target
 
 func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vector3:
-	if bool(wolf.get_meta("wolf_fleeing",false)):
-		npc.set_meta("attacker_id","")
-		return Vector3.ZERO
 	var direction := wolf.global_position-npc.global_position
 	direction.y = 0.0
 	var distance := direction.length()
@@ -2327,13 +2325,28 @@ func update_villagers(dt: float) -> void:
 		var heading := Vector3.ZERO
 		# Prioridade absoluta: NPC que chega ao limite retorna para perto da fogueira.
 		var attacker: CharacterBody3D = objects.get(str(npc.get_meta("attacker_id","")),null) as CharacterBody3D
+		if not is_instance_valid(attacker) or attacker.is_queued_for_deletion() or attacker.global_position.distance_to(campfire)>NPC_COMBAT_RADIUS:
+			npc.set_meta("attacker_id","")
+			attacker = null
+			if village_is_adult(npc) and distance_home<NPC_PATROL_RADIUS and elapsed>=float(npc.get_meta("recover_until",0.0)):
+				var closest_hostile := 12.0
+				for hostile in mobs:
+					if not is_instance_valid(hostile) or hostile.is_queued_for_deletion() or hostile.get_meta("kind","")!="wolf":
+						continue
+					var hostile_distance := npc.global_position.distance_to(hostile.global_position)
+					if hostile_distance<closest_hostile and hostile.global_position.distance_to(campfire)<=NPC_COMBAT_RADIUS:
+						closest_hostile = hostile_distance
+						attacker = hostile
+				if is_instance_valid(attacker):
+					npc.set_meta("attacker_id",str(attacker.get_meta("id","")))
+		var pursuing := is_instance_valid(attacker) and elapsed>=float(npc.get_meta("recover_until",0.0)) and village_is_adult(npc)
 		if not village_is_adult(npc):
 			var child_goal := campfire+Vector3(cos(float(npc.get_instance_id()%31))*2.0,0,sin(float(npc.get_instance_id()%31))*2.0)
 			var toward := child_goal-npc.global_position
 			toward.y = 0.0
 			heading = toward.normalized() if toward.length()>.6 and not npc.is_on_wall() else Vector3.ZERO
 			walking = not heading.is_zero_approx()
-		elif is_instance_valid(attacker) and not attacker.is_queued_for_deletion() and attacker.global_position.distance_to(npc.global_position)<6.0 and elapsed>=float(npc.get_meta("recover_until",0.0)):
+		elif pursuing:
 			heading = npc_defend(npc,attacker,dt)
 			walking = not heading.is_zero_approx()
 		elif elapsed<float(npc.get_meta("recover_until",0.0)):
@@ -2365,7 +2378,7 @@ func update_villagers(dt: float) -> void:
 			choose_goblin_destination(npc)
 		if walking:
 			npc.rotation.y = lerp_angle(npc.rotation.y,atan2(heading.x,heading.z),minf(dt*6.0,1.0))
-		var pace: float = float(npc.get_meta("walk_speed",1.3)) if walking else 0.0
+		var pace: float = (3.8 if pursuing else float(npc.get_meta("walk_speed",1.3))) if walking else 0.0
 		npc.velocity.x = move_toward(npc.velocity.x,heading.x*pace,dt*7.0)
 		npc.velocity.z = move_toward(npc.velocity.z,heading.z*pace,dt*7.0)
 		if not npc.is_on_floor():
@@ -2383,8 +2396,9 @@ func update_villagers(dt: float) -> void:
 		npc_restore_ground(npc)
 		# O limite é aplicado após a física, mesmo quando há empurrões.
 		var displacement := Vector2(npc.global_position.x-campfire.x,npc.global_position.z-campfire.z)
-		if displacement.length()>NPC_PATROL_RADIUS:
-			var border := displacement.normalized()*(NPC_PATROL_RADIUS-.04)
+		var movement_limit := NPC_COMBAT_RADIUS if pursuing or distance_home>NPC_PATROL_RADIUS else NPC_PATROL_RADIUS
+		if displacement.length()>movement_limit:
+			var border := displacement.normalized()*(movement_limit-.04)
 			npc.global_position = Vector3(campfire.x+border.x,npc.global_position.y,campfire.z+border.y)
 			npc.velocity.x = 0.0
 			npc.velocity.z = 0.0
