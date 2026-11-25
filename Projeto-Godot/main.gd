@@ -2612,7 +2612,7 @@ func wall_surface_material(beam: bool) -> StandardMaterial3D:
 		materials[key] = mat
 	return materials[key] as StandardMaterial3D
 
-func wall_surface_box(surface: SurfaceTool, center: Vector3, size: Vector3, beam: bool) -> void:
+func wall_surface_box(surface: SurfaceTool, center: Vector3, size: Vector3, beam: bool, orientation: Basis = Basis.IDENTITY) -> void:
 	var half := size*.5
 	var faces := [
 		[Vector3.BACK,Vector3.RIGHT,Vector3.UP],
@@ -2643,71 +2643,186 @@ func wall_surface_box(surface: SurfaceTool, center: Vector3, size: Vector3, beam
 				uv = Vector2((point.z+.075)/WALL_SIZE,1.0-point.y/WALL_SIZE)
 			elif absf(normal.y)>.5:
 				uv = Vector2((point.x+WALL_SIZE*.5)/WALL_SIZE,(point.z+.075)/WALL_SIZE)
-			surface.set_normal(normal)
+			surface.set_normal(orientation*normal)
 			surface.set_uv(uv)
-			surface.add_vertex(point)
+			surface.add_vertex(center+orientation*(point-center))
+
+# Materiais compartilhados e malhas agrupadas: detalhes nao criam corpos fisicos.
+func rustic_surface(key: String) -> SurfaceTool:
+	var material_key := "rustic_"+key
+	if not materials.has(material_key):
+		var mat: StandardMaterial3D
+		if key in ["wall","beam","step","stair_beam"]:
+			var original := floor_surface_material(key=="stair_beam") if key in ["step","stair_beam"] else wall_surface_material(key=="beam")
+			mat = original.duplicate() as StandardMaterial3D
+		else:
+			mat = StandardMaterial3D.new()
+			mat.albedo_color = Color("#a18a60") if key=="rope" else Color("#69635a")
+			mat.roughness = .95
+			if key=="iron":
+				mat.metallic = .40
+		mat.vertex_color_use_as_albedo = true
+		materials[material_key] = mat
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	surface.set_material(materials[material_key])
+	surface.set_color(Color.WHITE)
+	return surface
+
+func rustic_rng(parent: StaticBody3D, kind: String) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	# ID persistente e igual em todos os clientes, sem alterar o formato do save.
+	rng.seed = hash(str(parent.get_meta("id","preview"))+kind)
+	return rng
+
+func rustic_box(surface: SurfaceTool, at: Vector3, size: Vector3, beam: bool, rng: RandomNumberGenerator, angle: float = 0.0) -> void:
+	var tone := rng.randf_range(.82,1.0)
+	surface.set_color(Color(tone,tone,tone))
+	wall_surface_box(surface,at,size,beam,Basis(Vector3.BACK,angle))
+
+func rustic_finish(parent: StaticBody3D, surfaces: Array, mesh_name: String) -> void:
+	var mesh := ArrayMesh.new()
+	for surface in surfaces:
+		if surface is SurfaceTool:
+			surface.commit(mesh)
+	if mesh.get_surface_count()==0:
+		return
+	var visual := MeshInstance3D.new()
+	visual.name = mesh_name
+	visual.mesh = mesh
+	parent.add_child(visual)
+
+# Uma tabua de cinco vertices com ponta irregular, sem adicionar colisao.
+func rustic_plank(surface: SurfaceTool, left: float, right: float, bottom: float, top: float, rng: RandomNumberGenerator) -> void:
+	var width := right-left
+	var inset := minf(.013,width*.05)
+	var x0 := left+inset
+	var x1 := right-inset
+	var skew := rng.randf_range(-inset,inset)
+	var z := rng.randf_range(-.014,.014)
+	var thickness := rng.randf_range(.125,.155)
+	var cut := minf(.085,(top-bottom)*.12)
+	var h0 := top-rng.randf_range(.005,cut)
+	var h1 := top-rng.randf_range(.005,cut)
+	var hm := top-rng.randf_range(.012,cut)
+	var poly := PackedVector2Array([Vector2(x0,bottom),Vector2(x1,bottom),Vector2(x1+skew,h1),Vector2(lerpf(x0,x1,.54)+skew,hm),Vector2(x0+skew,h0)])
+	var triangles := Geometry2D.triangulate_polygon(poly)
+	var tone := rng.randf_range(.79,1.0)
+	surface.set_color(Color(tone,tone*.98,tone*.95))
+	for front in [true,false]:
+		var normal := Vector3.BACK if front else Vector3.FORWARD
+		var face_z := z+thickness*.5 if front else z-thickness*.5
+		for i in range(0,triangles.size(),3):
+			for offset in ([0,2,1] if front else [0,1,2]):
+				var v := poly[triangles[i+int(offset)]]
+				surface.set_normal(normal)
+				surface.set_uv(Vector2((v.x+WALL_SIZE*.5)/WALL_SIZE,1.0-v.y/WALL_SIZE))
+				surface.add_vertex(Vector3(v.x,v.y,face_z))
+	for i in range(poly.size()):
+		var p := poly[i]
+		var q := poly[(i+1)%poly.size()]
+		var edge := q-p
+		var normal := Vector3(edge.y,-edge.x,0).normalized()
+		var corners := [Vector3(p.x,p.y,z+thickness*.5),Vector3(q.x,q.y,z+thickness*.5),Vector3(q.x,q.y,z-thickness*.5),Vector3(p.x,p.y,z-thickness*.5)]
+		for index in [0,1,2,0,2,3]:
+			var v: Vector3 = corners[index]
+			surface.set_normal(normal)
+			surface.set_uv(Vector2((v.x+WALL_SIZE*.5+v.z*.24)/WALL_SIZE,1.0-v.y/WALL_SIZE))
+			surface.add_vertex(v)
+
+func rustic_plank_zone(surface: SurfaceTool, left: float, right: float, bottom: float, top: float, rng: RandomNumberGenerator) -> void:
+	var count := maxi(1,roundi((right-left)/.32))
+	var widths: Array[float] = []
+	var total := 0.0
+	for i in range(count):
+		var width := rng.randf_range(.76,1.24)
+		widths.append(width)
+		total += width
+	var x := left
+	for i in range(count):
+		var next := right if i==count-1 else x+(right-left)*widths[i]/total
+		rustic_plank(surface,x,next,bottom,top,rng)
+		x = next
+
+# Cordas de secao quadrada arredondadas visualmente por varias voltas estreitas.
+func rustic_lashing(surface: SurfaceTool, at: Vector3, width: float, depth: float, rng: RandomNumberGenerator) -> void:
+	for i in range(3):
+		var y := at.y+float(i-1)*.027
+		for side in [-1.0,1.0]:
+			rustic_box(surface,Vector3(at.x,y,at.z+float(side)*depth*.5),Vector3(width+.024,.018,.019),false,rng,.035)
+			rustic_box(surface,Vector3(at.x+float(side)*width*.5,y,at.z),Vector3(.019,.018,depth+.024),false,rng)
+
+func rustic_patch(wood: SurfaceTool, iron: SurfaceTool, at: Vector3, rng: RandomNumberGenerator, metal: bool) -> void:
+	var target := iron if metal else wood
+	rustic_box(target,at,Vector3(rng.randf_range(.19,.32),rng.randf_range(.12,.20),.026),not metal,rng,rng.randf_range(-.13,.13))
+	for dx in [-.065,.065]:
+		rustic_box(iron,at+Vector3(float(dx),0,.019 if at.z>0 else -.019),Vector3(.024,.024,.020),false,rng)
 
 func build_wood_wall(parent: StaticBody3D, kind: String) -> void:
-	var boards := SurfaceTool.new()
-	boards.begin(Mesh.PRIMITIVE_TRIANGLES)
-	boards.set_material(wall_surface_material(false))
-	var beams := SurfaceTool.new()
-	beams.begin(Mesh.PRIMITIVE_TRIANGLES)
-	beams.set_material(wall_surface_material(true))
-	# Porta com abertura mais larga e apenas tres volumes de colisao.
-	# O vao antigo de 85 cm prendia a capsula em abordagens diagonais.
+	var rng := rustic_rng(parent,kind)
+	var boards := rustic_surface("wall")
+	var beams := rustic_surface("beam")
+	var rope := rustic_surface("rope")
+	var iron := rustic_surface("iron")
+	var half := WALL_SIZE*.5
+	# Mantem o vao util de 1,18 m e o cabecalho a 2,15 m. Somente o visual muda.
 	if kind=="wood_doorway":
-		var side_width := (WALL_SIZE-DOOR_CLEAR_WIDTH)*.5
+		var opening := DOOR_CLEAR_WIDTH*.5
+		rustic_plank_zone(boards,-half,-opening,0,WALL_SIZE,rng)
+		rustic_plank_zone(boards,opening,half,0,WALL_SIZE,rng)
+		rustic_plank_zone(boards,-opening,opening,DOOR_CLEAR_HEIGHT,WALL_SIZE,rng)
+		var side_width := half-opening
 		for side in [-1.0,1.0]:
-			var at := Vector3(float(side)*(DOOR_CLEAR_WIDTH+side_width)*.5,WALL_SIZE*.5,0)
-			var size := Vector3(side_width,WALL_SIZE,.15)
-			wall_surface_box(boards,at,size,false)
+			var at := Vector3(float(side)*(opening+side_width*.5),WALL_SIZE*.5,0)
 			collider(parent,Vector3(side_width,WALL_SIZE,.15),at)
 		var head_height := WALL_SIZE-DOOR_CLEAR_HEIGHT
-		var head_at := Vector3(0,DOOR_CLEAR_HEIGHT+head_height*.5,0)
-		wall_surface_box(boards,head_at,Vector3(DOOR_CLEAR_WIDTH,head_height,.15),false)
-		collider(parent,Vector3(DOOR_CLEAR_WIDTH,head_height,.15),head_at)
-	# As outras paredes mantem as aberturas e colisoes anteriores.
-	for row in range(3) if kind!="wood_doorway" else range(0):
-		for column in range(3):
-			var opening: bool = column==1 and ((kind=="wood_doorway" and row in [0,1]) or (kind=="wood_window" and row==1))
-			if opening:
-				continue
-			if kind=="wood_doorway" and row==2 and column==1:
-				wall_surface_box(boards,Vector3(0,WALL_SIZE-.20,0),Vector3(CELL,.40,.15),false)
-				collider(parent,Vector3(CELL*.99,.40,.18),Vector3(0,WALL_SIZE-.20,0))
-				continue
-			var x := (float(column)-1.0)*CELL
-			var y := (float(row)+.5)*CELL
-			wall_surface_box(boards,Vector3(x,y,0),Vector3(CELL,CELL,.15),false)
-			collider(parent,Vector3(CELL*.99,CELL*.99,.18),Vector3(x,y,0))
-	# Estrutura decorativa na face interna (+Z local), sem colisao extra.
-	for x in [-WALL_SIZE*.5+.06,WALL_SIZE*.5-.06]:
-		wall_surface_box(beams,Vector3(float(x),WALL_SIZE*.5,.105),Vector3(.12,WALL_SIZE,.10),true)
-	wall_surface_box(beams,Vector3(0,WALL_SIZE-.06,.105),Vector3(WALL_SIZE,.12,.10),true)
-	if kind!="wood_doorway":
-		wall_surface_box(beams,Vector3(0,.06,.105),Vector3(WALL_SIZE,.12,.10),true)
-	if kind=="wood_wall":
-		wall_surface_box(beams,Vector3(0,WALL_SIZE*.5,.105),Vector3(.12,WALL_SIZE-.24,.10),true)
+		collider(parent,Vector3(DOOR_CLEAR_WIDTH,head_height,.15),Vector3(0,DOOR_CLEAR_HEIGHT+head_height*.5,0))
+	elif kind=="wood_window":
+		rustic_plank_zone(boards,-half,-CELL*.5,0,WALL_SIZE,rng)
+		rustic_plank_zone(boards,CELL*.5,half,0,WALL_SIZE,rng)
+		rustic_plank_zone(boards,-CELL*.5,CELL*.5,0,CELL,rng)
+		rustic_plank_zone(boards,-CELL*.5,CELL*.5,CELL*2.0,WALL_SIZE,rng)
+		for row in range(3):
+			for column in range(3):
+				if row==1 and column==1:
+					continue
+				collider(parent,Vector3(CELL*.99,CELL*.99,.18),Vector3((float(column)-1.0)*CELL,(float(row)+.5)*CELL,0))
 	else:
-		var window := kind=="wood_window"
-		var low := CELL if window else 0.0
-		var high := CELL*2.0 if window else DOOR_CLEAR_HEIGHT
-		var half_opening := CELL*.5 if window else DOOR_CLEAR_WIDTH*.5
-		var jamb_height := high-low
-		for side in [-1.0,1.0]:
-			wall_surface_box(beams,Vector3(float(side)*half_opening,low+jamb_height*.5,.105),Vector3(.075,jamb_height,.065),true)
-		if window:
-			for edge in [CELL,2.0*CELL]:
-				wall_surface_box(beams,Vector3(0,float(edge),.105),Vector3(CELL,.075,.07),true)
-		else:
-			wall_surface_box(beams,Vector3(0,high,.105),Vector3(DOOR_CLEAR_WIDTH,.095,.075),true)
-	var wall_mesh := boards.commit()
-	beams.commit(wall_mesh)
-	var visual := MeshInstance3D.new()
-	visual.name = "MadeiraTexturizada"
-	visual.mesh = wall_mesh
-	parent.add_child(visual)
+		rustic_plank_zone(boards,-half,half,0,WALL_SIZE,rng)
+		collider(parent,Vector3(WALL_SIZE*.995,WALL_SIZE*.995,.18),Vector3.UP*WALL_SIZE*.5)
+	# Postes e travessas em ambas as faces; dentro ficam os reforcos maiores.
+	for side in [-1.0,1.0]:
+		var x := float(side)*(half-.075)
+		rustic_box(beams,Vector3(x,WALL_SIZE*.5,.10),Vector3(.14,WALL_SIZE-.025,.13),true,rng,rng.randf_range(-.012,.012))
+		rustic_box(beams,Vector3(x,WALL_SIZE*.5,-.084),Vector3(.11,WALL_SIZE-.05,.09),true,rng,rng.randf_range(-.012,.012))
+		rustic_lashing(rope,Vector3(x,.32 if side<0 else WALL_SIZE-.34,.055),.16,.28,rng)
+	for z in [-.095,.12]:
+		rustic_box(beams,Vector3(0,WALL_SIZE-.09,float(z)),Vector3(WALL_SIZE-.035,.14,.10),true,rng,rng.randf_range(-.009,.009))
+		if kind!="wood_doorway":
+			rustic_box(beams,Vector3(0,.10,float(z)),Vector3(WALL_SIZE-.035,.13,.10),true,rng,rng.randf_range(-.009,.009))
+	if kind=="wood_wall":
+		rustic_box(beams,Vector3(0,WALL_SIZE*.52,.12),Vector3(WALL_SIZE-.15,.13,.10),true,rng,rng.randf_range(-.055,.055))
+		rustic_box(beams,Vector3(rng.randf_range(-.32,.32),WALL_SIZE*.5,.125),Vector3(.12,WALL_SIZE-.24,.11),true,rng,rng.randf_range(-.035,.035))
+	else:
+		var is_window := kind=="wood_window"
+		var low := CELL if is_window else 0.0
+		var high := CELL*2.0 if is_window else DOOR_CLEAR_HEIGHT
+		var half_opening := CELL*.5 if is_window else DOOR_CLEAR_WIDTH*.5
+		for z in [-.10,.12]:
+			for side in [-1.0,1.0]:
+				# Moldura fica do lado de fora do vao, sem invadir a passagem.
+				var x := float(side)*(half_opening+.06)
+				rustic_box(beams,Vector3(x,(low+high)*.5,float(z)),Vector3(.10,high-low,.10),true,rng,rng.randf_range(-.009,.009))
+			rustic_box(beams,Vector3(0,high+.07,float(z)),Vector3(half_opening*2.0+.23,.12,.11),true,rng,rng.randf_range(-.009,.009))
+			if is_window:
+				rustic_box(beams,Vector3(0,low-.07,float(z)),Vector3(CELL+.22,.12,.11),true,rng,rng.randf_range(-.012,.012))
+	# Tres composicoes estaveis de remendos; nunca dentro do vao.
+	var variant := rng.randi_range(0,2)
+	var patch_x := -half+.22 if variant==0 else half-.23
+	rustic_patch(beams,iron,Vector3(patch_x,.61+float(variant)*.21,-.095),rng,variant==1)
+	rustic_patch(beams,iron,Vector3(-patch_x,1.95,-.095),rng,variant!=1)
+	rustic_patch(beams,iron,Vector3(patch_x,.96,.095),rng,variant==2)
+	rustic_finish(parent,[boards,beams,rope,iron],"MadeiraTexturizada")
 	add_wall_foundations(parent)
 	if kind=="wood_doorway":
 		build_door_transitions(parent)
@@ -2774,20 +2889,35 @@ func stair_exit(kind: String) -> Vector3:
 	var path := stair_path(kind)
 	return path[path.size()-1]
 
+func rustic_stair_stringer(surface: SurfaceTool, start: Vector3, finish: Vector3, rng: RandomNumberGenerator) -> void:
+	var delta := finish-start
+	var tone := rng.randf_range(.81,.97)
+	surface.set_color(Color(tone,tone,tone))
+	wall_surface_box(surface,(start+finish)*.5,Vector3(.13,.20,delta.length()),true,Basis.looking_at(delta.normalized(),Vector3.UP))
+
 func build_stairs(parent: StaticBody3D, kind: String) -> void:
+	var rng := rustic_rng(parent,kind)
+	var steps := rustic_surface("step")
+	var beams := rustic_surface("stair_beam")
+	var rope := rustic_surface("rope")
+	var iron := rustic_surface("iron")
 	if kind=="ladder":
-		for x in [-.38,.38]:
-			stair_board(parent,Vector3(float(x),WALL_SIZE*.5,0),Vector3(.10,WALL_SIZE+.15,.12),false,true)
+		for side in [-1.0,1.0]:
+			var x := float(side)*.38
+			rustic_box(beams,Vector3(x,WALL_SIZE*.5,0),Vector3(.105,WALL_SIZE+rng.randf_range(.08,.18),.12),true,rng,rng.randf_range(-.018,.018))
+			for y in [.19,1.32,2.35]:
+				rustic_lashing(rope,Vector3(x,float(y),0),.12,.15,rng)
 		for i in range(11):
-			stair_board(parent,Vector3(0,.15+float(i)*.23,0),Vector3(.83,.065,.12),false,true)
+			var y := .15+float(i)*.23
+			rustic_box(beams,Vector3(0,y+rng.randf_range(-.015,.015),0),Vector3(rng.randf_range(.80,.88),.065,.12),true,rng,rng.randf_range(-.025,.025))
+		rustic_patch(beams,iron,Vector3(.38,1.07,.076),rng,true)
+		rustic_finish(parent,[beams,rope,iron],"EscadaGoblin")
 		collider(parent,Vector3(.86,WALL_SIZE,.08),Vector3(0,WALL_SIZE*.5,-.08))
 		parent.collision_layer = TARGET
 		return
 	var path := stair_path(kind)
 	var end := stair_exit(kind)
 	var direction := Vector3.FORWARD if kind=="stairs_straight" else Vector3.RIGHT
-	# A capsula precisa chegar na altura do piso antes de tocar a borda.
-	# Preserva o ponto de encaixe antigo, inclusive em escadas salvas.
 	var landing_start := end-direction*.32
 	path[path.size()-1] = landing_start
 	var flights := [0] if kind=="stairs_straight" else [0,3]
@@ -2797,24 +2927,36 @@ func build_stairs(parent: StaticBody3D, kind: String) -> void:
 		stair_slope(parent,start,finish)
 		var count := 12 if kind=="stairs_straight" else 6
 		var horizontal := Vector3(finish.x-start.x,0,finish.z-start.z)
+		var forward := horizontal.normalized()
+		var across := forward.cross(Vector3.UP).normalized()
 		var depth := horizontal.length()/float(count)
 		for i in range(count):
 			var at := start.lerp(finish,(float(i)+.5)/float(count))
 			at.y -= .055
-			var size := Vector3(1.0,.11,depth+.008) if absf(horizontal.z)>.1 else Vector3(depth+.008,.11,1.0)
-			stair_board(parent,at,size,false)
-			for side in [-1.0,1.0]:
-				var offset := Vector3(float(side)*.43,0,0) if absf(horizontal.z)>.1 else Vector3(0,0,float(side)*.43)
-				stair_board(parent,at+offset+Vector3.DOWN*.13,Vector3(.12,.25,.26),false,true)
+			at += across*rng.randf_range(-.018,.018)
+			var width := rng.randf_range(.98,1.055)
+			var size := Vector3(width,.11,depth+.008) if absf(horizontal.z)>.1 else Vector3(depth+.008,.11,width)
+			# Altura e profundidade de cada degrau conservadas para nao afetar a subida.
+			rustic_box(steps,at,size,false,rng,0.0)
+		for side in [-1.0,1.0]:
+			var offset := across*float(side)*.43+Vector3.DOWN*.18
+			rustic_stair_stringer(beams,start+offset,finish+offset,rng)
+			var support := start.lerp(finish,.44)+offset
+			var height := maxf(.15,support.y)
+			rustic_box(beams,Vector3(support.x,height*.5,support.z),Vector3(.12,height,.13),true,rng,rng.randf_range(-.025,.025))
+			rustic_lashing(rope,support,.14,.16,rng)
+			var brace := start.lerp(finish,.73)+offset
+			rustic_patch(beams,iron,brace+Vector3(0,0,.08),rng,true)
 	if kind=="stairs_l":
-		stair_board(parent,Vector3(0,WALL_SIZE*.5-.055,-2.02),Vector3(1.0,.11,1.0))
-	# Patamar horizontal de 46 cm, incluindo 14 cm de sobreposicao
-	# fisica com a borda do piso: nao deixa uma quina vertical entre ambos.
+		var at := Vector3(0,WALL_SIZE*.5-.055,-2.02)
+		rustic_box(steps,at,Vector3(1.0,.11,1.0),false,rng)
+		collider(parent,Vector3(1.0,.11,1.0),at)
+	# Patamar original: preservar a transicao sem degrau ao piso superior.
 	var landing_size := Vector3(1.0,.10,.46) if kind=="stairs_straight" else Vector3(.46,.10,1.0)
 	var landing_center := end-direction*.09-Vector3.UP*.05
-	stair_board(parent,landing_center,landing_size,false)
-	# A malha do piso cobre a parte sobreposta; a colisao continua por baixo.
+	rustic_box(steps,landing_center,landing_size,false,rng)
 	collider(parent,landing_size,landing_center)
+	rustic_finish(parent,[steps,beams,rope,iron],"EscadaGoblin")
 
 func floor_surface_material(beam: bool) -> StandardMaterial3D:
 	var key := "floor_dark_joist" if beam else "floor_dark_planks"
