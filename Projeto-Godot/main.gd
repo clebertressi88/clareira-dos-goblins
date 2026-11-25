@@ -37,11 +37,11 @@ var tree_vines: Dictionary = {} # id -> {count, next}; persistido/sincronizado p
 var tree_regrowth: Dictionary = {} # id -> horario real do corte (segundos Unix)
 var cleared_stumps: Dictionary = {} # locais de tocos desenterrados, persistente
 var tree_regrowth_clock := 0.0
-const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate", "Baú", "Escada reta", "Escada em L", "Escada vertical", "Bancada de marcenaria","Pá de pedra"]
-const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed","chest","stairs_straight","stairs_l","ladder","carpentry_bench","stone_shovel"]
-const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú","stairs_straight":"Escada reta","stairs_l":"Escada em L","ladder":"Escada vertical","carpentry_bench":"Bancada de marcenaria","tomato_seeds":"3 sementes de tomate","stone_shovel":"Pá de pedra"}
+const ITEMS := ["Lança de pedra", "Graveto", "Pedra", "Carne", "Couro", "Pé de coelho", "Tronco", "Tábua", "Lança de madeira", "Machado de madeira", "Machado de pedra", "Cipó", "Corda", "Bancada de trabalho", "Fogueira", "Mochila", "Parede de madeira", "Parede com porta", "Parede com janela", "Bancada de trabalho · Nível 2", "Pá de madeira", "Muda de árvore", "Piso / teto de madeira", "Dente de lobo", "Porrete de espinhos", "Picareta de madeira", "Picareta de pedra", "Tomate", "Sementes de tomate", "Baú", "Escada reta", "Escada em L", "Escada vertical", "Bancada de marcenaria","Pá de pedra","Cama rústica"]
+const ITEM_KINDS := ["spear","stick","stone","meat","hide","foot","log","plank","wood_spear","wood_axe","stone_axe","vine","rope","bench","fire","backpack","wood_wall","wood_doorway","wood_window","bench2","shovel","sapling","wood_floor","wolf_tooth","spiked_club", "wood_pickaxe", "stone_pickaxe","tomato","tomato_seed","chest","stairs_straight","stairs_l","ladder","carpentry_bench","stone_shovel","bed"]
+const CRAFT_OUTPUT := {"bench":"Bancada de trabalho · Nível 1","fire":"Fogueira","plank":"4 tábuas","spear":"Lança de pedra","wood_spear":"Lança de madeira","wood_axe":"Machado de madeira","stone_axe":"Machado de pedra","rope":"Corda","backpack":"Mochila","wood_wall":"Parede de madeira","wood_doorway":"Parede com porta","wood_window":"Parede com janela","bench2":"Bancada de trabalho · Nível 2","shovel":"Pá de madeira","spiked_club":"Porrete de espinhos","wood_pickaxe":"Picareta de madeira","stone_pickaxe":"Picareta de pedra","wood_floor":"Piso / teto de madeira","chest":"Baú","stairs_straight":"Escada reta","stairs_l":"Escada em L","ladder":"Escada vertical","carpentry_bench":"Bancada de marcenaria","tomato_seeds":"3 sementes de tomate","stone_shovel":"Pá de pedra","bed":"Cama rústica"}
 const LEVEL_2_RECIPES := ["stone_shovel","stone_pickaxe","spiked_club","spear","carpentry_bench"]
-const CARPENTRY_PATTERNS := {"wood_wall":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_doorway":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,-1,7,-1,-1,-1,-1,-1,-1],"wood_window":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_floor":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,6,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"chest":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,11,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"ladder":[-1,-1,-1,-1,-1,-1,1,11,1,-1,-1,1,-1,1,-1,-1,1,11,1,-1,-1,-1,-1,-1,-1],"stairs_straight":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,7,7,-1,-1,7,7,-1,-1,-1,1,-1,-1,-1,-1],"stairs_l":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,1,7,7,7,-1,7,7,7,1,7,7,1,-1,-1]}
+const CARPENTRY_PATTERNS := {"bed":[7,7,7,7,7,7,4,4,4,1,1,1,1,11,11,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],"wood_wall":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_doorway":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,-1,7,-1,-1,-1,-1,-1,-1],"wood_window":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,-1,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"wood_floor":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,6,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"chest":[-1,-1,-1,-1,-1,-1,7,7,7,-1,-1,7,11,7,-1,-1,7,7,7,-1,-1,-1,-1,-1,-1],"ladder":[-1,-1,-1,-1,-1,-1,1,11,1,-1,-1,1,-1,1,-1,-1,1,11,1,-1,-1,-1,-1,-1,-1],"stairs_straight":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,7,7,-1,-1,7,7,-1,-1,-1,1,-1,-1,-1,-1],"stairs_l":[-1,-1,-1,7,7,-1,-1,7,7,1,-1,1,7,7,7,-1,7,7,7,1,7,7,1,-1,-1]}
 const STATION_PATTERNS := {"spear":[-1,-1,2,-1,1,-1,1,-1,-1],"wood_spear":[-1,-1,1,-1,1,-1,1,-1,-1],"wood_axe":[1,7,-1,1,7,-1,1,-1,-1],"stone_axe":[1,2,-1,1,2,-1,1,-1,-1],"backpack":[4,11,4,4,11,4,4,4,4],"bench2":[2,2,2,6,11,6,6,-1,6],"shovel":[-1,7,-1,-1,1,-1,-1,1,-1],"spiked_club":[-1,23,6,23,6,23,1,23,-1],"wood_pickaxe":[7,7,7,-1,1,-1,-1,1,-1],"stone_pickaxe":[2,2,2,-1,1,-1,-1,1,-1],"stone_shovel":[-1,2,-1,-1,1,-1,-1,1,-1],"carpentry_bench":[7,7,7,7,10,7,6,7,6]}
 const WOOD_AXE := 9
 const STONE_AXE := 10
@@ -68,6 +68,14 @@ const WOOD_PICKAXE := 25
 const STONE_PICKAXE := 26
 const CHEST_ITEM := 29
 const CARPENTRY_ITEM := 33
+const BED_ITEM := 35
+const VILLAGE_MAX := 10
+const VILLAGE_ADULT_AGE := 5400.0
+const VILLAGE_BIRTH_INTERVAL := 600.0
+const VILLAGE_NAMES := ["Nara","Boro","Luma","Garo","Mira","Pipo","Fina","Daro"]
+var village_population: Dictionary = {"Bruma":{"age":5400.0,"job":"Agricultor"},"Talo":{"age":5400.0,"job":"Lenhador"}}
+var village_birth_clock := 0.0
+var village_tick := 0.0
 const STAIR_ITEMS := [30,31,32]
 const STAIR_KINDS := ["stairs_straight","stairs_l","ladder"]
 const CHEST_SIZE := 16
@@ -108,7 +116,7 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
-const NET_PROTOCOL := 11 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
+const NET_PROTOCOL := 12 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
 const NET_SHARED_KINDS := ITEM_KINDS + ["stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -167,7 +175,7 @@ const MENU_OPTIONS_FILE := "user://clareira-menu.cfg"
 var show_coordinates := false
 const SPAWN_ORIGIN := Vector2.ZERO
 var hotbar: HBoxContainer
-const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg"),preload("res://icones/stairs_straight.svg"),preload("res://icones/stairs_l.svg"),preload("res://icones/ladder.svg"),preload("res://icones/carpentry_bench.svg"),preload("res://icones/stone_shovel.svg")]
+const ITEM_ICONS := [preload("res://icones/0.png"),preload("res://icones/1.png"),preload("res://icones/2.png"),preload("res://icones/3.png"),preload("res://icones/4.png"),preload("res://icones/5.png"),preload("res://icones/6.png"),preload("res://icones/7.png"),preload("res://icones/8.png"),preload("res://icones/machado_madeira.svg"),preload("res://icones/10.png"),preload("res://icones/11.png"),preload("res://icones/12.png"),preload("res://icones/13.png"),preload("res://icones/14.png"),preload("res://icones/15.png"),preload("res://icones/16.png"),preload("res://icones/17.png"),preload("res://icones/18.png"),preload("res://icones/19.png"),preload("res://icones/20.svg"),preload("res://icones/21.svg"),preload("res://icones/22.svg"),preload("res://icones/23.svg"),preload("res://icones/24.svg"),preload("res://icones/25.svg"),preload("res://icones/26.svg"),preload("res://icones/27.svg"),preload("res://icones/28.svg"),preload("res://icones/29.svg"),preload("res://icones/stairs_straight.svg"),preload("res://icones/stairs_l.svg"),preload("res://icones/ladder.svg"),preload("res://icones/carpentry_bench.svg"),preload("res://icones/stone_shovel.svg"),preload("res://icones/22.svg")]
 var bar_items := [-1,-1,-1,-1,-1,-1,-1,-1,-1]
 var inventory_slots: Array[int] = [] # A ordem visual pode ser alterada sem perder nenhum item.
 var stone_axe_sprite: Sprite3D
@@ -936,8 +944,9 @@ func create_river_chunk(chunk: Node3D, key: Vector2i) -> void:
 func village() -> void:
 	if not removed.has(STARTER_CABIN_ID):
 		spawn_starter_cabin()
-	spawn_friendly_goblin("Bruma",Vector3(-2,0,-4))
-	spawn_friendly_goblin("Talo",Vector3(2,0,-5))
+	for id in village_population:
+		var index := villagers.size()
+		spawn_friendly_goblin(str(id),Vector3(-2.0+float(index%4)*1.3,0,-4.0-float(index/4)*1.4))
 	if not removed.has("fire"):
 		spawn_object("fire","fire",Vector3(0,0,-6))
 	if hut and not won and not removed.has("guardiao"):
@@ -952,6 +961,7 @@ func village() -> void:
 func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	var npc := CharacterBody3D.new()
 	npc.name = kind
+	npc.set_meta("villager",true)
 	npc.collision_layer = SOLID|TARGET
 	npc.collision_mask = SOLID|4 # Obstáculos, outros goblins e jogador.
 	npc.floor_snap_length = .34
@@ -976,6 +986,16 @@ func spawn_friendly_goblin(kind: String, at: Vector3) -> void:
 	collider(npc,Vector3(.63,1.47,.55),Vector3.UP*.74)
 	objects[kind] = npc
 	villagers.append(npc)
+	village_apply_age(npc)
+	if is_instance_valid(npc_marker_overlay) and not npc_markers.has(kind):
+		var mark := Label.new()
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mark.add_theme_font_size_override("font_size",11)
+		mark.add_theme_color_override("font_color",Color("#b6d5a2"))
+		mark.add_theme_color_override("font_outline_color",Color("#121410"))
+		mark.add_theme_constant_override("outline_size",2)
+		npc_marker_overlay.add_child(mark)
+		npc_markers[kind] = mark
 
 func get_campfire_center() -> Vector3:
 	# A fogueira original é a referência do acampamento. Uma fogueira construída
@@ -1153,9 +1173,9 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		var d: float = npc.global_position.distance_to(obj.global_position)
 		if loose:
 			d -= 100.0
-		elif kind=="tree" and str(npc.get_meta("id",""))=="Talo":
+		elif kind=="tree" and village_job(npc)=="Lenhador":
 			d -= 7.0
-		elif kind.begins_with("tomato") and str(npc.get_meta("id",""))=="Bruma":
+		elif kind.begins_with("tomato") and village_job(npc)=="Agricultor":
 			d -= 7.0+float(tomato_available(obj))*.4
 		if d<best_distance:
 			best_distance = d
@@ -1702,6 +1722,145 @@ func npc_update_camp_pose(npc: CharacterBody3D) -> void:
 # NPCs persistem mesmo quando a regiao visual/fisica e descarregada.
 # Suspender a fisica fora dos chunks ativos evita queda infinita sem manter
 # terreno adicional em memoria. Restaurar apenas posicoes abaixo do relevo.
+
+func village_job(npc: CharacterBody3D) -> String:
+	var data: Dictionary = village_population.get(str(npc.get_meta("id","")),{})
+	return str(data.get("job","Coletor"))
+
+func village_is_adult(npc: CharacterBody3D) -> bool:
+	var data: Dictionary = village_population.get(str(npc.get_meta("id","")),{})
+	return float(data.get("age",VILLAGE_ADULT_AGE))>=VILLAGE_ADULT_AGE
+
+func village_age_label(age: float) -> String:
+	return "Adulto" if age>=5400.0 else ("Jovem" if age>=2700.0 else ("Criança" if age>=900.0 else "Bebê"))
+
+func village_apply_age(npc: CharacterBody3D) -> void:
+	if not is_instance_valid(npc):
+		return
+	var data: Dictionary = village_population.get(str(npc.get_meta("id","")),{})
+	var age := float(data.get("age",VILLAGE_ADULT_AGE))
+	var factor := lerpf(.38,1.0,clampf(age/VILLAGE_ADULT_AGE,0.0,1.0))
+	npc.set_meta("growth_scale",factor)
+	var visual := npc.get_node_or_null("Visual") as Node3D
+	if visual!=null:
+		visual.scale = Vector3.ONE*factor
+	var shape := npc.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if shape!=null and shape.shape is BoxShape3D:
+		(shape.shape as BoxShape3D).size = Vector3(.63,1.47,.55)*factor
+		shape.position.y = .74*factor
+
+func village_objects(kind: String,camp: Vector3) -> Array[Node3D]:
+	var found: Array[Node3D] = []
+	for obj in objects.values():
+		if is_instance_valid(obj) and not obj.is_queued_for_deletion() and obj.get_meta("kind","")==kind and obj.global_position.distance_to(camp)<=NPC_PATROL_RADIUS:
+			found.append(obj)
+	return found
+
+func village_bed_sheltered(bed: Node3D) -> bool:
+	var pos := bed.global_position
+	var cabin: Node3D = objects.get(STARTER_CABIN_ID,null)
+	if is_instance_valid(cabin) and absf(pos.x-cabin.global_position.x)<2.1 and absf(pos.z-cabin.global_position.z)<2.1:
+		return true
+	var ray_query := PhysicsRayQueryParameters3D.create(pos+Vector3.UP*.85,pos+Vector3.UP*4.0,SOLID,[bed.get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(ray_query)
+	return not hit.is_empty() and str(hit.get("collider").get_meta("kind","")) in ["wood_floor","hut"]
+
+func village_food_count(camp: Vector3) -> int:
+	var amount := 0
+	for chest in village_objects("chest",camp):
+		for cell in normalized_chest_slots(str(chest.get_meta("id",""))):
+			if int(cell[0])==TOMATO_ITEM:
+				amount += int(cell[1])
+	return amount
+
+func village_consume_food(camp: Vector3,amount: int) -> bool:
+	if village_food_count(camp)<amount:
+		return false
+	for chest in village_objects("chest",camp):
+		var id := str(chest.get_meta("id",""))
+		var slots := normalized_chest_slots(id)
+		for i in range(slots.size()):
+			var cell: Array = slots[i]
+			if int(cell[0])!=TOMATO_ITEM:
+				continue
+			var used := mini(amount,int(cell[1]))
+			var left := int(cell[1])-used
+			slots[i] = [TOMATO_ITEM,left] if left>0 else [-1,0]
+			amount -= used
+			if amount<=0:
+				break
+		chest_storage[id] = slots
+		if net_role=="host":
+			net_chest_snapshot.rpc(id,slots)
+		if open_chest_id==id and not chest_pending:
+			show_chest()
+		if amount<=0:
+			return true
+	return false
+
+func village_choose_job() -> String:
+	# Profissoes somente entre tarefas que ja possuem IA.
+	var jobs := ["Agricultor","Lenhador","Coletor","Artesão"]
+	var counts := {}
+	for job in jobs:
+		counts[job] = 0
+	for id in village_population:
+		var data: Dictionary = village_population[id]
+		var job := str(data.get("job",""))
+		if counts.has(job):
+			counts[job] = int(counts[job])+1
+	var best: String = jobs[0]
+	for job in jobs:
+		if int(counts[job])<int(counts[best]):
+			best = job
+	return best
+
+func village_update(dt: float,camp: Vector3) -> void:
+	if not moving or net_role=="client":
+		return
+	village_tick += dt
+	if village_tick<1.0:
+		return
+	var step := village_tick
+	village_tick = 0.0
+	var adults := 0
+	for npc in villagers:
+		if not is_instance_valid(npc):
+			continue
+		var id := str(npc.get_meta("id",""))
+		var data: Dictionary = village_population.get(id,{})
+		var age := float(data.get("age",VILLAGE_ADULT_AGE))
+		if age<VILLAGE_ADULT_AGE:
+			data["age"] = minf(age+step,VILLAGE_ADULT_AGE)
+			if float(data["age"])>=VILLAGE_ADULT_AGE:
+				data["job"] = village_choose_job()
+			village_population[id] = data
+			village_apply_age(npc)
+		if village_is_adult(npc):
+			adults += 1
+	if adults<2 or village_population.size()>=VILLAGE_MAX:
+		return
+	var beds: Array[Node3D] = []
+	for bed in village_objects("bed",camp):
+		if village_bed_sheltered(bed):
+			beds.append(bed)
+	if beds.size()<=village_population.size() or village_food_count(camp)<4+village_population.size():
+		return
+	village_birth_clock += step
+	if village_birth_clock<VILLAGE_BIRTH_INTERVAL:
+		return
+	for child_name in VILLAGE_NAMES:
+		if village_population.has(child_name):
+			continue
+		if not village_consume_food(camp,4):
+			return
+		village_population[child_name] = {"age":0.0,"job":"Filhote"}
+		var at := beds[village_population.size()-1].global_position+Vector3(1.05,0,0)
+		spawn_friendly_goblin(child_name,at)
+		village_birth_clock = 0.0
+		save_game()
+		return
+
 func npc_restore_ground(npc: CharacterBody3D) -> void:
 	var pos := npc.global_position
 	if not pos.is_finite():
@@ -1731,16 +1890,17 @@ func update_villagers(dt: float) -> void:
 	for i in range(villagers.size()-1,-1,-1):
 		if not is_instance_valid(villagers[i]) or villagers[i].is_queued_for_deletion():
 			villagers.remove_at(i)
-	for id in ["Bruma","Talo"]:
+	for id in village_population:
 		var resident: CharacterBody3D
 		for existing in villagers:
 			if str(existing.get_meta("id",""))==id:
 				resident = existing
 				break
 		if not is_instance_valid(resident):
-			spawn_friendly_goblin(id,campfire+Vector3(-2.0 if id=="Bruma" else 2.0,0,1.5))
+			spawn_friendly_goblin(str(id),campfire+Vector3(-2.0 if id=="Bruma" else 2.0,0,1.5))
 		else:
 			objects[id] = resident
+	village_update(dt,campfire)
 	for npc in villagers:
 		if not is_instance_valid(npc) or npc.is_queued_for_deletion():
 			continue
@@ -1764,7 +1924,13 @@ func update_villagers(dt: float) -> void:
 		var heading := Vector3.ZERO
 		# Prioridade absoluta: NPC que chega ao limite retorna para perto da fogueira.
 		var attacker: CharacterBody3D = objects.get(str(npc.get_meta("attacker_id","")),null) as CharacterBody3D
-		if is_instance_valid(attacker) and not attacker.is_queued_for_deletion() and attacker.global_position.distance_to(npc.global_position)<6.0 and elapsed>=float(npc.get_meta("recover_until",0.0)):
+		if not village_is_adult(npc):
+			var child_goal := campfire+Vector3(cos(float(npc.get_instance_id()%31))*2.0,0,sin(float(npc.get_instance_id()%31))*2.0)
+			var toward := child_goal-npc.global_position
+			toward.y = 0.0
+			heading = toward.normalized() if toward.length()>.6 and not npc.is_on_wall() else Vector3.ZERO
+			walking = not heading.is_zero_approx()
+		elif is_instance_valid(attacker) and not attacker.is_queued_for_deletion() and attacker.global_position.distance_to(npc.global_position)<6.0 and elapsed>=float(npc.get_meta("recover_until",0.0)):
 			heading = npc_defend(npc,attacker,dt)
 			walking = not heading.is_zero_approx()
 		elif elapsed<float(npc.get_meta("recover_until",0.0)):
@@ -1831,6 +1997,10 @@ func speak_to_goblin(npc: Node3D) -> void:
 		return
 	var kind: String = npc.get_meta("kind","")
 	var lines: Array[String] = []
+	if kind not in ["Bruma","Talo"]:
+		var resident: Dictionary = village_population.get(kind,{})
+		notice(kind+": "+str(resident.get("job","Filhote"))+" · "+village_age_label(float(resident.get("age",0.0))))
+		return
 	if kind=="Bruma":
 		lines = [
 			"Bruma: Os cipós perto das árvores servem para fazer cordas.",
@@ -1859,6 +2029,16 @@ func spawn_starter_cabin() -> void:
 		for dz in [-2.7,0.0,2.7]:
 			base_y = maxf(base_y,ground(STARTER_CABIN_CENTER.x+dx,STARTER_CABIN_CENTER.y+dz))
 	spawn_object("hut",STARTER_CABIN_ID,Vector3(STARTER_CABIN_CENTER.x,base_y,STARTER_CABIN_CENTER.y))
+
+func build_village_bed(o: Node3D) -> void:
+	for x in [-.39,.39]:
+		for z in [-.76,.76]:
+			box(o,Vector3(x,.17,z),Vector3(.14,.34,.14),"bed_wood",Color("#62432c"))
+	box(o,Vector3(0,.30,0),Vector3(.95,.16,1.88),"bed_wood",Color("#62432c"))
+	box(o,Vector3(0,.43,0),Vector3(.88,.16,1.72),"bed_straw",Color("#c2a36b"))
+	box(o,Vector3(0,.54,.59),Vector3(.73,.13,.36),"bed_pillow",Color("#b9a583"))
+	box(o,Vector3(0,.53,-.27),Vector3(.89,.06,1.00),"bed_hide",Color("#66513e"))
+	box(o,Vector3(0,.48,.87),Vector3(.99,.60,.12),"bed_wood",Color("#62432c"))
 
 func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, yaw: float = 0.0) -> StaticBody3D:
 	var o := StaticBody3D.new()
@@ -1941,6 +2121,10 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			# Galho caido com casca texturizada, nos e madeira quebrada.
 			preload("res://forest_fallen_stick.gd").build(o,id)
 			collider(o,Vector3(.78,.23,.33),Vector3.UP*.115)
+		"bed":
+			o.collision_layer |= SOLID
+			build_village_bed(o)
+			collider(o,Vector3(.96,.52,1.88),Vector3.UP*.26)
 		"chest":
 			o.collision_layer |= SOLID
 			preload("res://chest_model.gd").build(o)
@@ -3412,7 +3596,7 @@ func update_npc_markers() -> void:
 		var name_label := npc.get_node_or_null("Visual/GoblinRig/NomeNPC") as Label3D
 		if is_instance_valid(name_label):
 			name_label.hide()
-		var at := npc.global_position+Vector3.UP*1.95
+		var at := npc.global_position+Vector3.UP*1.95*float(npc.get_meta("growth_scale",1.0))
 		var distance := player.global_position.distance_to(npc.global_position)
 		var local := camera.to_local(at)
 		var behind := camera.is_position_behind(at)
@@ -4574,7 +4758,7 @@ func craft_basic() -> void:
 		notice("Esta receita exige a bancada de trabalho nível 2.")
 		return
 	var costs: Dictionary = {
-		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"stone_shovel":{2:1,1:2},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1},"stairs_straight":{7:8,1:2},"stairs_l":{7:12,1:4},"ladder":{1:6,VINE:2},"carpentry_bench":{7:6,6:2,10:1},"tomato_seeds":{TOMATO_ITEM:1}
+		"plank":{6:1},"fire":{1:2,2:1},"bench":{7:2,1:2},"spear":{2:1,1:2},"wood_spear":{1:3},"wood_axe":{1:3,7:2},"stone_axe":{1:3,2:2},"shovel":{1:2,7:1},"stone_shovel":{2:1,1:2},"wood_pickaxe":{7:3,1:2},"stone_pickaxe":{2:3,1:2},"spiked_club":{1:1,6:2,WOLF_TOOTH:4},"rope":{VINE:2},"backpack":{4:7,VINE:2},"bench2":{2:3,6:4,VINE:1},"wood_wall":{7:9},"wood_doorway":{7:7},"wood_window":{7:8},"wood_floor":{7:8,6:1},"chest":{7:8,VINE:1},"stairs_straight":{7:8,1:2},"stairs_l":{7:12,1:4},"ladder":{1:6,VINE:2},"carpentry_bench":{7:6,6:2,10:1},"tomato_seeds":{TOMATO_ITEM:1},"bed":{7:6,1:4,4:3,VINE:2}
 	}[kind]
 	for index: int in costs:
 		if stock[index]<int(costs[index]):
@@ -5255,7 +5439,7 @@ func construction_candidate(kind: String) -> Dictionary:
 	var yaw := snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5 if is_wall else (player.rotation.y+float(build_rotation)*PI*.5 if kind=="chest" else 0.0)
 	# O lado frontal do bau (fechadura, +Z local) aponta para o jogador por padrao.
 	# R gira a pre-visualizacao em passos de 90 graus sem perder essa orientacao inicial.
-	if is_stair or kind=="carpentry_bench":
+	if is_stair or kind in ["carpentry_bench","bed"]:
 		yaw = snappedf(player.rotation.y,PI/2.0)+float(build_rotation)*PI*.5
 	var point := player.position-player.basis.z*2.15
 	var hit := ray(5.8)
@@ -5324,6 +5508,9 @@ func construction_candidate(kind: String) -> Dictionary:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
 	query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*(WALL_SIZE*.5 if is_wall else (.01 if is_floor else .48)))
+	if kind=="bed":
+		shape.size = Vector3(.96,.58,1.88)
+		query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*.32)
 	if kind=="carpentry_bench":
 		shape.size = Vector3(1.56,1.02,.84)
 		query.transform = Transform3D(Basis(Vector3.UP,yaw),point+Vector3.UP*.54)
@@ -5345,7 +5532,7 @@ func construction_candidate(kind: String) -> Dictionary:
 
 func update_construction_ghost() -> void:
 	var item: int = bar_items[selected]
-	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM] or stock[item]<=0:
+	if not moving or item not in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM,BED_ITEM] or stock[item]<=0:
 		if is_instance_valid(construction_ghost):
 			construction_ghost.hide()
 		construction_preview = {}
@@ -5366,6 +5553,8 @@ func update_construction_ghost() -> void:
 		elif kind in STAIR_KINDS:
 			build_stairs(ghost,kind)
 			ghost.collision_layer = 0
+		elif kind=="bed":
+			build_village_bed(ghost)
 		elif kind=="chest":
 			preload("res://chest_model.gd").build(ghost)
 		elif kind=="wood_floor":
@@ -5441,7 +5630,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.is_action_pressed("goblin_largar"):
 			drop_selected()
 		elif event.is_action_pressed("goblin_girar_usar"):
-			if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
+			if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM,BED_ITEM]:
 				build_rotation = (build_rotation+1)%4
 				notice("Rotação: %d°" % (build_rotation*90))
 			else:
@@ -5679,7 +5868,7 @@ func _physics_process(dt: float) -> void:
 		next_interaction_hint = elapsed+.12
 		var hit := ray()
 		interaction_hint = "E Inventário  ·  Esc Menu"
-		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
+		if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM,BED_ITEM]:
 			interaction_hint = "Aponte para posicionar · Clique: instalar · R: girar"
 		if not hit.is_empty() and bar_items[selected] not in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM]:
 			match hit["collider"].get_meta("kind",""):
@@ -5862,7 +6051,7 @@ func update_mobs(dt: float) -> void:
 		if mob.get_meta("kind","")=="wolf":
 			var nearest: float = target_pos.distance_to(mob.global_position)
 			for candidate in villagers:
-				if not is_instance_valid(candidate) or candidate.is_queued_for_deletion() or elapsed<float(candidate.get_meta("recover_until",0.0)):
+				if not is_instance_valid(candidate) or candidate.is_queued_for_deletion() or not village_is_adult(candidate) or elapsed<float(candidate.get_meta("recover_until",0.0)):
 					continue
 				var d: float = candidate.global_position.distance_to(mob.global_position)
 				if d<nearest and d<10.0:
@@ -6024,7 +6213,7 @@ func primary() -> void:
 		return
 	next_attack = elapsed+.46
 	var held: int = bar_items[selected]
-	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM] and stock[held]>0:
+	if held in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM,BED_ITEM] and stock[held]>0:
 		if place_craft(ITEM_KINDS[held]):
 			stock[held] -= 1
 			if held in [BENCH_ITEM,BENCH2_ITEM]:
@@ -6107,7 +6296,7 @@ func primary() -> void:
 		if chest_has_items(str(o.get_meta("id",""))):
 			notice("Esvazie o baú antes de desmontar.")
 			return
-	if kind in ["chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+	if kind in ["chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","bed"]:
 		if held not in [WOOD_AXE,STONE_AXE]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
@@ -6508,7 +6697,7 @@ func collectible_item_for_kind(kind: String) -> int:
 	if kind=="vine_bush":
 		return VINE
 	# Bancadas, estruturas, arvores e rochas exigem mecanicas proprias.
-	if kind in ["tree","stump","stone","block","chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","tomato_plant","tomato_crop","fern","forest_shrub","river_reed"]:
+	if kind in ["tree","stump","stone","block","chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","tomato_plant","tomato_crop","fern","forest_shrub","river_reed","bed"]:
 		return -1
 	return ITEM_KINDS.find(kind)
 
@@ -6527,7 +6716,7 @@ func secondary() -> void:
 		if kind in ["tomato_plant","tomato_crop"]:
 			harvest_tomatoes(o)
 			return
-		if kind in ["Bruma","Talo"]:
+		if bool(o.get_meta("villager",false)):
 			speak_to_goblin(o)
 			return
 		if kind=="chest":
@@ -6540,7 +6729,7 @@ func secondary() -> void:
 			station_level = 2 if kind=="bench2" else 1
 			open_craft("station")
 			return
-		if kind in ["fire","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+		if kind in ["fire","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","bed"]:
 			notice("Use um machado para desmontar esta estrutura.")
 			return
 		if kind in ["stone","block"]:
@@ -6610,7 +6799,7 @@ func drop_selected() -> void:
 	if item==BACKPACK_ITEM and backpack_equipped:
 		notice("Retire a mochila antes de largá-la.")
 		return
-	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
+	if item in [BENCH_ITEM,BENCH2_ITEM,FIRE_ITEM,WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,FLOOR_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM,BED_ITEM]:
 		if place_craft(ITEM_KINDS[item]):
 			stock[item] -= 1
 			if item in [BENCH_ITEM,BENCH2_ITEM]:
@@ -7107,6 +7296,8 @@ func load_game() -> void:
 	tomato_fruits = data.get("tomato_fruits",{})
 	chest_storage = data.get("chest_storage",{})
 	npc_saved_resources = data.get("npc_resources",{})
+	village_population = data.get("village_population",village_population)
+	village_birth_clock = float(data.get("village_birth_clock",0.0))
 	placed = (data.get("placed",[]) as Array).filter(func(entry): return entry is Dictionary and str(entry.get("kind",""))!="hut")
 	health = int(data.get("health",100))
 	hut = bool(data.get("hut",false))
@@ -7135,7 +7326,7 @@ func save_game() -> bool:
 				resources["extra_items"] = npc_extra_items(npc).duplicate(true)
 				npc_saved_resources[str(npc.get_meta("id",""))] = resources
 		file.store_string(JSON.stringify({"world_uid":world_uid,"npc_world_clock":fposmod(npc_world_clock,NPC_DAY_SECONDS+NPC_NIGHT_SECONDS),"stock":stock,"bar_items":bar_items,"reserve":reserve,"tool_durability":tool_durability,"removed":removed,
-			"placed":placed,"tree_regrowth":tree_regrowth,"vegetation_harvest":vegetation_harvest,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
+			"placed":placed,"tree_regrowth":tree_regrowth,"vegetation_harvest":vegetation_harvest,"tree_vines":tree_vines,"tomato_crop_times":tomato_crop_times,"tomato_fruits":tomato_fruits,"chest_storage":chest_storage,"npc_resources":npc_saved_resources,"village_population":village_population,"village_birth_clock":village_birth_clock,"cleared_stumps":cleared_stumps,"health":health,"hut":hut,"bench":bench,"won":won,"pos":[p.x,p.y,p.z],
 			"backpack_equipped":backpack_equipped,"backpack_slots":serialize_backpack(),"hotbar_manual":hotbar_manual,"inventory_slots":inventory_slots,
 			"sword_equipped":sword_equipped,"shield_equipped":shield_equipped}))
 		file.flush()
@@ -7440,7 +7631,7 @@ func net_request_dismantle(id: String,tool: int) -> void:
 	if not is_instance_valid(obj) or not remote_can_interact(peer_id,obj.global_position,5.5):
 		return
 	var kind := str(obj.get_meta("kind",""))
-	if kind not in ["chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+	if kind not in ["chest","bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","bed"]:
 		return
 	if kind=="chest" and chest_has_items(id):
 		net_dismantle_feedback.rpc_id(peer_id,-2,0,-1)
@@ -7515,7 +7706,7 @@ func net_request_remove(id: String) -> void:
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
 		return
 	var obj: Node3D = objects[id]
-	if not is_instance_valid(obj) or str(obj.get_meta("kind","")) not in ["bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder"]:
+	if not is_instance_valid(obj) or str(obj.get_meta("kind","")) not in ["bench","bench2","carpentry_bench","fire","hut","wood_wall","wood_doorway","wood_window","wood_floor","stairs_straight","stairs_l","ladder","bed"]:
 		return
 	if not remote_can_interact(peer_id,obj.global_position,6.5):
 		return
@@ -7571,7 +7762,7 @@ func net_capture_entities() -> Array:
 	for npc in villagers:
 		if is_instance_valid(npc) and not npc.is_queued_for_deletion():
 			result.append({"id":str(npc.get_meta("id","")),"kind":str(npc.get_meta("kind","")),
-				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
+				"p":npc.global_position,"r":npc.rotation.y,"hp":-1,"resident":true,"growth":village_population.get(str(npc.get_meta("id","")),{}),"clock":npc_world_clock,"attack_serial":int(npc.get_meta("attack_serial",0)),"camp_warming":bool(npc.get_meta("camp_warming",false)),"camp_stretch":float(npc.get_meta("camp_stretch",-1.0))})
 	for mob in mobs:
 		if is_instance_valid(mob) and not mob.is_queued_for_deletion():
 			result.append({"id":str(mob.get_meta("id","")),"kind":str(mob.get_meta("kind","")),
@@ -7590,12 +7781,17 @@ func net_apply_entities(states: Array) -> void:
 		var pos: Variant = data.get("p",Vector3.ZERO)
 		if id.is_empty() or id.length()>100 or not pos is Vector3 or not (pos as Vector3).is_finite():
 			continue
-		if kind not in ["rabbit","wolf","guardian","Bruma","Talo"]:
+		var resident := bool(data.get("resident",false)) or kind in ["Bruma","Talo"]
+		if kind not in ["rabbit","wolf","guardian"] and not resident:
 			continue
+		if resident:
+			if not village_population.has(id) and village_population.size()>=VILLAGE_MAX:
+				continue
+			village_population[id] = data.get("growth",{"age":VILLAGE_ADULT_AGE,"job":"Coletor"})
 		visible_ids[id] = true
 		var obj: Node3D = objects.get(id,null)
 		if not is_instance_valid(obj) or obj.is_queued_for_deletion():
-			if kind in ["Bruma","Talo"]:
+			if resident:
 				for existing in villagers:
 					if is_instance_valid(existing) and not existing.is_queued_for_deletion() and str(existing.get_meta("id",""))==id:
 						obj = existing
@@ -7620,7 +7816,8 @@ func net_apply_entities(states: Array) -> void:
 			obj.set_meta("net_animation_velocity",delta*7.0)
 			obj.global_position = obj.global_position.lerp(pos,.65) if delta.length()<10.0 else pos
 		obj.rotation.y = angle
-		if kind in ["Bruma","Talo"] and data.has("clock"):
+		if resident and data.has("clock"):
+			village_apply_age(obj as CharacterBody3D)
 			npc_world_clock = float(data["clock"])
 			obj.set_meta("camp_warming",bool(data.get("camp_warming",false)))
 			obj.set_meta("camp_stretch",float(data.get("camp_stretch",-1.0)))
