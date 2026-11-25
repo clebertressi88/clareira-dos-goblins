@@ -162,14 +162,21 @@ func attach_right_hand(accessory: Node3D) -> bool:
 	for i in range(_skeleton.get_bone_count()):
 		var n := _skeleton.get_bone_name(i).to_lower().replace("_","").replace(":","").replace(".","")
 		if n.contains("righthand") or n.ends_with("handr") or n.ends_with("rhand") or n == "handright":
-			var anchor := BoneAttachment3D.new()
-			anchor.name = "MaoDireitaMachado"
-			anchor.bone_name = _skeleton.get_bone_name(i)
-			_skeleton.add_child(anchor)
-			anchor.add_child(accessory)
-			var pose := _skeleton.get_bone_global_pose(i)
-			var correction := pose.basis.orthonormalized().inverse()
-			accessory.transform = Transform3D(correction,Vector3.ZERO)
+			var anchor := _skeleton.get_node_or_null("MaoDireitaMachado") as BoneAttachment3D
+			if anchor == null:
+				anchor = BoneAttachment3D.new()
+				anchor.name = "MaoDireitaMachado"
+				anchor.bone_idx = i
+				_skeleton.add_child(anchor)
+			# Reparent, not add_child: the caller already owns the accessory.
+			if accessory.get_parent() != null:
+				accessory.reparent(anchor,false)
+			else:
+				anchor.add_child(accessory)
+			var rest := _skeleton.get_bone_global_rest(i)
+			var correction := rest.basis.inverse()
+			var grip := Basis.from_euler(Vector3(deg_to_rad(95.0),0.0,deg_to_rad(12.0)))
+			accessory.transform = Transform3D(correction*grip,correction*Vector3(.03,-.02,-.10))
 			return true
 	return false
 
