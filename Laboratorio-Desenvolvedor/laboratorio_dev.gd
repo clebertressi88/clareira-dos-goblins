@@ -45,6 +45,7 @@ func _ready() -> void:
 	backpack_slots.resize(BACKPACK_SIZE)
 	backpack_slots.fill(Vector2i(-1,0))
 	village_population.clear()
+	_sync_game_wolf_asset()
 	setup_world()
 	configure_movement_inputs()
 	_create_flat_arena()
@@ -388,6 +389,7 @@ func _create_developer_ui() -> void:
 		mob_selector.add_item(label_value)
 	dev_body.add_child(mob_selector)
 	_lab_button("Importar skin Dire Wolf (ZIP/GLB)",_select_lab_wolf_skin)
+	_lab_button("Sincronizar lobo do jogo",_sync_existing_wolves)
 	_lab_button("Criar criatura a 5 metros",_spawn_selected_mob)
 	_lab_button("Remover todas as criaturas",_remove_mobs)
 	dev_body.add_child(HSeparator.new())
@@ -831,3 +833,48 @@ func _lab_update_changed(state: Dictionary) -> void:
 	lab_update_button.text = "↻  NOVA VERSÃO  [F7]" if bool(state.get("update_available",false)) else "↻  ATUALIZAR  [F7]"
 	if phase=="downloading":
 		lab_update_button.text = "Baixando %d%%" % int(state.get("percent",0))
+
+# O modelo licenciado permanece no PC; compartilhar somente a referencia.
+func _sync_game_wolf_asset() -> bool:
+	var game_dir := ProjectSettings.globalize_path("user://").get_base_dir().path_join("Clareira dos Goblins")
+	# globalize_path pode terminar em barra; normalizar antes de subir.
+	var lab_dir := ProjectSettings.globalize_path("user://").trim_suffix("/").trim_suffix("\\")
+	game_dir = lab_dir.get_base_dir().path_join("Clareira dos Goblins")
+	var config := ConfigFile.new()
+	if config.load(game_dir.path_join("dire_wolf_lab.cfg")) == OK:
+		var path := str(config.get_value("asset","path",""))
+		if FileAccess.file_exists(path) and DIRE_WOLF.select_asset(path):
+			return true
+	for folder in [game_dir,OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS),OS.get_executable_path().get_base_dir()]:
+		for filename in ["Dire_Wolf_Lite_v1.0.0.zip","Dire_Wolf_Lite.glb"]:
+			var path := str(folder).path_join(filename)
+			if FileAccess.file_exists(path) and DIRE_WOLF.select_asset(path):
+				return true
+	return DIRE_WOLF._cache_asset()
+
+func creature(kind: String, id: String, at: Vector3, parent: Node3D) -> CharacterBody3D:
+	var body := super.creature(kind,id,at,parent)
+	if kind=="wolf" and body.get_node_or_null("Visual/DireWolfRig")==null:
+		notice("Dire Wolf indisponível. F6 > Importar skin Dire Wolf (ZIP/GLB).")
+	return body
+
+func _sync_existing_wolves() -> void:
+	if not _sync_game_wolf_asset():
+		notice("Modelo original não localizado. Importe o ZIP/GLB pelo F6.")
+		return
+	for mob in mobs:
+		if not is_instance_valid(mob) or mob.get_meta("kind","")!="wolf":
+			continue
+		var visual := mob.get_node_or_null("Visual") as Node3D
+		if visual==null:
+			continue
+		var rig: Node3D = DIRE_WOLF.new()
+		if not bool(rig.call("install")):
+			rig.free()
+			continue
+		for child in visual.get_children():
+			visual.remove_child(child)
+			child.queue_free()
+		rig.name = "DireWolfRig"
+		visual.add_child(rig)
+	notice("Modelo Dire Wolf sincronizado com o jogo.")
