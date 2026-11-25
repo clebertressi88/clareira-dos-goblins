@@ -7002,7 +7002,7 @@ func update_mobs(dt: float) -> void:
 			speed = 2.25
 			# Inimigos soterrados, em outro nivel ou atras de objetos
 			# nao devem causar dano apenas pela distancia horizontal.
-			var attack_in_range := distance<1.35 if kind!="wolf" else (distance>=.65 and distance<=WOLF_ATTACK_DISTANCE and wolf_aligned and elapsed>=float(mob.get_meta("stagger_until",0.0)) and elapsed>=float(mob.get_meta("wolf_bite_hold_until",0.0)))
+			var attack_in_range := distance<1.35 if kind!="wolf" else (distance>=WOLF_BACKOFF_DISTANCE and distance<=WOLF_ATTACK_DISTANCE and wolf_aligned and elapsed>=float(mob.get_meta("stagger_until",0.0)) and elapsed>=float(mob.get_meta("wolf_bite_hold_until",0.0)))
 			if attack_in_range and absf(target_pos.y-mob.global_position.y)<1.35:
 				if is_instance_valid(npc_target):
 					if elapsed>=float(mob.get_meta("npc_bite_at",0.0)) and npc_clear_combat_hit(mob,npc_target):
