@@ -5,6 +5,7 @@ extends "res://main.gd"
 const LAB_WIDTH := 160.0
 const LAB_SAVE := "user://laboratorio-arena-v1.dat"
 var lab_loaded := false
+var lab_floor: StaticBody3D
 var lab_save_clock := 0.0
 var lab_god_mode: CheckButton
 var dev_panel: PanelContainer
@@ -76,6 +77,8 @@ func ground(_x: float, _z: float) -> float:
 func _create_flat_arena() -> void:
 	var floor_body := StaticBody3D.new()
 	floor_body.name = "ChaoPlanoDeTestes"
+	lab_floor = floor_body
+	floor_body.set_meta("lab_terrain",true)
 	floor_body.collision_layer = SOLID
 	floor_body.collision_mask = 0
 	floor_body.set_meta("kind","")
@@ -878,3 +881,4 @@ func _sync_existing_wolves() -> void:
 		rig.name = "DireWolfRig"
 		visual.add_child(rig)
 	notice("Modelo Dire Wolf sincronizado com o jogo.")
+
