@@ -30,6 +30,24 @@ func _test() -> void:
 	if stride.length()>.001:
 		_fail(game,wolf,"Lobo avanca durante a mordida.")
 		return
+	wolf.rotation.y = 0.0
+	aligned = bool(game.call("wolf_attack_heading",wolf,Vector3.BACK,.1,true))
+	if not aligned:
+		_fail(game,wolf,"Guardiao nao reconhece a frente +Z.")
+		return
+	stride = game.call("wolf_combat_stride",wolf,Vector3.BACK*.95,.95,.1,true,true)
+	if stride.length()>.001:
+		_fail(game,wolf,"Guardiao avanca alem da distancia de ataque.")
+		return
+	stride = game.call("wolf_combat_stride",wolf,Vector3.BACK*.5,.5,.1,true,true)
+	if stride.z>=0 or absf(wolf.rotation.y)>.001:
+		_fail(game,wolf,"Guardiao nao recua mantendo o olhar.")
+		return
+	wolf.set_meta("guardian_attack_hold_until",1000000.0)
+	stride = game.call("wolf_combat_stride",wolf,Vector3.BACK*2,2.0,.1,true,true)
+	if stride.length()>.001:
+		_fail(game,wolf,"Guardiao avanca durante ataque.")
+		return
 	game.free()
 	wolf.free()
 	print("WOLF COMBAT OK")
