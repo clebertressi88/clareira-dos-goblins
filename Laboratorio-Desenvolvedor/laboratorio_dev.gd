@@ -608,21 +608,28 @@ func _create_lab_update_ui() -> void:
 	lab_update_button.pressed.connect(_open_lab_update)
 	lab_update_dialog = ConfirmationDialog.new()
 	lab_update_dialog.title = "Atualização do Laboratório Dev"
-	lab_update_dialog.min_size = Vector2i(470,180)
+	lab_update_dialog.min_size = Vector2i(470,220)
+	lab_update_dialog.max_size = Vector2i(560,320)
+	lab_update_dialog.unresizable = true
+	lab_update_dialog.dialog_hide_on_ok = false
 	lab_update_dialog.ok_button_text = "Baixar e instalar"
 	lab_update_dialog.cancel_button_text = "Fechar"
 	layer.add_child(lab_update_dialog)
 	var body := VBoxContainer.new()
 	lab_update_dialog.add_child(body)
+	body.add_theme_constant_override("separation",10)
+	body.custom_minimum_size = Vector2(430,100)
 	lab_update_status = Label.new()
 	lab_update_status.custom_minimum_size.x = 430
 	lab_update_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(lab_update_status)
 	var warning := Label.new()
 	warning.text = "A atualização reinicia somente o laboratório. A arena temporária será perdida."
+	warning.custom_minimum_size = Vector2(430,48)
 	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(warning)
 	lab_update_progress = ProgressBar.new()
+	lab_update_progress.custom_minimum_size.y = 24
 	lab_update_progress.show_percentage = true
 	body.add_child(lab_update_progress)
 	lab_update_dialog.confirmed.connect(_install_lab_update)
@@ -640,7 +647,7 @@ func _open_lab_update() -> void:
 	lab_update_resume = moving
 	moving = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	lab_update_dialog.popup_centered()
+	lab_update_dialog.popup_centered(Vector2i(500,260))
 	_lab_update_changed(updater.get_state())
 	if str(lab_update_state.get("phase","")) not in ["ready","downloading","verified","installing"]:
 		updater.check_updates()
@@ -653,7 +660,6 @@ func _close_lab_update() -> void:
 func _install_lab_update() -> void:
 	if str(lab_update_state.get("phase",""))!="ready":
 		return
-	lab_update_dialog.popup_centered.call_deferred()
 	updater.download_and_install()
 
 func _lab_update_verified() -> void:
@@ -667,6 +673,8 @@ func _lab_update_changed(state: Dictionary) -> void:
 	lab_update_progress.value = int(state.get("percent",0))
 	lab_update_progress.visible = phase in ["downloading","verified","installing"]
 	lab_update_dialog.get_ok_button().disabled = phase!="ready"
+	lab_update_dialog.get_ok_button().custom_minimum_size = Vector2(180,38)
+	lab_update_dialog.get_cancel_button().custom_minimum_size = Vector2(100,38)
 	lab_update_button.text = "↻  NOVA VERSÃO  [F7]" if bool(state.get("update_available",false)) else "↻  ATUALIZAR  [F7]"
 	if phase=="downloading":
 		lab_update_button.text = "Baixando %d%%" % int(state.get("percent",0))
