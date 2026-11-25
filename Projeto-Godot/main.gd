@@ -1326,32 +1326,43 @@ func npc_clear_combat_hit(attacker: CharacterBody3D, target: CharacterBody3D) ->
 	var contact := get_world_3d().direct_space_state.intersect_ray(query)
 	return contact.is_empty() or contact.get("collider",null)==target
 
-func npc_defend(npc: CharacterBody3D, wolf: CharacterBody3D, dt: float) -> Vector3:
-	var direction := wolf.global_position-npc.global_position
+func npc_defend(npc: CharacterBody3D, hostile: CharacterBody3D, dt: float) -> Vector3:
+	var kind := str(hostile.get_meta("kind",""))
+	var direction := hostile.global_position-npc.global_position
 	direction.y = 0.0
 	var distance := direction.length()
 	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(direction.x,direction.z),minf(dt*9.0,1.0))
-	if distance>1.25:
-		return direction.normalized()
-	if elapsed>=float(npc.get_meta("defend_at",0.0)) and npc_clear_combat_hit(npc,wolf):
+	var reach := WOLF_ATTACK_DISTANCE if kind=="wolf" else GUARDIAN_ATTACK_DISTANCE
+	if distance>reach:
+		# Reduz o ultimo passo para manter a distancia de combate.
+		return direction.normalized()*clampf((distance-reach)/maxf(dt*3.8,.001),0.0,1.0)
+	if distance<.70:
+		return -direction.normalized() if distance>.02 else -npc.global_basis.z.normalized()
+	if absf(hostile.global_position.y-npc.global_position.y)>1.35 or npc.global_basis.z.normalized().dot(direction.normalized())<.85:
+		return Vector3.ZERO
+	if elapsed>=float(npc.get_meta("defend_at",0.0)) and npc_clear_combat_hit(npc,hostile):
 		npc.set_meta("defend_at",elapsed+1.15)
 		npc.set_meta("attack_serial",int(npc.get_meta("attack_serial",0))+1)
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
 			rig.call("play_action","attack")
-		var hp := maxi(0,int(wolf.get_meta("hp",WOLF_MAX_HP))-1)
-		wolf.set_meta("hp",hp)
-		wolf_damage_received(wolf)
+		var hp := maxi(0,int(hostile.get_meta("hp",1))-1)
+		hostile.set_meta("hp",hp)
+		wolf_damage_received(hostile)
 		if hp<=0:
-			var pos := wolf.global_position
-			remove_object(wolf)
-			store_object("meat_wolf",pos)
-			var meat_entry: Dictionary = placed.back()
-			objects[str(meat_entry["id"])].set_meta("npc_owner",str(npc.get_meta("id","")))
-			if randf()<.5:
-				store_object("wolf_tooth",pos+Vector3(.36,0,0))
-				var tooth_entry: Dictionary = placed.back()
-				objects[str(tooth_entry["id"])].set_meta("npc_owner",str(npc.get_meta("id","")))
+			var pos := hostile.global_position
+			remove_object(hostile)
+			if kind=="guardian":
+				won = true
+				notice("Os moradores conquistaram o Vale da Nevoa.")
+			else:
+				store_object("meat_wolf",pos)
+				var meat_entry: Dictionary = placed.back()
+				objects[str(meat_entry["id"])].set_meta("npc_owner",str(npc.get_meta("id","")))
+				if randf()<.5:
+					store_object("wolf_tooth",pos+Vector3(.36,0,0))
+					var tooth_entry: Dictionary = placed.back()
+					objects[str(tooth_entry["id"])].set_meta("npc_owner",str(npc.get_meta("id","")))
 			npc.set_meta("work_mode","")
 			npc.set_meta("work_id","")
 			npc.set_meta("next_work",elapsed)
@@ -2415,7 +2426,7 @@ func update_villagers(dt: float) -> void:
 			if village_is_adult(npc) and distance_home<NPC_PATROL_RADIUS and elapsed>=float(npc.get_meta("recover_until",0.0)):
 				var closest_hostile := 12.0
 				for hostile in mobs:
-					if not is_instance_valid(hostile) or hostile.is_queued_for_deletion() or hostile.get_meta("kind","")!="wolf":
+					if not is_instance_valid(hostile) or hostile.is_queued_for_deletion() or hostile.get_meta("kind","") not in ["wolf","guardian"]:
 						continue
 					var hostile_distance := npc.global_position.distance_to(hostile.global_position)
 					if hostile_distance<closest_hostile and hostile.global_position.distance_to(campfire)<=NPC_COMBAT_RADIUS:
@@ -2472,7 +2483,7 @@ func update_villagers(dt: float) -> void:
 				walking = true
 		elif elapsed>=float(npc.get_meta("ai_until",0.0)):
 			choose_goblin_destination(npc)
-		if walking:
+		if walking and not pursuing:
 			npc.rotation.y = lerp_angle(npc.rotation.y,atan2(heading.x,heading.z),minf(dt*6.0,1.0))
 		var pace: float = (3.8 if pursuing else float(npc.get_meta("walk_speed",1.3))) if walking else 0.0
 		npc.velocity.x = move_toward(npc.velocity.x,heading.x*pace,dt*7.0)
@@ -2485,7 +2496,8 @@ func update_villagers(dt: float) -> void:
 		if not npc_has_loaded_ground(projected):
 			npc.velocity.x = 0.0
 			npc.velocity.z = 0.0
-		try_character_step(npc,dt)
+		if not pursuing or (is_instance_valid(attacker) and not attacker.is_queued_for_deletion() and npc.global_position.distance_to(attacker.global_position)>1.6):
+			try_character_step(npc,dt)
 		npc.move_and_slide()
 		if npc.velocity.y<=0.0:
 			npc.apply_floor_snap()
@@ -6978,7 +6990,7 @@ func update_mobs(dt: float) -> void:
 		var target_id := nearest_player_id(mob.global_position)
 		var target_pos: Vector3 = player.global_position if target_id==1 else (remotes[target_id].global_position if remotes.has(target_id) else player.global_position)
 		var npc_target: CharacterBody3D
-		if mob.get_meta("kind","")=="wolf":
+		if mob.get_meta("kind","") in ["wolf","guardian"]:
 			var nearest: float = target_pos.distance_to(mob.global_position)
 			for candidate in villagers:
 				if not is_instance_valid(candidate) or candidate.is_queued_for_deletion() or not village_is_adult(candidate) or elapsed<float(candidate.get_meta("recover_until",0.0)):
@@ -7029,7 +7041,7 @@ func update_mobs(dt: float) -> void:
 						mob.set_meta("npc_bite_at",elapsed+1.0)
 						wolf_bite_visual(mob)
 						npc_target.set_meta("attacker_id",str(mob.get_meta("id","")))
-						var hp := maxi(0,int(npc_target.get_meta("npc_health",100))-15)
+						var hp := maxi(0,int(npc_target.get_meta("npc_health",100))-(15 if kind=="wolf" else 23))
 						npc_target.set_meta("npc_health",hp)
 						if hp<=0:
 							npc_target.set_meta("recover_until",elapsed+30.0)
