@@ -40,6 +40,7 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 
 	# Copas compostas de ramos e folhas pequenas em varias profundidades.
 	# Duas cartas cruzadas em cada volume deixam as folhas visiveis de todos os lados.
+	var cards: Array[Transform3D] = []
 	for i in range(37):
 		var angle := rng.randf_range(0.0,TAU)
 		var radial := sqrt(rng.randf())*1.17
@@ -47,20 +48,30 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 		var taper := clampf((3.22-height)/1.25,0.24,1.0)
 		var pos := Vector3(cos(angle)*radial*taper,height,sin(angle)*radial*taper)
 		var scale_size := rng.randf_range(0.62,0.98)
-		_add_leaf_cluster(growth,pos,scale_size,rng.randf_range(0.0,TAU),rng)
+		_add_leaf_cluster(cards,pos,scale_size,rng.randf_range(0.0,TAU),rng)
 	# Silhueta de folhas no topo, em vez de um unico poligono arredondado.
 	for i in range(6):
 		var angle := float(i)*TAU/6.0
-		_add_leaf_cluster(growth,Vector3(cos(angle)*0.24,3.04+variation,sin(angle)*0.24),0.59,angle,rng)
+		_add_leaf_cluster(cards,Vector3(cos(angle)*0.24,3.04+variation,sin(angle)*0.24),0.59,angle,rng)
+	_add_leaf_batch(growth,cards)
 
-static func _add_leaf_cluster(parent: Node3D, pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> void:
-	var leaf_material := _leaf_material()
-	var leaf_mesh := _leaf_mesh()
+static func _add_leaf_cluster(cards: Array[Transform3D], pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> void:
 	for side in range(2):
-		var part := MeshInstance3D.new()
-		part.mesh = leaf_mesh
-		part.material_override = leaf_material
-		part.position = pos
-		part.rotation = Vector3(rng.randf_range(-0.26,0.26),yaw+float(side)*PI*0.5,rng.randf_range(-0.15,0.15))
-		part.scale = Vector3(extent*1.45,extent*1.25,1.0)
-		parent.add_child(part)
+		var rotation := Vector3(rng.randf_range(-0.26,0.26),yaw+float(side)*PI*0.5,rng.randf_range(-0.15,0.15))
+		var basis := Basis.from_euler(rotation).scaled_local(Vector3(extent*1.45,extent*1.25,1.0))
+		cards.append(Transform3D(basis,pos))
+
+static func _add_leaf_batch(parent: Node3D, cards: Array[Transform3D]) -> void:
+	if cards.is_empty():
+		return
+	var batch := MultiMesh.new()
+	batch.transform_format = MultiMesh.TRANSFORM_3D
+	batch.mesh = _leaf_mesh()
+	batch.instance_count = cards.size()
+	for i in range(cards.size()):
+		batch.set_instance_transform(i,cards[i])
+	var part := MultiMeshInstance3D.new()
+	part.name = "CopaFolhas"
+	part.multimesh = batch
+	part.material_override = _leaf_material()
+	parent.add_child(part)
