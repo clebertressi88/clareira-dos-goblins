@@ -3,10 +3,13 @@ extends Node3D
 ## O asset licenciado nao e redistribuido no repositorio publico.
 static var cached_scene: PackedScene
 var animation_player: AnimationPlayer
+static var selected_asset := ""
 var attack_clip := ""
 var current_clip := ""
 
 static func _find_asset() -> String:
+	if not selected_asset.is_empty() and FileAccess.file_exists(selected_asset):
+		return selected_asset
 	var config := ConfigFile.new()
 	if config.load("user://dire_wolf_lab.cfg") == OK:
 		var path := str(config.get_value("asset", "path", ""))
@@ -48,7 +51,7 @@ static func _cache_asset() -> bool:
 	if cached_scene != null:
 		return true
 	var bundled := "res://modelos/dire_wolf/Dire_Wolf_Lite.glb"
-	if ResourceLoader.exists(bundled, "PackedScene"):
+	if selected_asset.is_empty() and ResourceLoader.exists(bundled, "PackedScene"):
 		cached_scene = load(bundled) as PackedScene
 		return cached_scene != null
 	var path := _find_asset()
@@ -61,8 +64,12 @@ static func _cache_asset() -> bool:
 		var zip := ZIPReader.new()
 		if zip.open(path) != OK:
 			return false
-		var entry := "Dire_Wolf_Lite/Dire_Wolf_Lite.glb"
-		if not zip.file_exists(entry):
+		var entry := ""
+		for candidate in zip.get_files():
+			if candidate.get_file().to_lower() == "dire_wolf_lite.glb":
+				entry = candidate
+				break
+		if entry.is_empty():
 			zip.close()
 			return false
 		var data := zip.read_file(entry)
@@ -88,6 +95,20 @@ static func _cache_asset() -> bool:
 	if pack_error != OK:
 		return false
 	cached_scene = packed
+	return true
+
+static func select_asset(path: String) -> bool:
+	var previous := selected_asset
+	var old_scene := cached_scene
+	selected_asset = path
+	cached_scene = null
+	if not _cache_asset():
+		selected_asset = previous
+		cached_scene = old_scene
+		return false
+	var config := ConfigFile.new()
+	config.set_value("asset","path",path)
+	config.save("user://dire_wolf_lab.cfg")
 	return true
 
 func install() -> bool:
