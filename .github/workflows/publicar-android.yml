@@ -53,16 +53,22 @@ jobs:
           if (-not (Test-Path $manager)) { throw 'sdkmanager ausente' }
           $env:ANDROID_HOME = $sdk
           $env:ANDROID_SDK_ROOT = $sdk
+          $answers = Join-Path $env:RUNNER_TEMP 'android-license-answers.txt'
+          @('y') * 100 | Set-Content -LiteralPath $answers -Encoding ascii
           $ErrorActionPreference = 'Continue'
-          1..100 | ForEach-Object { 'y' } | & $manager "--sdk_root=$sdk" --licenses
+          $cmdLine = '""{0}" "--sdk_root={1}" --licenses < "{2}""' -f $manager,$sdk,$answers
+          & cmd.exe /d /s /c $cmdLine
           $rc = $LASTEXITCODE
-          $ErrorActionPreference = 'Stop'
           if ($rc -ne 0) { throw 'Falha ao aceitar licencas Android' }
-          $ErrorActionPreference = 'Continue'
-          & $manager "--sdk_root=$sdk" "platform-tools" "platforms;android-35" "build-tools;35.0.1"
+          $cmdLine = '""{0}" "--sdk_root={1}" "platform-tools" "platforms;android-35" "build-tools;35.0.1" < "{2}""' -f $manager,$sdk,$answers
+          & cmd.exe /d /s /c $cmdLine
           $rc = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
+          Remove-Item -LiteralPath $answers -Force
           if ($rc -ne 0) { throw 'Falha no SDK Android' }
+          foreach ($required in @('build-tools/35.0.1/apksigner.bat','build-tools/35.0.1/aapt.exe','platform-tools/adb.exe','platforms/android-35/android.jar')) {
+            if (-not (Test-Path (Join-Path $sdk $required))) { throw "SDK incompleto: $required" }
+          }
           "ANDROID_HOME=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "ANDROID_SDK_ROOT=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: Preparar Android SDK e Godot isolado
