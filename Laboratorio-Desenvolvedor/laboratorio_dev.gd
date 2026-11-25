@@ -13,6 +13,15 @@ var test_mob_sequence := 0
 var immortal := true
 var lab_open := false
 var lab_note: Label
+var creative_panel: PanelContainer
+var creative_list: ItemList
+var creative_search: LineEdit
+var creative_category: OptionButton
+var creative_entries: Array[Dictionary] = []
+var creative_visible := false
+var placement_kind := ""
+const NATURAL := [["Árvore adulta","tree",21],["Toco com raízes","stump",6],["Árvore jovem","young_tree",21],["Rocha mineral","stone",2],["Samambaia","fern",21],["Arbusto","forest_shrub",21],["Junco","river_reed",21],["Arbusto de cipó","vine_bush",11],["Tomateiro adulto","tomato_plant",27],["Muda de árvore","seedling",21]]
+const CREATURES := [["Lobo","wolf"],["Coelho","rabbit"],["Goblin guardião","guardian"],["Bruma","Bruma"],["Talo","Talo"]]
 
 func _ready() -> void:
 	# NAO chamar super._ready(): ele abre slots, saves e o mapa do jogo.
@@ -31,6 +40,7 @@ func _ready() -> void:
 	make_player()
 	make_ui()
 	_create_developer_ui()
+	_create_creative_inventory()
 	health = 100
 	moving = true
 	panel.hide()
@@ -64,6 +74,7 @@ func _create_flat_arena() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(LAB_WIDTH,LAB_WIDTH)
 	mesh.mesh = plane
+	mesh.position.y = .5
 	var surface := StandardMaterial3D.new()
 	surface.albedo_color = Color("#78846b")
 	surface.roughness = 1.0
@@ -113,7 +124,7 @@ func _physics_process(dt: float) -> void:
 	if immortal:
 		health = 100
 	if is_instance_valid(hud):
-		hud.text = "LABORATORIO DO DESENVOLVEDOR  |  Arena plana  |  F6: ferramentas"
+		hud.text = "LABORATORIO DO DESENVOLVEDOR  |  Arena plana  |  E: inventário criativo  |  F6: ferramentas"
 	if is_instance_valid(lab_note):
 		lab_note.text = "Criaturas: %d  |  Objetos: %d  |  %s" % [mobs.size()+villagers.size(),placed.size(),"Invulneravel" if immortal else "Dano ativo"]
 
@@ -121,6 +132,9 @@ func show_menu(_starting_page: String = "home") -> void:
 	_toggle_panel(true)
 
 func begin() -> void:
+	creative_visible = false
+	if is_instance_valid(creative_panel):
+		creative_panel.hide()
 	super.begin()
 	if is_instance_valid(dev_panel):
 		dev_panel.hide()
@@ -128,6 +142,22 @@ func begin() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.is_action_pressed("goblin_inventario") or event.keycode == KEY_E:
+			if creative_visible or inventory:
+				begin()
+			else:
+				_open_creative_inventory()
+			get_viewport().set_input_as_handled()
+			return
+		if event.keycode == KEY_ESCAPE and creative_visible:
+			begin()
+			get_viewport().set_input_as_handled()
+			return
+		if event.keycode == KEY_ESCAPE and not placement_kind.is_empty():
+			placement_kind = ""
+			notice("Posicionamento cancelado.")
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode == KEY_F6:
 			_toggle_panel(not lab_open)
 			get_viewport().set_input_as_handled()
@@ -135,6 +165,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	super._unhandled_input(event)
 
 func _toggle_panel(visible_now: bool) -> void:
+	if is_instance_valid(creative_panel):
+		creative_panel.hide()
+	creative_visible = false
 	if inventory:
 		panel.hide()
 		inventory = false
@@ -179,19 +212,7 @@ func _create_developer_ui() -> void:
 	dev_body.add_child(lab_note)
 	_lab_button("Fechar painel  [F6 / Esc]",func(): _toggle_panel(false))
 	dev_body.add_child(HSeparator.new())
-	_heading("INVENTARIO CRIATIVO",18)
-	catalog_filter = LineEdit.new()
-	catalog_filter.placeholder_text = "Buscar item ou ferramenta..."
-	catalog_filter.text_changed.connect(_refresh_catalog)
-	dev_body.add_child(catalog_filter)
-	catalog = ItemList.new()
-	catalog.custom_minimum_size = Vector2(315,205)
-	catalog.select_mode = ItemList.SELECT_SINGLE
-	catalog.item_activated.connect(func(_idx: int): _give_item(64))
-	dev_body.add_child(catalog)
-	_refresh_catalog("")
-	_lab_button("Adicionar 1 item",func(): _give_item(1))
-	_lab_button("Adicionar 64 e equipar na hotbar",func(): _give_item(64))
+	_lab_button("Abrir inventário criativo [E]",_open_creative_inventory)
 	_lab_button("Reabastecer todos os materiais",_restock_materials)
 	dev_body.add_child(HSeparator.new())
 	_heading("CRAFTING REAL DO JOGO",18)
@@ -330,6 +351,11 @@ func _clear_structures() -> void:
 			(objects[id] as Node).queue_free()
 		objects.erase(id)
 	placed.clear()
+	tree_regrowth.clear()
+	tree_vines.clear()
+	vegetation_harvest.clear()
+	tomato_fruits.clear()
+	tomato_crop_times.clear()
 	chest_storage.clear()
 	notice("Arena limpa, sem afetar os mundos do jogo.")
 
@@ -342,3 +368,167 @@ func _reset_player() -> void:
 	player.position = Vector3(0,1.0,0)
 	player.velocity = Vector3.ZERO
 	notice("Jogador voltou ao centro.")
+
+func _create_creative_inventory() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 5
+	add_child(layer)
+	creative_panel = PanelContainer.new()
+	layer.add_child(creative_panel)
+	creative_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	creative_panel.offset_left = 100
+	creative_panel.offset_right = -100
+	creative_panel.offset_top = 40
+	creative_panel.offset_bottom = -150
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#202820f5")
+	style.border_color = Color("#a18b5a")
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	style.content_margin_left = 16
+	style.content_margin_right = 16
+	style.content_margin_top = 12
+	style.content_margin_bottom = 12
+	creative_panel.add_theme_stylebox_override("panel",style)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation",8)
+	creative_panel.add_child(body)
+	var title := Label.new()
+	title.text = "INVENTÁRIO CRIATIVO   |   Clique em um item para equipar ou posicionar"
+	title.add_theme_font_size_override("font_size",22)
+	body.add_child(title)
+	var top := HBoxContainer.new()
+	body.add_child(top)
+	creative_category = OptionButton.new()
+	for category in ["Todos","Ferramentas","Construção","Materiais","Natureza","Agricultura","Criaturas"]:
+		creative_category.add_item(category)
+	creative_category.item_selected.connect(func(_index: int): _rebuild_creative())
+	top.add_child(creative_category)
+	creative_search = LineEdit.new()
+	creative_search.placeholder_text = "Pesquisar todos os itens..."
+	creative_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	creative_search.text_changed.connect(func(_value: String): _rebuild_creative())
+	top.add_child(creative_search)
+	var close := Button.new()
+	close.text = "Fechar [E / Esc]"
+	close.pressed.connect(begin)
+	top.add_child(close)
+	creative_list = ItemList.new()
+	creative_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	creative_list.max_columns = 0
+	creative_list.fixed_column_width = 142
+	creative_list.same_column_width = true
+	creative_list.fixed_icon_size = Vector2i(42,42)
+	creative_list.icon_mode = ItemList.ICON_MODE_TOP
+	creative_list.max_text_lines = 2
+	creative_list.add_theme_constant_override("h_separation",8)
+	creative_list.add_theme_constant_override("v_separation",8)
+	creative_list.item_clicked.connect(func(index: int,_pos: Vector2,button_index: int):
+		if button_index==MOUSE_BUTTON_LEFT:
+			_choose_creative(index))
+	body.add_child(creative_list)
+	var actions := HBoxContainer.new()
+	body.add_child(actions)
+	for option in [["Inventário / Crafting 2×2","basic",1],["Bancada 1","station",1],["Bancada 2","station",2],["Marcenaria","carpentry",1]]:
+		var b := Button.new()
+		b.text = str(option[0])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(_open_test_craft.bind(str(option[1]),int(option[2])))
+		actions.add_child(b)
+	var caption := Label.new()
+	caption.text = "Itens: 64 unidades no slot selecionado. Natureza e criaturas: selecione e clique no chão. Esc cancela."
+	body.add_child(caption)
+	creative_panel.hide()
+
+func _open_creative_inventory() -> void:
+	dev_panel.hide()
+	lab_open = false
+	panel.hide()
+	inventory = false
+	moving = false
+	creative_visible = true
+	creative_panel.show()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	set_hotbar_interactive(false)
+	_rebuild_creative()
+
+func _creative_add(label_value: String, category: String, kind: String, id: int, icon: Texture2D) -> void:
+	var selected_category := creative_category.get_item_text(creative_category.selected)
+	if selected_category!="Todos" and selected_category!=category:
+		return
+	if not creative_search.text.is_empty() and not label_value.to_lower().contains(creative_search.text.to_lower()):
+		return
+	creative_entries.append({"label":label_value,"kind":kind,"id":id})
+	creative_list.add_item(label_value,icon)
+
+func _rebuild_creative() -> void:
+	creative_list.clear()
+	creative_entries.clear()
+	for i in range(ITEMS.size()):
+		var category := "Materiais"
+		if i in [0,8,9,10,20,24,25,26,34]:
+			category = "Ferramentas"
+		elif i in [13,14,16,17,18,19,22,29,30,31,32,33,35]:
+			category = "Construção"
+		elif i in [21,27,28]:
+			category = "Agricultura"
+		_creative_add(ITEMS[i],category,"item",i,ITEM_ICONS[i])
+	for entry in NATURAL:
+		_creative_add(str(entry[0]),"Agricultura" if entry[1]=="tomato_plant" else "Natureza",str(entry[1]),-1,ITEM_ICONS[int(entry[2])])
+	for entry in CREATURES:
+		_creative_add(str(entry[0]),"Criaturas",str(entry[1]),-1,null)
+
+func _choose_creative(index: int) -> void:
+	if index<0 or index>=creative_entries.size():
+		return
+	var entry: Dictionary = creative_entries[index]
+	placement_kind = ""
+	if entry["kind"]=="item":
+		var id := int(entry["id"])
+		stock[id] = maxi(64,int(stock[id]))
+		# Evitar duplicar o mesmo item em varios slots.
+		for i in range(bar_items.size()):
+			if bar_items[i]==id:
+				bar_items[i] = -1
+		hotbar_manual = true
+		bar_items[selected] = id
+		item_received(id)
+		sync_hotbar()
+		notice(str(entry["label"])+" equipado.")
+	else:
+		placement_kind = str(entry["kind"])
+		notice(str(entry["label"])+" | Clique esquerdo no chão; Esc cancela.")
+	begin()
+
+func primary() -> void:
+	if placement_kind.is_empty():
+		super.primary()
+		return
+	var hit := ray(30.0)
+	if hit.is_empty() or str(hit["collider"].get_meta("kind",""))!="" or (hit["normal"] as Vector3).y<.7:
+		notice("Aponte para um espaço livre no chão.")
+		return
+	var at: Vector3 = hit["position"]
+	at.y = 0.0
+	if at.distance_to(player.position)<1.5:
+		notice("Posicione um pouco mais longe do jogador.")
+		return
+	var kind := placement_kind
+	test_mob_sequence += 1
+	var id := "lab-natural-%d" % test_mob_sequence
+	if kind in ["wolf","rabbit","guardian"]:
+		creature(kind,id,at,self)
+	elif kind in ["Bruma","Talo"]:
+		if objects.has(kind) and is_instance_valid(objects[kind]):
+			notice("Este NPC já está no mapa.")
+			return
+		village_population[kind] = {"age":5400.0,"job":"Agricultor" if kind=="Bruma" else "Lenhador"}
+		spawn_friendly_goblin(kind,at)
+	else:
+		var actual := "tree" if kind in ["stump","young_tree","seedling"] else kind
+		if kind in ["stump","young_tree","seedling"]:
+			var age := 0.0 if kind=="stump" else TREE_BUD_DELAY+TREE_GROW_SECONDS*.65 if kind=="young_tree" else TREE_BUD_DELAY+TREE_GROW_SECONDS*.25
+			tree_regrowth[id] = Time.get_unix_time_from_system()-age
+		placed.append({"kind":actual,"id":id,"p":[at.x,at.y,at.z],"r":0.0,"level":0})
+		spawn_object(actual,id,at,self)
+	notice("Objeto colocado. Clique novamente ou Esc para cancelar.")
