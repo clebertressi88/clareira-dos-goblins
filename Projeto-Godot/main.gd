@@ -1164,7 +1164,7 @@ func npc_work_target(npc: CharacterBody3D, camp: Vector3) -> Node3D:
 		elif kind=="tomato_plant":
 			if tomato_available(obj)<=0:
 				continue
-		elif kind!="tree" or int(npc.get_meta("axe_uses",0))<=0 or tree_regrowth.has(str(obj.get_meta("id",""))):
+		elif kind!="tree" or (int(npc.get_meta("axe_uses",0))<=0 and village_job(npc)!="Lenhador") or tree_regrowth.has(str(obj.get_meta("id",""))):
 			continue
 		if Vector2(obj.global_position.x-camp.x,obj.global_position.z-camp.z).length()>NPC_PATROL_RADIUS-1.2 or TERRAIN.is_river(obj.global_position.x,obj.global_position.z):
 			continue
@@ -1195,8 +1195,13 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 	if kind=="tree":
 		var tool := int(npc.get_meta("axe_item",-1))
 		var uses := int(npc.get_meta("axe_uses",0))
-		if tool not in [WOOD_AXE,STONE_AXE] or uses<=0 or tree_regrowth.has(id):
+		if tree_regrowth.has(id):
 			return
+		var bare_hands := tool not in [WOOD_AXE,STONE_AXE] or uses<=0
+		if bare_hands and village_job(npc)!="Lenhador":
+			return
+		if bare_hands:
+			tool = -1
 		var rig := npc.get_node_or_null("Visual/GoblinRig")
 		if rig!=null:
 			rig.call("play_action","attack")
@@ -1205,10 +1210,11 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 		obj.set_meta("fall_from",npc.global_position)
 		var cuts := int(obj.get_meta("cuts",0))+1
 		obj.set_meta("cuts",cuts)
-		var required := 4 if tool==STONE_AXE else 5
-		npc.set_meta("axe_uses",uses-1)
-		if uses==1:
-			npc.set_meta("axe_item",-1)
+		var required := 15 if bare_hands else (4 if tool==STONE_AXE else 5)
+		if not bare_hands:
+			npc.set_meta("axe_uses",uses-1)
+			if uses==1:
+				npc.set_meta("axe_item",-1)
 		play_tree_chop_sound(pos+Vector3.UP*.85,tool)
 		timber(obj,cuts>=required)
 		if net_role=="host":
@@ -1222,6 +1228,16 @@ func npc_finish_work(npc: CharacterBody3D, obj: Node3D) -> void:
 				var log_id := str(entry["id"])
 				if objects.has(log_id):
 					objects[log_id].set_meta("npc_owner",str(npc.get_meta("id","")))
+			if bare_hands:
+				# Galhos da primeira arvore fornecem os gravetos para bancada e machado.
+				for i in range(5):
+					var branch_pos := pos+Vector3(cos(float(i)*TAU/5.0),0,sin(float(i)*TAU/5.0))
+					branch_pos.y = ground(branch_pos.x,branch_pos.z)
+					store_object("stick",branch_pos)
+					var branch_entry: Dictionary = placed.back()
+					var branch_id := str(branch_entry["id"])
+					if objects.has(branch_id):
+						objects[branch_id].set_meta("npc_owner",str(npc.get_meta("id","")))
 		save_game()
 		return
 	if npc_loose_item(obj)>=0:
@@ -2036,7 +2052,7 @@ func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 		var continuing := false
 		if is_instance_valid(obj) and not obj.is_queued_for_deletion() and npc_delivery_count(npc)<32:
 			if kind=="tree":
-				continuing = int(npc.get_meta("axe_uses",0))>0 and obj.get_meta("kind","")=="tree"
+				continuing = (int(npc.get_meta("axe_uses",0))>0 or village_job(npc)=="Lenhador") and obj.get_meta("kind","")=="tree"
 			elif kind in ["tomato_plant","tomato_crop"]:
 				continuing = tomato_available(obj)>0
 		if not continuing:
