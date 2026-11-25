@@ -38,6 +38,16 @@ jobs:
           $updater = [System.IO.File]::ReadAllText((Join-Path $stage 'game_updater.gd'))
           $updater = $updater.Replace('jogo-windows','laboratorio-dev-windows').Replace('Clareira-dos-Goblins-Windows.zip','Clareira-Laboratorio-Dev-Windows.zip').Replace('Clareira-dos-Goblins.exe','Clareira-Laboratorio-Dev.exe').Replace('clareira-dos-goblins.exe','clareira-laboratorio-dev.exe').Replace('clareira-atualizador','laboratorio-atualizador').Replace('instalar-clareira.ps1','instalar-laboratorio.ps1')
           [System.IO.File]::WriteAllText((Join-Path $stage 'laboratorio_updater.gd'),$updater,(New-Object System.Text.UTF8Encoding($false)))
+          # Somente no laboratorio: excluir o corpo do solo da consulta de
+          # sobreposicao modular, preservando raycast, colisao e encaixes.
+          $mainPath = Join-Path $stage 'main.gd'
+          $main = [System.IO.File]::ReadAllText($mainPath)
+          $anchor = 'query.exclude = excluded' + [char]10 + [char]9 + 'valid = valid and get_world_3d().direct_space_state.intersect_shape(query,12).is_empty()'
+          $main = $main.Replace([string][char]13,'')
+          if (-not $main.Contains($anchor)) { throw 'Validacao modular mudou; revise a adaptacao do laboratorio.' }
+          $extra = 'if is_wall or is_floor:' + [char]10 + [char]9 + [char]9 + 'var lab_ground := get_node_or_null("ChaoPlanoDeTestes") as StaticBody3D' + [char]10 + [char]9 + [char]9 + 'if lab_ground != null and bool(lab_ground.get_meta("lab_terrain",false)):' + [char]10 + [char]9 + [char]9 + [char]9 + 'excluded.append(lab_ground.get_rid())' + [char]10 + [char]9
+          $main = $main.Replace($anchor,$extra+$anchor)
+          [System.IO.File]::WriteAllText($mainPath,$main,(New-Object System.Text.UTF8Encoding($false)))
           $project = Join-Path $stage 'project.godot'
           $source = [System.IO.File]::ReadAllText($project)
           if (-not $source.Contains('run/main_scene="res://main.tscn"')) { throw 'Cena principal do jogo mudou; revise o build isolado do laboratorio.' }
