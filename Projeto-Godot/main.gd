@@ -117,7 +117,7 @@ const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
 const NET_PROTOCOL := 12 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
-const NET_SHARED_KINDS := ITEM_KINDS + ["village_cabin","stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
+const NET_SHARED_KINDS := ITEM_KINDS + ["village_cabin","rabbit_spear_wood","rabbit_spear_stone","stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var reserve := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 var removed: Dictionary = {}
@@ -1115,6 +1115,7 @@ func npc_collect_loose(npc: CharacterBody3D,obj: Node3D) -> void:
 	var owner := str(obj.get_meta("npc_owner",""))
 	if not owner.is_empty() and owner!=str(npc.get_meta("id","")):
 		return
+	harvest_pinned_rabbit(obj)
 	remove_object(obj)
 	if item in [WOOD_AXE,STONE_AXE] and int(npc.get_meta("axe_uses",0))<=0:
 		npc.set_meta("axe_item",item)
@@ -1771,8 +1772,50 @@ func village_build_step(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3
 	save_game()
 	return village_cancel_build(npc)
 
+func npc_hunt_rabbit(npc: CharacterBody3D,camp: Vector3,dt: float) -> Vector3:
+	var bag := npc_extra_items(npc)
+	var item := 0 if int(bag.get("0",0))>0 else 8 if int(bag.get("8",0))>0 else -1
+	if item<0:
+		return Vector3.INF
+	var prey: CharacterBody3D
+	var nearest := 9.0
+	for mob in mobs:
+		if not is_instance_valid(mob) or mob.is_queued_for_deletion() or mob.get_meta("kind","")!="rabbit":
+			continue
+		var distance := npc.global_position.distance_to(mob.global_position)
+		if distance<nearest and mob.global_position.distance_to(camp)<NPC_PATROL_RADIUS-1.0:
+			prey = mob
+			nearest = distance
+	if not is_instance_valid(prey):
+		return Vector3.INF
+	var toward := prey.global_position-npc.global_position
+	toward.y = 0
+	npc.rotation.y = lerp_angle(npc.rotation.y,atan2(toward.x,toward.z),minf(dt*8.0,1.0))
+	if nearest>5.0:
+		return toward.normalized()
+	if elapsed<float(npc.get_meta("next_hunt_throw",0.0)):
+		return Vector3.ZERO
+	var origin := npc.global_position+Vector3.UP*.95
+	var aim := prey.global_position+Vector3.UP*.28-origin
+	var travel := aim.length()/19.0
+	aim.y += 4.9*travel*travel
+	npc.set_meta("next_hunt_throw",elapsed+3.0)
+	bag[str(item)] = int(bag.get(str(item),0))-1
+	npc.set_meta("extra_items",bag)
+	var rig := npc.get_node_or_null("Visual/GoblinRig")
+	if rig!=null:
+		rig.call("play_action","attack")
+	npc.set_meta("attack_serial",int(npc.get_meta("attack_serial",0))+1)
+	resolve_spear_throw(origin,aim.normalized(),item,[npc.get_rid()])
+	npc.set_meta("next_work",elapsed)
+	return Vector3.ZERO
+
 func npc_routine(npc: CharacterBody3D, camp: Vector3, dt: float) -> Vector3:
 	var night := npc_is_night()
+	if not night and str(npc.get_meta("work_mode",""))=="":
+		var hunting := npc_hunt_rabbit(npc,camp,dt)
+		if hunting.is_finite():
+			return hunting
 	var task := str(npc.get_meta("work_mode",""))
 	if not night and task=="" and village_plan_build(npc,camp):
 		task = "infra"
@@ -2617,6 +2660,27 @@ func spawn_object(kind: String,id: String, pos: Vector3, parent: Node3D = self, 
 			club.rotation.z = PI*.5
 			preload("res://spiked_club_model.gd").build(club)
 			collider(o,Vector3(.45,.35,.85),Vector3.UP*.17)
+		"spear","wood_spear","rabbit_spear_wood","rabbit_spear_stone":
+			var pinned := kind.begins_with("rabbit_spear_")
+			if pinned:
+				var carcass := Node3D.new()
+				o.add_child(carcass)
+				animal_model(carcass,true)
+				carcass.scale = Vector3.ONE*.64
+				carcass.rotation.z = PI*.5
+				carcass.position.y = .15
+			var shaft := Node3D.new()
+			o.add_child(shaft)
+			shaft.position.y = .40 if pinned else .12
+			shaft.rotation.z = .65 if pinned else PI*.5
+			cylinder(shaft,Vector3.ZERO,.022,1.05,"wood",Color("#855b36"))
+			var tip := CylinderMesh.new()
+			tip.top_radius = 0
+			tip.bottom_radius = .065
+			tip.height = .23
+			tip.radial_segments = 4
+			mesh_part(shaft,tip,Vector3(0,.54,0),Vector3(1,1,.4),materials["rock"] if kind in ["spear","rabbit_spear_stone"] else material("wood",Color("#855b36")))
+			collider(o,Vector3(1.2,.85,.7),Vector3.UP*.35)
 		"meat","meat_wolf","meat_rabbit":
 			preload("res://raw_meat_model.gd").build(o,kind=="meat_rabbit")
 			# Colisao maior que o corte novo, incluindo a parte do osso.
@@ -6125,6 +6189,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM,BED_ITEM]:
 				build_rotation = (build_rotation+1)%4
 				notice("Rotação: %d°" % (build_rotation*90))
+			elif bar_items[selected] in [0,8]:
+				player_throw_spear()
 			else:
 				eat()
 		elif event.is_action_pressed("goblin_interagir"):
@@ -6700,6 +6766,75 @@ func ray(distance := 3.5) -> Dictionary:
 	query.to = destination+eye.direction_to(destination)*.04
 	return space.intersect_ray(query)
 
+# O host resolve o arco em pequenos segmentos para impedir atravessar paredes.
+func resolve_spear_throw(origin: Vector3, direction: Vector3, item: int, exclude: Array[RID]) -> void:
+	var pos := origin
+	var velocity := direction.normalized()*19.0
+	var hit: Dictionary = {}
+	for i in range(40):
+		var next := pos+velocity*.035
+		var query := PhysicsRayQueryParameters3D.create(pos,next,SOLID|TARGET,exclude)
+		hit = get_world_3d().direct_space_state.intersect_ray(query)
+		if not hit.is_empty():
+			pos = hit["position"]
+			break
+		pos = next
+		velocity.y -= 9.8*.035
+		if pos.y<=ground(pos.x,pos.z):
+			break
+	var target := hit.get("collider") as Node3D
+	var kind := "spear" if item==0 else "wood_spear"
+	if is_instance_valid(target) and target.get_meta("kind","")=="rabbit" and not target.is_queued_for_deletion():
+		pos = target.global_position
+		remove_object(target)
+		kind = "rabbit_spear_stone" if item==0 else "rabbit_spear_wood"
+	elif is_instance_valid(target) and target.get_meta("kind","")=="wolf":
+		var hp := maxi(0,int(target.get_meta("hp",1))-1)
+		target.set_meta("hp",hp)
+		wolf_damage_received(target)
+		if hp==0:
+			remove_object(target)
+			store_object("meat_wolf",pos)
+	pos.y = ground(pos.x,pos.z)+.05
+	store_object(kind,pos,atan2(direction.x,direction.z))
+	save_game()
+
+func player_throw_spear() -> void:
+	var item: int = bar_items[selected]
+	if item not in [0,8] or stock[item]<=0 or elapsed<next_attack:
+		return
+	if net_role=="client" and not net_world_ready:
+		return
+	next_attack = elapsed+.8
+	var origin := player.global_position+Vector3.UP*eye_height
+	var direction := -camera.global_basis.z
+	use_tool(item)
+	if stock[item]<=0:
+		return
+	stock[item]-=1
+	sync_hotbar()
+	if net_role=="client":
+		net_throw_spear.rpc_id(1,item,direction)
+	else:
+		resolve_spear_throw(origin,direction,item,[player.get_rid()])
+	save_game()
+
+@rpc("any_peer","call_remote","reliable")
+func net_throw_spear(item: int,direction: Vector3) -> void:
+	if net_role!="host" or item not in [0,8] or not direction.is_finite() or direction.length()<.9:
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	var avatar: Node3D = remotes.get(peer,null)
+	if not is_instance_valid(avatar):
+		return
+	if elapsed<float(avatar.get_meta("next_spear_throw",0.0)):
+		return
+	avatar.set_meta("next_spear_throw",elapsed+.8)
+	var exclusions: Array[RID] = []
+	if avatar is CollisionObject3D:
+		exclusions.append(avatar.get_rid())
+	resolve_spear_throw(avatar.global_position+Vector3.UP*1.49,direction,item,exclusions)
+
 func primary() -> void:
 	if elapsed<next_attack:
 		return
@@ -7182,6 +7317,10 @@ func net_request_uproot_vegetation(id: String, tool: int) -> void:
 	save_game()
 
 func collectible_item_for_kind(kind: String) -> int:
+	if kind=="rabbit_spear_wood":
+		return 8
+	if kind=="rabbit_spear_stone":
+		return 0
 	if kind=="stone_drop":
 		return 2
 	if kind in ["meat_wolf","meat_rabbit"]:
@@ -7235,6 +7374,7 @@ func secondary() -> void:
 				else:
 					notice("Aguarde a sincronizacao do mundo.")
 				return
+			harvest_pinned_rabbit(o)
 			stock[item] += 2 if kind=="vine_bush" else 1
 			item_received(item)
 			sync_hotbar()
@@ -7262,6 +7402,7 @@ func net_request_collect(id: String) -> void:
 	if item<0:
 		return
 	var amount := 2 if kind=="vine_bush" else 1
+	harvest_pinned_rabbit(obj)
 	remove_object(obj) # atualiza mundo persistido e notifica todos os clientes
 	net_collect_reward.rpc_id(peer_id,item,amount)
 	save_game()
@@ -7616,6 +7757,12 @@ func store_object(kind: String, pos: Vector3, yaw: float = 0.0, level: int = 0) 
 		refresh_door_transitions(pos)
 	if kind in NET_SHARED_KINDS and net_role=="host" and not net_apply_in_progress:
 		net_shared_place.rpc(kind,id,pos,yaw,level)
+
+func harvest_pinned_rabbit(o: Node3D) -> void:
+	if str(o.get_meta("kind","")).begins_with("rabbit_spear_"):
+		var pos := o.global_position
+		store_object("meat_rabbit",pos+Vector3(.35,0,0))
+		store_object("hide",pos+Vector3(-.35,0,0))
 
 func remove_object(o: Node3D) -> void:
 	var removed_kind := str(o.get_meta("kind",""))
@@ -8161,7 +8308,7 @@ func net_dismantle_feedback(hits: int,required: int,recovered_item: int) -> void
 
 @rpc("any_peer","call_remote","reliable")
 func net_request_place(kind: String,pos: Vector3,yaw: float,level: int) -> void:
-	if net_role!="host" or kind in ["hut","tomato_crop","village_cabin"] or kind not in NET_SHARED_KINDS:
+	if net_role!="host" or kind in ["hut","tomato_crop","village_cabin","rabbit_spear_wood","rabbit_spear_stone"] or kind not in NET_SHARED_KINDS:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if peer_id<=1 or not multiplayer.get_peers().has(peer_id):
