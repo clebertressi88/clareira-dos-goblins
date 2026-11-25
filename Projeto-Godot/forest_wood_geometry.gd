@@ -10,6 +10,8 @@ static func tapered(parent: Node3D, start: Vector3, finish: Vector3, base_radius
 	mesh.top_radius = tip_radius
 	mesh.height = maxf(delta.length(),0.01)
 	mesh.radial_segments = segments
+	# Cilindros afunilados nao precisam de subdivisoes verticais.
+	mesh.rings = 0
 	var part := MeshInstance3D.new()
 	part.mesh = mesh
 	part.material_override = bark
@@ -20,10 +22,10 @@ static func tapered(parent: Node3D, start: Vector3, finish: Vector3, base_radius
 
 static func make_trunk(parent: Node3D, bark: Material, adult: bool) -> MeshInstance3D:
 	# Adulto e toco partilham o mesmo perfil de base para nao criar degrau.
-	var flare := tapered(parent,Vector3.ZERO,Vector3.UP*0.44,0.355,0.225,bark,12)
+	var flare := tapered(parent,Vector3.ZERO,Vector3.UP*0.44,0.355,0.225,bark,10)
 	flare.name = "TroncoToco" if not adult else "BaseAlargada"
 	if adult:
-		var upper := tapered(parent,Vector3.UP*0.405,Vector3.UP*2.20,0.230,0.205,bark,12)
+		var upper := tapered(parent,Vector3.UP*0.405,Vector3.UP*2.20,0.230,0.205,bark,10)
 		upper.name = "TroncoPrincipal"
 	return flare
 
@@ -39,8 +41,8 @@ static func make_roots(parent: Node3D, bark: Material, tree_id: String) -> void:
 		var start := direction*0.09 + Vector3.UP*0.205
 		var elbow := direction*(total*0.52) + side*rng.randf_range(-0.07,0.07) + Vector3.UP*0.068
 		var tip := direction*total + side*rng.randf_range(-0.08,0.08) + Vector3.UP*0.02
-		tapered(parent,start,elbow,0.145,0.091,bark,8)
-		tapered(parent,elbow-direction*0.025,tip,0.094,0.019,bark,7)
+		tapered(parent,start,elbow,0.145,0.091,bark,6)
+		tapered(parent,elbow-direction*0.025,tip,0.094,0.019,bark,5)
 
 static func make_branch(parent: Node3D, start: Vector3, tip: Vector3, radius: float, bark: Material) -> void:
 	var delta := tip-start
@@ -48,5 +50,5 @@ static func make_branch(parent: Node3D, start: Vector3, tip: Vector3, radius: fl
 		return
 	# A raiz do galho fica embutida no tronco e engrossada na origem.
 	var mid := start+delta*0.43+Vector3.UP*0.028
-	tapered(parent,start,mid,radius*1.26,radius*0.76,bark,8)
-	tapered(parent,mid-delta.normalized()*0.025,tip,radius*0.79,radius*0.28,bark,7)
+	tapered(parent,start,mid,radius*1.26,radius*0.76,bark,6)
+	tapered(parent,mid-delta.normalized()*0.025,tip,radius*0.79,radius*0.28,bark,5)
