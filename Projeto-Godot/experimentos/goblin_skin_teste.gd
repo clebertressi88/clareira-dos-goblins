@@ -7,6 +7,8 @@ const BACKPACK = preload("res://backpack_model.gd")
 var characters: Array[Node3D] = [] # Compatibilidade com ferramentas antigas.
 var goblin: Node3D
 var wolf: Node3D
+var second_goblin: Node3D
+var second_goblin_holder: Node3D
 var goblin_holder: Node3D
 var wolf_holder: Node3D
 var camera: Camera3D
@@ -27,6 +29,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_build_world()
 	_spawn_goblin()
+	_spawn_second_goblin()
 	_spawn_wolf()
 	_build_ui()
 	_set_view("goblin")
@@ -73,6 +76,20 @@ func _spawn_goblin() -> void:
 		return
 	goblin.call("set_equipment",false,false)
 	characters.append(goblin)
+
+func _spawn_second_goblin() -> void:
+	second_goblin_holder = Node3D.new()
+	second_goblin_holder.name = "SegundoGoblin"
+	add_child(second_goblin_holder)
+	second_goblin = GOBLIN_RIG.new()
+	second_goblin.name = "GoblinRig"
+	second_goblin_holder.add_child(second_goblin)
+	second_goblin.call("set_variant","talo")
+	if not bool(second_goblin.call("install")):
+		push_warning("Laboratorio: segundo goblin nao carregou.")
+		return
+	second_goblin.call("set_equipment",false,false)
+	characters.append(second_goblin)
 
 func _spawn_wolf() -> void:
 	wolf_holder = Node3D.new()
@@ -217,10 +234,11 @@ func _build_ui() -> void:
 
 func _set_view(value: String) -> void:
 	group_mode = value
-	if not is_instance_valid(goblin_holder) or not is_instance_valid(wolf_holder):
+	if not is_instance_valid(goblin_holder) or not is_instance_valid(wolf_holder) or not is_instance_valid(second_goblin_holder):
 		return
 	goblin_holder.visible = value in ["goblin","group","goblins"]
 	wolf_holder.visible = value in ["wolf","group"]
+	second_goblin_holder.visible = value=="goblins"
 	_reset_positions()
 	_reset_camera()
 	_update_status()
@@ -228,7 +246,9 @@ func _set_view(value: String) -> void:
 func _reset_positions() -> void:
 	elapsed = 0.0
 	interaction = "none"
-	goblin_holder.position = Vector3(-0.83,0,0) if group_mode=="group" else Vector3.ZERO
+	goblin_holder.position = Vector3(-0.83,0,0) if group_mode in ["group","goblins"] else Vector3.ZERO
+	second_goblin_holder.position = Vector3(0.83,0,0)
+	second_goblin_holder.rotation.y = PI
 	wolf_holder.position = Vector3(0.83,0,0) if group_mode=="group" else Vector3.ZERO
 	goblin_holder.rotation.y = 0.0
 	wolf_holder.rotation.y = PI if group_mode=="group" else 0.0
@@ -265,6 +285,8 @@ func _attack() -> void:
 		goblin.call("play_action","attack")
 	if wolf_holder.visible and is_instance_valid(wolf):
 		wolf.call("bite")
+	if second_goblin_holder.visible and is_instance_valid(second_goblin):
+		second_goblin.call("play_action","attack")
 	_update_status()
 
 func _set_interaction(value: String) -> void:
@@ -286,6 +308,8 @@ func _shield() -> void:
 func _apply_equipment() -> void:
 	if is_instance_valid(goblin):
 		goblin.call("set_equipment",sword_on,shield_on)
+	if is_instance_valid(second_goblin):
+		second_goblin.call("set_equipment",sword_on,shield_on)
 	_update_status()
 
 func _backpack() -> void:
@@ -311,6 +335,9 @@ func _process(dt: float) -> void:
 	if is_instance_valid(goblin):
 		var walking_speed := 0.0 if motion=="idle" else 3.2 if motion=="run" else 1.6
 		goblin.call("animate",Vector3(0,0,walking_speed),dt,true)
+	if is_instance_valid(second_goblin):
+		var second_speed := 0.0 if motion=="idle" else 3.2 if motion=="run" else 1.6
+		second_goblin.call("animate",Vector3(0,0,second_speed),dt,true)
 	if is_instance_valid(wolf):
 		var wolf_speed := 0.0 if motion=="idle" else 3.6 if motion=="run" else 1.4
 		wolf.call("animate",Vector3(0,0,wolf_speed))
