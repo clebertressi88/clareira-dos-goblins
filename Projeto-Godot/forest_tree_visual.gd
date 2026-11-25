@@ -53,7 +53,19 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 	for i in range(6):
 		var angle := float(i)*TAU/6.0
 		_add_leaf_cluster(cards,Vector3(cos(angle)*0.24,3.04+variation,sin(angle)*0.24),0.59,angle,rng)
-	_add_leaf_batch(growth,cards)
+	var near := _add_leaf_batch(growth,cards)
+	near.visibility_range_end = 24.0
+	var medium_cards: Array[Transform3D] = []
+	for i in range(0,cards.size(),4):
+		# Preserve pares cruzados e distribua os volumes por toda a copa.
+		for side in range(2):
+			var card := cards[i+side]
+			card.basis = card.basis.scaled_local(Vector3(1.16,1.16,1.0))
+			medium_cards.append(card)
+	var medium := _add_leaf_batch(growth,medium_cards)
+	medium.name = "CopaFolhasMedia"
+	medium.visibility_range_begin = 24.0
+	medium.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 static func _add_leaf_cluster(cards: Array[Transform3D], pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> void:
 	for side in range(2):
@@ -61,9 +73,9 @@ static func _add_leaf_cluster(cards: Array[Transform3D], pos: Vector3, extent: f
 		var basis := Basis.from_euler(rotation).scaled_local(Vector3(extent*1.45,extent*1.25,1.0))
 		cards.append(Transform3D(basis,pos))
 
-static func _add_leaf_batch(parent: Node3D, cards: Array[Transform3D]) -> void:
+static func _add_leaf_batch(parent: Node3D, cards: Array[Transform3D]) -> MultiMeshInstance3D:
 	if cards.is_empty():
-		return
+		return null
 	var batch := MultiMesh.new()
 	batch.transform_format = MultiMesh.TRANSFORM_3D
 	batch.mesh = _leaf_mesh()
@@ -75,3 +87,4 @@ static func _add_leaf_batch(parent: Node3D, cards: Array[Transform3D]) -> void:
 	part.multimesh = batch
 	part.material_override = _leaf_material()
 	parent.add_child(part)
+	return part
