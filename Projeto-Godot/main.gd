@@ -692,6 +692,22 @@ func refresh_distant_horizon(center: Vector2i) -> void:
 	distant_horizon_center = center
 	distant_horizon_radius = visible_chunk_radius
 
+# Mantem a clareira original e toda a patrulha dos moradores ativas.
+# Os setores sao de 16 m; uma margem pequena protege as bordas de colisao.
+func permanent_spawn_chunks() -> Dictionary:
+	var keep: Dictionary = {}
+	var spawn := Vector3(SPAWN_ORIGIN.x,0.0,SPAWN_ORIGIN.y)
+	var camp := get_campfire_center()
+	# O ponto zero e a fogueira original permanecem mesmo se a fogueira mudar.
+	for center in [spawn,Vector3(0,0,-6),camp]:
+		var radius := NPC_PATROL_RADIUS+2.0
+		var low := chunk_from_position(center-Vector3(radius,0,radius))
+		var high := chunk_from_position(center+Vector3(radius,0,radius))
+		for z in range(low.y,high.y+1):
+			for x in range(low.x,high.x+1):
+				keep[Vector2i(x,z)] = true
+	return keep
+
 func load_chunks() -> void:
 	# Cada maquina desenha sua vizinhanca; o anfitriao mantem carregadas
 	# TODAS as vizinhancas ocupadas por jogadores, mesmo distantes entre si.
@@ -705,7 +721,9 @@ func load_chunks() -> void:
 			var remote_center := chunk_from_position(remote_pos)
 			if not centers.has(remote_center):
 				centers.append(remote_center)
-	var desired: Dictionary = {}
+	# Somente solo/anfitriao simulam a IA; visitantes nao precisam duplicar setores fixos.
+	var permanent: Dictionary = permanent_spawn_chunks() if net_role!="client" else {}
+	var desired: Dictionary = permanent.duplicate()
 	for center_index in range(centers.size()):
 		var center: Vector2i = centers[center_index]
 		# O host conserva cinco por cinco ao redor de si; para cada visitante,
@@ -729,7 +747,7 @@ func load_chunks() -> void:
 	for key: Vector2i in desired.keys():
 		if chunks.has(key):
 			continue
-		var urgent := initial_load
+		var urgent := initial_load or permanent.has(key)
 		for center: Vector2i in centers:
 			if maxi(absi(key.x-center.x),absi(key.y-center.y))<=1:
 				urgent = true
@@ -1670,6 +1688,10 @@ func npc_has_loaded_ground(pos: Vector3) -> bool:
 
 func update_villagers(dt: float) -> void:
 	var campfire := get_campfire_center()
+	var camp_sector := chunk_from_position(campfire)
+	if camp_sector!=get_meta("permanent_camp_sector",Vector2i(100000,100000)):
+		set_meta("permanent_camp_sector",camp_sector)
+		load_chunks()
 	# Recuperar referencias sem duplicar moradores ou recriar inventarios.
 	for i in range(villagers.size()-1,-1,-1):
 		if not is_instance_valid(villagers[i]) or villagers[i].is_queued_for_deletion():
