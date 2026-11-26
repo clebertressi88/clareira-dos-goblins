@@ -638,8 +638,8 @@ func _render_controls() -> void:
 
 func _render_updates() -> void:
 	_page_container.add_child(_heading("⇩  ATUALIZAÇÕES DO JOGO"))
-	_page_container.add_child(_text("Atualize diretamente por aqui, sem abrir o navegador.",19,CREAM,true))
-	_page_container.add_child(_text("O download é feito antes de fechar o jogo. Depois, a instalação começa automaticamente.",17,MUTED,true))
+	_page_container.add_child(_text("Verifique a nova versão por aqui e abra o APK oficial." if OS.has_feature("android") else "Atualize diretamente por aqui, sem abrir o navegador.",19,CREAM,true))
+	_page_container.add_child(_text("O progresso é salvo antes do download. Confirme Atualizar no Android; não desinstale o jogo." if OS.has_feature("android") else "O download é feito antes de fechar o jogo. Depois, a instalação começa automaticamente.",17,MUTED,true))
 	_page_container.add_child(HSeparator.new())
 	_update_status_label = _text("Consultando atualizações...",19,GOLD,true)
 	_page_container.add_child(_update_status_label)
@@ -655,10 +655,10 @@ func _render_updates() -> void:
 	_update_check_button = _action_button("↻  VERIFICAR NOVAMENTE")
 	_update_check_button.pressed.connect(func(): _call_action("check_update"))
 	_page_container.add_child(HSeparator.new())
-	_page_container.add_child(_text("O atualizador confere o arquivo antes de instalar e mantém um backup do executável anterior.",16,CREAM,true))
+	_page_container.add_child(_text("O Android verifica a assinatura do APK durante a instalação." if OS.has_feature("android") else "O atualizador confere o arquivo antes de instalar e mantém um backup do executável anterior.",16,CREAM,true))
 	_page_container.add_child(_text("Se a instalação falhar, o jogo não deve perder seus mundos e inventários salvos.",16,MUTED,true))
 	var link := _action_button("↗  DOWNLOAD MANUAL (GITHUB)")
-	link.pressed.connect(func(): OS.shell_open("https://github.com/clebertressi88/clareira-dos-goblins/releases/tag/jogo-windows"))
+	link.pressed.connect(func(): OS.shell_open("https://github.com/clebertressi88/clareira-dos-goblins/releases/tag/jogo-android-lan-v12" if OS.has_feature("android") else "https://github.com/clebertressi88/clareira-dos-goblins/releases/tag/jogo-windows"))
 	_refresh_update_controls()
 	if str((_state.get("updater",{}) as Dictionary).get("phase","idle"))=="idle":
 		_call_action("check_update")
