@@ -156,13 +156,20 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $head = (gh api "repos/$env:GITHUB_REPOSITORY/commits/teste-android-lan" | ConvertFrom-Json).sha
           if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA) { throw 'Build nao corresponde ao HEAD Android' }
-          gh release view jogo-android-lan *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create jogo-android-lan --target $env:GITHUB_SHA --prerelease --latest=false --title 'Clareira dos Goblins - Android experimental' --notes 'APK de teste. Multiplayer por IP local. Testes em aparelho real pendentes.'
+          # Windows PowerShell 5.1 converte stderr em excecao quando Stop esta ativo.
+          $ErrorActionPreference = 'Continue'
+          $releaseLookup = gh release view jogo-android-lan 2>&1 | Out-String
+          $lookupCode = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($lookupCode -ne 0 -and $releaseLookup -notmatch 'release not found|HTTP 404') { throw "Falha consultando release: $releaseLookup" }
+          if ($lookupCode -ne 0) {
+            gh release create jogo-android-lan dist/Clareira-dos-Goblins-Android.apk dist/SHA256-Android.txt --target $env:GITHUB_SHA --prerelease --latest=false --title 'Clareira dos Goblins - Android experimental' --notes 'APK de teste. Multiplayer por IP local. Testes em aparelho real pendentes.'
             if ($LASTEXITCODE -ne 0) { throw 'Falha na criacao da release Android' }
           }
-          gh release upload jogo-android-lan dist/Clareira-dos-Goblins-Android.apk dist/SHA256-Android.txt --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Falha na publicacao Android' }
+          if ($lookupCode -eq 0) {
+            gh release upload jogo-android-lan dist/Clareira-dos-Goblins-Android.apk dist/SHA256-Android.txt --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Falha na publicacao Android' }
+          }
           gh release edit jogo-android-lan --prerelease --latest=false --notes "APK experimental do commit $env:GITHUB_SHA. Testes em celular pendentes."
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar release Android' }
           $assets = @(gh release view jogo-android-lan --json assets --jq '.assets[].name')
