@@ -7,6 +7,7 @@ const EXPIRY_MS := 5500
 var socket := PacketPeerUDP.new()
 var mode := ""
 var next_query := 0
+var scan_started := 0
 var nonce := ""
 var rooms: Dictionary = {}
 var status := ""
@@ -28,10 +29,14 @@ func _start(wanted: String) -> void:
 	socket.set_broadcast_enabled(true)
 	nonce = Crypto.new().generate_random_bytes(12).hex_encode()
 	next_query = 0
+	scan_started = Time.get_ticks_msec()
 
 func refresh() -> void:
 	rooms.clear()
 	next_query = 0
+	scan_started = Time.get_ticks_msec()
+	if not socket.is_bound():
+		mode = ""
 
 func tick(wanted: String, protocol: int, game_port: int, world_name: String, players: int) -> void:
 	if wanted!=mode:
@@ -79,6 +84,13 @@ func tick(wanted: String, protocol: int, game_port: int, world_name: String, pla
 	for ip in rooms.keys():
 		if now-int(rooms[ip]["seen"])>EXPIRY_MS:
 			rooms.erase(ip)
+
+func display_status() -> String:
+	if not status.is_empty():
+		return status
+	if rooms.is_empty() and Time.get_ticks_msec()-scan_started>3500:
+		return "Nenhuma partida encontrada. A busca continua automaticamente."
+	return ""
 
 func list_rooms() -> Array:
 	var result: Array = []
