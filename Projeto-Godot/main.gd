@@ -794,7 +794,7 @@ func stream_next_chunk() -> void:
 
 func _process(_delta: float) -> void:
 	stream_next_chunk()
-	var scan := is_instance_valid(medieval_menu) and medieval_menu.wants_lan_discovery() and net_role=="solo"
+	var scan: bool = is_instance_valid(medieval_menu) and medieval_menu.wants_lan_discovery() and net_role=="solo"
 	var mode := "host" if net_role=="host" else "scan" if scan else ""
 	var room_name := str(world_storage.active_name()) if net_role=="host" else ""
 	lan_discovery.tick(mode,NET_PROTOCOL,NET_PORT,room_name,multiplayer.get_peers().size()+1 if net_role=="host" else 1)
