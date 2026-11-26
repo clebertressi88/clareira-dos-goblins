@@ -19,6 +19,8 @@ const PRIMARY := preload("res://menu_art/botao_principal.svg")
 const OPTIONS_FILE := "user://clareira-menu.cfg"
 
 var ip_input: LineEdit
+var _lan_rooms: VBoxContainer
+var _lan_signature := ""
 var world_picker: OptionButton
 var world_create_input: LineEdit
 var world_rename_input: LineEdit
@@ -62,6 +64,8 @@ func rebuild(state: Dictionary, actions: Dictionary, starting_page: String = "ho
 
 func _recreate() -> void:
 	ip_input = null
+	_lan_rooms = null
+	_lan_signature = ""
 	world_picker = null
 	world_create_input = null
 	world_rename_input = null
@@ -311,6 +315,8 @@ func _render_page() -> void:
 	if not is_instance_valid(_middle):
 		return
 	ip_input = null
+	_lan_rooms = null
+	_lan_signature = ""
 	world_picker = null
 	world_create_input = null
 	world_rename_input = null
@@ -511,7 +517,15 @@ func _render_network() -> void:
 		var host := _action_button("♜  HOSPEDAR PARTIDA",true)
 		host.pressed.connect(func(): _call_action("host"))
 		_page_container.add_child(HSeparator.new())
-		_page_container.add_child(_text("ENTRAR EM OUTRA PARTIDA",18,GOLD))
+		_page_container.add_child(_text("PARTIDAS ABERTAS NA REDE",18,GOLD))
+		_lan_rooms = VBoxContainer.new()
+		_lan_rooms.add_theme_constant_override("separation",6)
+		_page_container.add_child(_lan_rooms)
+		update_lan_rooms([], "")
+		var scan := _action_button("ATUALIZAR LISTA")
+		scan.pressed.connect(func(): _call_action("refresh_lan"))
+		_page_container.add_child(HSeparator.new())
+		_page_container.add_child(_text("ENTRAR PELO IP (OPCIONAL)",18,GOLD))
 		ip_input = LineEdit.new()
 		ip_input.placeholder_text = "IP do anfitrião: 192.168.1.10"
 		ip_input.text = str(_state.get("ip",""))
@@ -537,6 +551,41 @@ func _render_network() -> void:
 		var leave := _action_button("DESCONECTAR DA PARTIDA")
 		leave.pressed.connect(func(): _call_action("disconnect"))
 	_message()
+
+func wants_lan_discovery() -> bool:
+	return is_visible_in_tree() and _page=="network" and str(_state.get("role","solo"))=="solo" and is_instance_valid(_lan_rooms)
+
+func update_lan_rooms(rooms: Array, status: String) -> void:
+	if not is_instance_valid(_lan_rooms):
+		return
+	var signature := JSON.stringify(rooms)+status
+	if signature==_lan_signature:
+		return
+	_lan_signature = signature
+	for child in _lan_rooms.get_children():
+		_lan_rooms.remove_child(child)
+		child.queue_free()
+	if rooms.is_empty():
+		_lan_rooms.add_child(_text(status if not status.is_empty() else "Buscando partidas na rede local…",16,MUTED,true))
+		return
+	for room in rooms:
+		var ip := str(room.get("ip",""))
+		var players := int(room.get("players",1))
+		var button := Button.new()
+		button.text = "%s  ·  %d/8 jogadores\n%s%s" % [str(room.get("world","Mundo")),players,ip,"  ·  Lotada" if players>=8 else ""]
+		button.custom_minimum_size = Vector2(300,64)
+		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		_style_button(button,true,true)
+		button.disabled = players>=8
+		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		_lan_rooms.add_child(button)
+		button.pressed.connect(_join_discovered.bind(ip))
+
+func _join_discovered(ip: String) -> void:
+	if _actions.has("join_discovered"):
+		var callback: Callable = _actions["join_discovered"]
+		if callback.is_valid():
+			callback.call(ip)
 
 func _render_settings() -> void:
 	_page_container.add_child(_heading("⚙  CONFIGURAÇÕES"))
