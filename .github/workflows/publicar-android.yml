@@ -1,0 +1,184 @@
+name: Compilar Clareira Android LAN
+on:
+  push:
+    branches: [teste-android-lan-v12]
+    paths:
+      - 'Projeto-Godot/**'
+      - '.github/workflows/publicar-android.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  statuses: write
+jobs:
+  android:
+    if: github.ref == 'refs/heads/teste-android-lan-v12'
+    runs-on: [self-hosted, Windows, X64, clareira-goblins]
+    timeout-minutes: 90
+    concurrency:
+      group: clareira-android-lan
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Registrar inicio
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -f state=pending -f context=clareira/android-build -f description="Compilacao Android iniciada" -f target_url="$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+      - uses: actions/checkout@v4
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK (ZIP oficial, compativel com PowerShell 5.1)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = Join-Path $env:RUNNER_TOOL_CACHE 'ClareiraAndroidSDK'
+          $latest = Join-Path $sdk 'cmdline-tools/latest'
+          $manager = Join-Path $latest 'bin/sdkmanager.bat'
+          if (-not (Test-Path $manager)) {
+            New-Item -ItemType Directory -Path $sdk -Force | Out-Null
+            $archive = Join-Path $env:RUNNER_TEMP 'android-commandlinetools.zip'
+            $unpack = Join-Path $env:RUNNER_TEMP 'android-commandlinetools-unpack'
+            if (Test-Path $unpack) { Remove-Item $unpack -Recurse -Force }
+            Invoke-WebRequest -UseBasicParsing 'https://dl.google.com/android/repository/commandlinetools-win-12266719_latest.zip' -OutFile $archive
+            Expand-Archive -LiteralPath $archive -DestinationPath $unpack -Force
+            New-Item -ItemType Directory -Path $latest -Force | Out-Null
+            Copy-Item (Join-Path $unpack 'cmdline-tools/*') -Destination $latest -Recurse -Force
+            Remove-Item $archive -Force
+            Remove-Item $unpack -Recurse -Force
+          }
+          if (-not (Test-Path $manager)) { throw 'sdkmanager ausente' }
+          $env:ANDROID_HOME = $sdk
+          $env:ANDROID_SDK_ROOT = $sdk
+          $answers = Join-Path $env:RUNNER_TEMP 'android-license-answers.txt'
+          @('y') * 100 | Set-Content -LiteralPath $answers -Encoding ascii
+          $ErrorActionPreference = 'Continue'
+          $cmdLine = '""{0}" "--sdk_root={1}" --licenses < "{2}""' -f $manager,$sdk,$answers
+          & cmd.exe /d /s /c $cmdLine
+          $rc = $LASTEXITCODE
+          if ($rc -ne 0) { throw 'Falha ao aceitar licencas Android' }
+          $cmdLine = '""{0}" "--sdk_root={1}" "platform-tools" "platforms;android-35" "build-tools;35.0.1" < "{2}""' -f $manager,$sdk,$answers
+          & cmd.exe /d /s /c $cmdLine
+          $rc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          Remove-Item -LiteralPath $answers -Force
+          if ($rc -ne 0) { throw 'Falha no SDK Android' }
+          foreach ($required in @('build-tools/35.0.1/apksigner.bat','build-tools/35.0.1/aapt.exe','platform-tools/adb.exe','platforms/android-35/android.jar')) {
+            if (-not (Test-Path (Join-Path $sdk $required))) { throw "SDK incompleto: $required" }
+          }
+          "ANDROID_HOME=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "ANDROID_SDK_ROOT=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Preparar Android SDK e Godot isolado
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = $env:ANDROID_HOME
+          if (-not (Test-Path (Join-Path $sdk 'build-tools/35.0.1/apksigner.bat'))) { throw 'SDK Android incompleto' }
+          $version = '4.7.2'
+          $base = "https://github.com/godotengine/godot/releases/download/$version-stable"
+          $root = Join-Path $env:RUNNER_TEMP "clareira-android-$version"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          $editor = Join-Path $root "Godot_v$version-stable_win64_console.exe"
+          $gui = Join-Path $root "Godot_v$version-stable_win64.exe"
+          if (-not (Test-Path $editor) -or -not (Test-Path $gui)) {
+            $zip = Join-Path $root 'editor.zip'
+            Invoke-WebRequest "$base/Godot_v$version-stable_win64.exe.zip" -OutFile $zip
+            Expand-Archive $zip $root -Force
+            Remove-Item $zip
+          }
+          if (-not (Test-Path $editor)) { throw 'Godot console ausente' }
+          New-Item -ItemType File -Force -Path (Join-Path $root '_sc_') | Out-Null
+          $data = Join-Path $root 'editor_data'
+          $templates = Join-Path $data "export_templates/$version.stable"
+          New-Item -ItemType Directory -Force -Path $templates | Out-Null
+          if (-not (Test-Path (Join-Path $templates 'android_debug.apk'))) {
+            $zip = Join-Path $root 'templates.zip'
+            Invoke-WebRequest "$base/Godot_v$version-stable_export_templates.tpz" -OutFile $zip
+            $unpack = Join-Path $root 'unpack'
+            Expand-Archive $zip $unpack -Force
+            Get-ChildItem $unpack -Recurse -File | Where-Object { $_.Name -in @('android_debug.apk','android_release.apk','version.txt') } | ForEach-Object { Copy-Item $_.FullName $templates -Force }
+            Remove-Item $unpack -Recurse -Force
+            Remove-Item $zip
+          }
+          if (-not (Test-Path (Join-Path $templates 'android_debug.apk'))) { throw 'Template APK ausente' }
+          $key = Join-Path $env:USERPROFILE '.android/debug.keystore'
+          New-Item -ItemType Directory -Force -Path (Split-Path $key) | Out-Null
+          if (-not (Test-Path $key)) {
+            & "$env:JAVA_HOME/bin/keytool.exe" -genkeypair -keystore $key -storepass android -keypass android -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -validity 10000 -storetype PKCS12
+            if ($LASTEXITCODE -ne 0) { throw 'Falha na assinatura de teste' }
+          }
+          $settings = @('[gd_resource type="EditorSettings" format=3]','','[resource]',('export/android/java_sdk_path = "' + ($env:JAVA_HOME -replace '\\','/') + '"'),('export/android/android_sdk_path = "' + ($sdk -replace '\\','/') + '"'),('export/android/debug_keystore = "' + ($key -replace '\\','/') + '"'))
+          $settings | Set-Content (Join-Path $data 'editor_settings-4.7.tres') -Encoding UTF8
+          "GODOT_EXE=$editor" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$key" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "ANDROID_SDK_LOCAL=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Importar e validar scripts
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $log = & $env:GODOT_EXE --headless --path Projeto-Godot --import 2>&1 | Out-String
+          $rc = $LASTEXITCODE
+          Write-Host $log
+          if ($rc -ne 0 -or $log -match '(?m)^\s*(SCRIPT ERROR:|ERROR:.*Parse Error)') { throw 'Falha na importacao Godot' }
+          foreach ($script in @('res://mobile_controls.gd','res://main.gd')) {
+            $log = & $env:GODOT_EXE --headless --path Projeto-Godot --check-only --script $script 2>&1 | Out-String
+            $rc = $LASTEXITCODE
+            Write-Host $log
+            if ($rc -ne 0 -or $log -match 'SCRIPT ERROR:|Parse Error') { throw "Falha no script $script" }
+          }
+      - name: Exportar e verificar APK ARM64
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          $apk = Join-Path $dist 'Clareira-dos-Goblins-Android.apk'
+          if (Test-Path $apk) { Remove-Item $apk -Force }
+          $ErrorActionPreference = 'Continue'
+          $log = & $env:GODOT_EXE --headless --path Projeto-Godot --export-debug 'Android LAN' $apk 2>&1 | Out-String
+          $rc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          Write-Host $log
+          if ($rc -ne 0 -or -not (Test-Path $apk) -or $log -match 'SCRIPT ERROR:|Parse Error') { throw 'Exportacao APK falhou' }
+          $tools = Join-Path $env:ANDROID_SDK_LOCAL 'build-tools/35.0.1'
+          & (Join-Path $tools 'apksigner.bat') verify --verbose $apk
+          if ($LASTEXITCODE -ne 0) { throw 'APK com assinatura invalida' }
+          $badging = & (Join-Path $tools 'aapt.exe') dump badging $apk | Out-String
+          if ($LASTEXITCODE -ne 0 -or $badging -notmatch 'arm64-v8a' -or $badging -notmatch 'br.com.clareiradosgoblins.lan' -or $badging -notmatch 'android.permission.INTERNET') { throw 'APK incorreto' }
+          Write-Host $badging
+          "$((Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant())  Clareira-dos-Goblins-Android.apk" | Set-Content (Join-Path $dist 'SHA256-Android.txt') -Encoding ascii
+      - name: Publicar somente na release Android experimental
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (gh api "repos/$env:GITHUB_REPOSITORY/commits/teste-android-lan-v12" | ConvertFrom-Json).sha
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA) { throw 'Build nao corresponde ao HEAD Android' }
+          # Windows PowerShell 5.1 converte stderr em excecao quando Stop esta ativo.
+          $ErrorActionPreference = 'Continue'
+          $releaseLookup = gh release view jogo-android-lan-v12 2>&1 | Out-String
+          $lookupCode = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($lookupCode -ne 0 -and $releaseLookup -notmatch 'release not found|HTTP 404') { throw "Falha consultando release: $releaseLookup" }
+          if ($lookupCode -ne 0) {
+            gh release create jogo-android-lan-v12 dist/Clareira-dos-Goblins-Android.apk dist/SHA256-Android.txt --target $env:GITHUB_SHA --prerelease --latest=false --title 'Clareira dos Goblins - Android experimental' --notes 'APK de teste. Multiplayer por IP local. Testes em aparelho real pendentes.'
+            if ($LASTEXITCODE -ne 0) { throw 'Falha na criacao da release Android' }
+          }
+          if ($lookupCode -eq 0) {
+            gh release upload jogo-android-lan-v12 dist/Clareira-dos-Goblins-Android.apk dist/SHA256-Android.txt --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Falha na publicacao Android' }
+          }
+          gh release edit jogo-android-lan-v12 --prerelease --latest=false --notes "APK experimental do commit $env:GITHUB_SHA. Testes em celular pendentes."
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar release Android' }
+          $assets = @(gh release view jogo-android-lan-v12 --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0 -or $assets -notcontains 'Clareira-dos-Goblins-Android.apk') { throw 'APK nao confirmado na release' }
+      - name: Registrar resultado
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RESULT: ${{ job.status }}
+        run: |
+          $state = if ($env:BUILD_RESULT -eq 'success') { 'success' } elseif ($env:BUILD_RESULT -eq 'cancelled') { 'error' } else { 'failure' }
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -f state=$state -f context=clareira/android-build -f description="Android: $env:BUILD_RESULT" -f target_url="$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
