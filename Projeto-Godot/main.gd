@@ -4846,7 +4846,7 @@ func _install_verified_update() -> void:
 	if not save_game():
 		updater.abort_install("Não foi possível salvar o progresso. Atualização cancelada.")
 		return
-	if updater.launch_installer():
+	if updater.launch_installer() and not OS.has_feature("android"):
 		get_tree().quit()
 
 
