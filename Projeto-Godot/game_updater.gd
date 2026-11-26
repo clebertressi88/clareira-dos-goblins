@@ -9,6 +9,12 @@ const RELEASE_ZIP := "https://github.com/clebertressi88/clareira-dos-goblins/rel
 const ZIP_NAME := "Clareira-dos-Goblins-Windows.zip"
 const REPOSITORY := "clebertressi88/clareira-dos-goblins"
 const RELEASE_TAG := "jogo-windows"
+const ANDROID_BUILD := preload("res://sistemas/atualizacao/android_build.gd")
+const ANDROID_TAG := "jogo-android-lan-v12"
+const ANDROID_API := "https://api.github.com/repos/clebertressi88/clareira-dos-goblins/releases/tags/jogo-android-lan-v12"
+const ANDROID_APK := "https://github.com/clebertressi88/clareira-dos-goblins/releases/download/jogo-android-lan-v12/Clareira-dos-Goblins-Android.apk"
+const ANDROID_APK_NAME := "Clareira-dos-Goblins-Android.apk"
+var android_release_code := 0
 const PRIVATE_REPO_MESSAGE := "Este jogo está em um repositório GitHub privado. Para consultar, instale o GitHub CLI e execute gh auth login com uma conta autorizada. Para todos os jogadores atualizarem sem login, publique os ZIPs em um repositório público de downloads."
 const UPDATE_FOLDER := "user://clareira-atualizador"
 const INSTALL_SCRIPT := """
@@ -161,13 +167,14 @@ func check_updates(silent: bool = false) -> void:
 	if str(state.get("phase","")) in ["checking","downloading","verified","installing"]:
 		return
 	_checking_silently = silent
-	if not OS.has_feature("windows"):
-		_set_phase("error","A instalação automática está disponível somente no Windows.")
+	if not OS.has_feature("windows") and not OS.has_feature("android"):
+		_set_phase("error","Atualizações disponíveis no Windows e Android.")
 		return
 	download_method = "http"
 	gh_download_pid = 0
-	_set_phase("checking","Consultando a versão Windows no GitHub...")
-	var result := api_request.request(RELEASE_API,
+	var android := OS.has_feature("android")
+	_set_phase("checking","Consultando a versão Android no GitHub..." if android else "Consultando a versão Windows no GitHub...")
+	var result := api_request.request(ANDROID_API if android else RELEASE_API,
 		PackedStringArray(["User-Agent: Clareira-dos-Goblins","Accept: application/vnd.github+json"]))
 	if result!=OK:
 		_set_phase("error","Não foi possível consultar as atualizações. Erro %d." % result)
@@ -181,6 +188,8 @@ func _valid_hex(value: String,length_required: int) -> bool:
 	return true
 
 func _parse_release(data: Dictionary) -> bool:
+	if OS.has_feature("android"):
+		return _parse_android_release(data)
 	asset_sha256 = ""
 	asset_size = 0
 	release_commit = ""
@@ -215,10 +224,50 @@ func _parse_release(data: Dictionary) -> bool:
 		return true
 	return false
 
+func _parse_android_release(data: Dictionary) -> bool:
+	asset_size = 0
+	asset_sha256 = ""
+	release_commit = ""
+	android_release_code = 0
+	if str(data.get("tag_name",""))!=ANDROID_TAG or bool(data.get("draft",false)):
+		return false
+	var body := str(data.get("body",""))
+	var marker := "android-version-code "
+	var start := body.find(marker)
+	if start<0:
+		return false
+	var code_text := body.substr(start+marker.length()).get_slice("\n",0).strip_edges()
+	if not code_text.is_valid_int():
+		return false
+	var code := int(code_text)
+	if code<1 or code>2100000000:
+		return false
+	var assets: Variant = data.get("assets",[])
+	if not assets is Array:
+		return false
+	for item in assets:
+		if not item is Dictionary:
+			continue
+		if str(item.get("name",""))!=ANDROID_APK_NAME or str(item.get("browser_download_url",""))!=ANDROID_APK:
+			continue
+		var size_bytes := int(item.get("size",0))
+		var digest := str(item.get("digest",""))
+		if size_bytes<1024*1024 or size_bytes>MAX_ZIP_SIZE or not digest.begins_with("sha256:") or not _valid_hex(digest.substr(7),64):
+			return false
+		asset_size = size_bytes
+		asset_sha256 = digest.substr(7).to_lower()
+		android_release_code = code
+		release_commit = str(code)
+		return true
+	return false
+
 func _on_api_finished(result: int,http_code: int,_headers: PackedStringArray,body: PackedByteArray) -> void:
 	if str(state.get("phase",""))!="checking":
 		return
 	if result!=HTTPRequest.RESULT_SUCCESS or http_code!=200:
+		if OS.has_feature("android"):
+			_set_phase("error","Não foi possível consultar a versão Android (HTTP %d). Tente novamente." % http_code)
+			return
 		if http_code in [401,403,404]:
 			# Em segundo plano, nunca iniciar gh via OS.execute: isso bloquearia o jogo.
 			if _checking_silently:
@@ -234,13 +283,19 @@ func _on_api_finished(result: int,http_code: int,_headers: PackedStringArray,bod
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not parsed is Dictionary or not _parse_release(parsed):
-		_set_phase("error","A Release do jogo não contém um ZIP válido e assinado.")
+		_set_phase("error","A versão Android ainda não possui um APK com metadados válidos." if OS.has_feature("android") else "A Release do jogo não contém um ZIP válido e assinado.")
 		return
 	_complete_release_check()
 
 
 func _complete_release_check() -> void:
 	local_commit = _local_version()
+	if OS.has_feature("android"):
+		if android_release_code<=ANDROID_BUILD.VERSION_CODE:
+			_set_phase("current","Seu jogo já está na versão mais recente.")
+		else:
+			_set_phase("ready","Nova versão Android disponível: %0.1f MB. Confirme a instalação pelo sistema." % (float(asset_size)/(1024.0*1024.0)))
+		return
 	if not local_commit.is_empty() and local_commit==release_commit:
 		_set_phase("current","Seu jogo já está na versão mais recente.")
 	else:
@@ -325,6 +380,13 @@ func _verify_downloaded_zip() -> void:
 func download_and_install() -> void:
 	if str(state.get("phase",""))!="ready":
 		return
+	if OS.has_feature("android"):
+		if android_release_code<=ANDROID_BUILD.VERSION_CODE or not _valid_hex(asset_sha256,64):
+			_set_phase("error","Consulte a nova versão novamente.")
+			return
+		_set_phase("verified","Dados da versão conferidos. Salvando o progresso antes de abrir o download...",0)
+		install_ready.emit()
+		return
 	if not OS.has_feature("windows"):
 		_set_phase("error","Instalação automática disponível apenas no Windows.")
 		return
@@ -386,6 +448,8 @@ func _on_zip_finished(result: int,http_code: int,_headers: PackedStringArray,_bo
 	_verify_downloaded_zip()
 
 func _local_version() -> String:
+	if OS.has_feature("android"):
+		return str(ANDROID_BUILD.VERSION_CODE)
 	var version_path := OS.get_executable_path().get_base_dir().path_join("versao-github.txt")
 	if not FileAccess.file_exists(version_path):
 		return ""
@@ -398,6 +462,13 @@ func abort_install(message: String) -> void:
 func launch_installer() -> bool:
 	if str(state.get("phase",""))!="verified":
 		return false
+	if OS.has_feature("android"):
+		var err := OS.shell_open(ANDROID_APK)
+		if err!=OK:
+			_set_phase("error","Não foi possível abrir o download oficial. Use o link manual.")
+			return false
+		_set_phase("ready","Download aberto no navegador. Abra o APK baixado e confirme Atualizar. Não desinstale o jogo.",0)
+		return true
 	var game_path := OS.get_executable_path()
 	if game_path.get_file().to_lower()!="clareira-dos-goblins.exe":
 		_set_phase("error","Executável inesperado. A instalação foi cancelada.")
