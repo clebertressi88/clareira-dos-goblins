@@ -252,7 +252,14 @@ var world_uid := ""
 var net_remote_world_uid := ""
 var net_offline_inventory_backup: Dictionary = {}
 
+var mobile_controls: Control
+
 func _ready() -> void:
+	if OS.has_feature("android"):
+		get_window().content_scale_size = Vector2i(1280,720)
+		get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
+		Engine.max_fps = 30
 	var menu_preferences := ConfigFile.new()
 	menu_preferences.load(MENU_OPTIONS_FILE)
 	show_coordinates = bool(menu_preferences.get_value("display","show_coordinates",false))
@@ -277,6 +284,8 @@ func _ready() -> void:
 	make_player()
 	make_ui()
 	updater = GAME_UPDATER.new()
+	if OS.has_feature("android"):
+		updater.auto_check_enabled = false
 	add_child(updater)
 	updater.status_changed.connect(_refresh_update_status)
 	updater.install_ready.connect(_install_verified_update)
@@ -300,9 +309,15 @@ func configure_movement_inputs() -> void:
 	key_bindings.configure()
 
 func movement_axis() -> Vector2:
+	if is_instance_valid(mobile_controls):
+		var touch_axis: Vector2 = mobile_controls.get("axis")
+		if touch_axis.length_squared()>0.0:
+			return touch_axis
 	return Input.get_vector("goblin_esquerda","goblin_direita","goblin_frente","goblin_tras")
 
 func load_render_distance() -> void:
+	if OS.has_feature("android"):
+		visible_chunk_radius = 1
 	var config := ConfigFile.new()
 	if config.load("user://clareira-menu.cfg")==OK:
 		visible_chunk_radius = clampi(int(config.get_value("video","chunk_radius",2)),1,4)
@@ -4493,6 +4508,10 @@ func make_ui() -> void:
 	medieval_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	medieval_menu.hide()
 	panel.hide()
+	if OS.has_feature("android"):
+		mobile_controls = preload("res://mobile_controls.gd").new()
+		mobile_controls.set("game",self)
+		layer.add_child(mobile_controls)
 
 func hotbar_style(fill: Color, border: Color, width: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -4865,9 +4884,9 @@ func show_menu(starting_page: String = "home") -> void:
 		"create_world": Callable(self,"create_named_world"),
 		"rename_world": Callable(self,"rename_named_world"),
 		"select_world": Callable(self,"select_named_world"),
-		"check_update": Callable(updater,"check_updates"),
+		"check_update": Callable(self,"check_platform_update"),
 		"toggle_coordinates": Callable(self,"toggle_coordinates"),
-		"install_update": Callable(updater,"download_and_install"),
+		"install_update": Callable(self,"install_platform_update"),
 		"change_view_radius": Callable(self,"set_render_distance"),
 		"rebind_key": Callable(self,"rebind_player_key"),
 		"reset_keys": Callable(self,"restore_player_keys"),
@@ -4952,6 +4971,27 @@ func open_goblin_skin_test() -> void:
 	get_tree().change_scene_to_packed(GOBLIN_SKIN_TEST_SCENE)
 
 
+func check_platform_update() -> void:
+	if OS.has_feature("android"):
+		notice("Atualização Android: instale uma nova versão do APK.")
+		return
+	updater.check_updates()
+
+func install_platform_update() -> void:
+	if OS.has_feature("android"):
+		notice("O instalador Windows não funciona no Android.")
+		return
+	updater.download_and_install()
+
+func mobile_rotate_or_use() -> void:
+	if bar_items[selected] in [WALL_ITEM,DOORWAY_ITEM,WINDOW_ITEM,CHEST_ITEM,30,31,32,CARPENTRY_ITEM]:
+		build_rotation = (build_rotation+1)%4
+		notice("Rotação: %d°" % (build_rotation*90))
+	elif bar_items[selected]==FLOOR_ITEM:
+		build_level = (build_level+1)%(BUILD_MAX_LEVEL+1)
+	else:
+		eat()
+
 func begin() -> void:
 	npc_menu_id = ""
 	close_chest_visual()
@@ -4966,7 +5006,7 @@ func begin() -> void:
 	set_hotbar_interactive(false)
 	inventory = false
 	moving = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("android") else Input.MOUSE_MODE_CAPTURED
 
 func open_craft(mode: String) -> void:
 	inventory = true
@@ -6674,6 +6714,8 @@ func construction_level_name() -> String:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if OS.has_feature("android") and moving and event is InputEventMouse:
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_ESCAPE:
 			if moving:
