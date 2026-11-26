@@ -799,7 +799,7 @@ func _process(_delta: float) -> void:
 	var room_name := str(world_storage.active_name()) if net_role=="host" else ""
 	lan_discovery.tick(mode,NET_PROTOCOL,NET_PORT,room_name,multiplayer.get_peers().size()+1 if net_role=="host" else 1)
 	if scan:
-		medieval_menu.update_lan_rooms(lan_discovery.list_rooms(),lan_discovery.status)
+		medieval_menu.update_lan_rooms(lan_discovery.list_rooms(),lan_discovery.display_status())
 
 func create_chunk(key: Vector2i) -> void:
 	var chunk := Node3D.new()
