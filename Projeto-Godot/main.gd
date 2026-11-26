@@ -125,6 +125,8 @@ var craft_material := -1
 const SOLID := 1
 const TARGET := 2
 const NET_PORT := 24650
+const LAN_DISCOVERY := preload("res://sistemas/multiplayer/lan_discovery.gd")
+var lan_discovery := LAN_DISCOVERY.new()
 const NET_PROTOCOL := 12 # Protocolo multiplayer com chunks por jogador e acoes validadas no servidor
 const NET_SHARED_KINDS := ITEM_KINDS + ["village_cabin","rabbit_spear_wood","rabbit_spear_stone","stone_drop","block","hut","meat_wolf","meat_rabbit","vine_bush","tomato_plant","tomato_crop"] # Inclui armas e ferramentas que antes ficavam invisiveis aos outros jogadores
 var stock := [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -807,6 +809,12 @@ func stream_next_chunk() -> void:
 
 func _process(_delta: float) -> void:
 	stream_next_chunk()
+	var scan: bool = is_instance_valid(medieval_menu) and medieval_menu.wants_lan_discovery() and net_role=="solo"
+	var mode := "host" if net_role=="host" else "scan" if scan else ""
+	var room_name := str(world_storage.active_name()) if net_role=="host" else ""
+	lan_discovery.tick(mode,NET_PROTOCOL,NET_PORT,room_name,multiplayer.get_peers().size()+1 if net_role=="host" else 1)
+	if scan:
+		medieval_menu.update_lan_rooms(lan_discovery.list_rooms(),lan_discovery.display_status())
 
 func create_chunk(key: Vector2i) -> void:
 	var chunk := Node3D.new()
@@ -4879,6 +4887,8 @@ func show_menu(starting_page: String = "home") -> void:
 		"play": Callable(self,"begin"),
 		"host": Callable(self,"host_game"),
 		"join": Callable(self,"join_game"),
+		"join_discovered": Callable(self,"join_at_address"),
+		"refresh_lan": Callable(lan_discovery,"refresh"),
 		"disconnect": Callable(self,"disconnect_and_show_menu"),
 		"lab": Callable(self,"open_goblin_skin_test"),
 		"create_world": Callable(self,"create_named_world"),
@@ -8616,7 +8626,7 @@ func host_game() -> void:
 	net_role = "host"
 	net_connected = true
 	var ips := lan_local_ipv4_addresses()
-	net_session_message = "Compartilhe o IP local: %s (UDP %d)." % [", ".join(ips) if ips.size()>0 else "veja em ipconfig",NET_PORT]
+	net_session_message = "Partida visível na LAN. IP manual: %s (UDP %d)." % [", ".join(ips) if ips.size()>0 else "veja em ipconfig",NET_PORT]
 	multiplayer.multiplayer_peer = peer
 	notice("Partida hospedada. Porta UDP %d." % NET_PORT)
 	begin()
@@ -9317,6 +9327,7 @@ func disconnect_and_show_menu() -> void:
 
 
 func disconnect_game() -> void:
+	lan_discovery.stop()
 	var was_client := net_role=="client"
 	if was_client and net_world_ready:
 		save_lan_inventory()
