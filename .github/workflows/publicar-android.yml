@@ -116,6 +116,17 @@ jobs:
           "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "ANDROID_SDK_LOCAL=$sdk" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Definir versao Android monotona
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $code = 1000 + [int]$env:GITHUB_RUN_NUMBER
+          $preset = 'Projeto-Godot/export_presets.cfg'
+          $content = Get-Content -Raw $preset
+          $content = $content -replace '(?m)^version/code=\d+',"version/code=$code"
+          $content = $content -replace '(?m)^version/name="[^"]*"',"version/name=`"0.3.$code`""
+          [IO.File]::WriteAllText((Join-Path $env:GITHUB_WORKSPACE $preset),$content)
+          "extends RefCounted`nconst VERSION_CODE := $code`n" | Set-Content -LiteralPath 'Projeto-Godot/sistemas/atualizacao/android_build.gd' -Encoding ascii
+          "ANDROID_BUILD_CODE=$code" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: Importar e validar scripts
         run: |
           $ErrorActionPreference = 'Continue'
@@ -167,10 +178,28 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Falha na criacao da release Android' }
           }
           if ($lookupCode -eq 0) {
+            # Nao substituir APK anterior por um assinado com outra chave.
+            $previous = Join-Path $env:RUNNER_TEMP "clareira-prev-$env:GITHUB_RUN_ID"
+            New-Item -ItemType Directory -Path $previous -Force | Out-Null
+            gh release download jogo-android-lan-v12 --pattern 'Clareira-dos-Goblins-Android.apk' --dir $previous --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel verificar a assinatura do APK anterior' }
+            $signer = Join-Path $env:ANDROID_SDK_LOCAL 'build-tools/35.0.1/apksigner.bat'
+            $old = & $signer verify --print-certs (Join-Path $previous 'Clareira-dos-Goblins-Android.apk') | Out-String
+            if ($LASTEXITCODE -ne 0) { throw 'APK anterior invalido' }
+            $new = & $signer verify --print-certs 'dist/Clareira-dos-Goblins-Android.apk' | Out-String
+            if ($LASTEXITCODE -ne 0) { throw 'Novo APK invalido' }
+            $pattern = '(?m)^Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]+)'
+            $oldCerts = @([regex]::Matches($old,$pattern) | ForEach-Object { $_.Groups[1].Value.ToLowerInvariant() } | Sort-Object)
+            $newCerts = @([regex]::Matches($new,$pattern) | ForEach-Object { $_.Groups[1].Value.ToLowerInvariant() } | Sort-Object)
+            if ($oldCerts.Count -eq 0 -or ($oldCerts -join ',') -ne ($newCerts -join ',')) { throw 'Assinatura diferente da release anterior. Publicacao bloqueada para preservar os saves.' }
+            $aapt = Join-Path $env:ANDROID_SDK_LOCAL 'build-tools/35.0.1/aapt.exe'
+            $oldBadging = & $aapt dump badging (Join-Path $previous 'Clareira-dos-Goblins-Android.apk') | Out-String
+            if ($LASTEXITCODE -ne 0 -or $oldBadging -notmatch "versionCode='(\d+)'") { throw 'Versao anterior nao identificada' }
+            if ([int]$Matches[1] -ge [int]$env:ANDROID_BUILD_CODE) { throw 'Codigo da nova versao nao e superior ao anterior' }
             gh release upload jogo-android-lan-v12 dist/Clareira-dos-Goblins-Android.apk dist/SHA256-Android.txt --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Falha na publicacao Android' }
           }
-          gh release edit jogo-android-lan-v12 --prerelease --latest=false --notes "APK experimental do commit $env:GITHUB_SHA. Testes em celular pendentes."
+          gh release edit jogo-android-lan-v12 --prerelease --latest=false --notes "APK experimental do commit $env:GITHUB_SHA.`nandroid-version-code $env:ANDROID_BUILD_CODE`nTestes em celular pendentes."
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao atualizar release Android' }
           $assets = @(gh release view jogo-android-lan-v12 --json assets --jq '.assets[].name')
           if ($LASTEXITCODE -ne 0 -or $assets -notcontains 'Clareira-dos-Goblins-Android.apk') { throw 'APK nao confirmado na release' }
