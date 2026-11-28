@@ -49,7 +49,16 @@ jobs:
             if [ ! -x "$godot_bin" ]; then
               archive="$(mktemp "$RUNNER_TEMP/godot-a23-XXXXXX.zip")"
               curl -fL --retry 2 --max-time 300 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.arm64.zip' -o "$archive"
-              unzip -o "$archive" -d "$cache"
+              if command -v unzip >/dev/null 2>&1; then
+                unzip -o "$archive" -d "$cache"
+              elif command -v python3 >/dev/null 2>&1; then
+                python3 -m zipfile -e "$archive" "$cache"
+              elif command -v busybox >/dev/null 2>&1; then
+                busybox unzip -o "$archive" -d "$cache"
+              else
+                echo 'Nenhum extrator ZIP disponivel (unzip, python3 ou busybox).'
+                exit 1
+              fi
               rm -f "$archive"
               chmod +x "$godot_bin"
             fi
