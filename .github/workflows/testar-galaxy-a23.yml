@@ -1,0 +1,27 @@
+name: Testar Galaxy A23 Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testar-a23:
+    runs-on: [self-hosted, Linux, ARM64, a23]
+    timeout-minutes: 10
+    steps:
+      - name: Identificar ambiente
+        shell: bash
+        run: |
+          echo "Runner: $RUNNER_NAME"
+          echo "Sistema: $(uname -s)"
+          echo "Arquitetura: $(uname -m)"
+          echo "Usuario: $(whoami)"
+          test "$(uname -m)" = "aarch64"
+      - name: Verificar memoria e disco
+        shell: bash
+        run: |
+          free -h
+          df -h .
+      - name: Testar execucao de comando
+        shell: bash
+        run: |
+          echo "Galaxy A23 executou o workflow com sucesso"
