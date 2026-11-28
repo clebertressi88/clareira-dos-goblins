@@ -1,27 +1,73 @@
-name: Testar Galaxy A23 Runner
-
+name: Testar compilacao Android no Galaxy A23
 on:
   workflow_dispatch:
-
+  push:
+    branches: [main]
+    paths: ['.github/workflows/testar-galaxy-a23.yml']
+permissions:
+  contents: read
+  statuses: write
+concurrency:
+  group: clareira-a23-teste
+  cancel-in-progress: false
 jobs:
   testar-a23:
     runs-on: [self-hosted, Linux, ARM64, a23]
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
-      - name: Identificar ambiente
+      - name: Diagnosticar runner e ferramentas
         shell: bash
         run: |
+          set -eu
           echo "Runner: $RUNNER_NAME"
-          echo "Sistema: $(uname -s)"
-          echo "Arquitetura: $(uname -m)"
-          echo "Usuario: $(whoami)"
-          test "$(uname -m)" = "aarch64"
-      - name: Verificar memoria e disco
-        shell: bash
-        run: |
-          free -h
+          uname -a
+          test "$(uname -m)" = aarch64
+          free -h || true
           df -h .
-      - name: Testar execucao de comando
+          for tool in godot godot4 java adb aapt aapt2 apksigner; do
+            command -v "$tool" || true
+          done
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+      - uses: actions/checkout@v4
+        with:
+          ref: ad36f73ba9df1c1f03d17d77f20fd997b287f250
+          persist-credentials: false
+      - name: Validar e tentar exportar APK local
         shell: bash
         run: |
-          echo "Galaxy A23 executou o workflow com sucesso"
+          set -eu
+          git log -1 --oneline
+          godot_bin="${GODOT_EXE:-}"
+          if [ -z "$godot_bin" ]; then
+            godot_bin="$(command -v godot4 || command -v godot || true)"
+          fi
+          if [ -z "$godot_bin" ]; then
+            cache="$RUNNER_TOOL_CACHE/clareira-godot-4.7.2-arm64"
+            mkdir -p "$cache"
+            godot_bin="$cache/Godot_v4.7.2-stable_linux.arm64"
+            if [ ! -x "$godot_bin" ]; then
+              archive="$(mktemp "$RUNNER_TEMP/godot-a23-XXXXXX.zip")"
+              curl -fL --retry 2 --max-time 300 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.arm64.zip' -o "$archive"
+              unzip -o "$archive" -d "$cache"
+              rm -f "$archive"
+              chmod +x "$godot_bin"
+            fi
+          fi
+          "$godot_bin" --version
+          "$godot_bin" --version | grep -q '^4\.7\.2' || { echo 'Godot 4.7.2 requerido para reproduzir a compilacao oficial'; exit 1; }
+          log="$RUNNER_TEMP/clareira-a23-import.log"
+          "$godot_bin" --headless --path Projeto-Godot --import > "$log" 2>&1 || { tail -100 "$log"; exit 1; }
+          if grep -E 'SCRIPT ERROR:|Parse Error' "$log"; then exit 1; fi
+          for script in res://mobile_controls.gd res://main.gd res://medieval_main_menu.gd res://game_updater.gd; do
+            "$godot_bin" --headless --path Projeto-Godot --check-only --script "$script"
+          done
+          echo 'Importacao e validacao de scripts concluídas.'
+          apk="$RUNNER_TEMP/Clareira-A23-teste-${GITHUB_RUN_ID}.apk"
+          log="$RUNNER_TEMP/clareira-a23-export.log"
+          "$godot_bin" --headless --path Projeto-Godot --export-debug 'Android LAN' "$apk" > "$log" 2>&1 || { tail -100 "$log"; echo 'Exportacao local falhou; verificar SDK Java e templates Android compativeis com ARM64.'; exit 1; }
+          if grep -E 'SCRIPT ERROR:|Parse Error' "$log"; then exit 1; fi
+          test -s "$apk"
+          ls -lh "$apk"
+          sha256sum "$apk"
+          echo 'APK local gerado. Nenhuma release alterada.'
