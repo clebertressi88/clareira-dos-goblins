@@ -1,6 +1,6 @@
 extends RefCounted
 ## Folhagem 3D com folhas realmente visiveis, sem bolas de SphereMesh.
-## Cartoes de folhas recortadas e cruzadas, semente estavel por arvore.
+## Folhas recortadas agrupadas em malhas por nivel de detalhe, semente estavel por arvore.
 static var shared_leaf_material: StandardMaterial3D
 static var shared_leaf_mesh: QuadMesh
 const WOOD := preload("res://forest_wood_geometry.gd")
@@ -38,29 +38,62 @@ static func decorate(growth: Node3D, bark: Material, tree_id: String) -> void:
 		var tip := Vector3(cos(angle)*radius,height+rng.randf_range(0.24,0.55),sin(angle)*radius)
 		WOOD.make_branch(growth,start,tip,rng.randf_range(0.078,0.117),bark)
 
-	# Copas compostas de ramos e folhas pequenas em varias profundidades.
-	# Duas cartas cruzadas em cada volume deixam as folhas visiveis de todos os lados.
-	for i in range(37):
-		var angle := rng.randf_range(0.0,TAU)
-		var radial := sqrt(rng.randf())*1.17
-		var height := rng.randf_range(1.91,2.93)+variation
-		var taper := clampf((3.22-height)/1.25,0.24,1.0)
-		var pos := Vector3(cos(angle)*radial*taper,height,sin(angle)*radial*taper)
-		var scale_size := rng.randf_range(0.62,0.98)
-		_add_leaf_cluster(growth,pos,scale_size,rng.randf_range(0.0,TAU),rng)
-	# Silhueta de folhas no topo, em vez de um unico poligono arredondado.
-	for i in range(6):
-		var angle := float(i)*TAU/6.0
-		_add_leaf_cluster(growth,Vector3(cos(angle)*0.24,3.04+variation,sin(angle)*0.24),0.59,angle,rng)
+	# A mesma copa deterministica e compartilhada pelos tres niveis de detalhe.
+	# Cada nivel e UMA malha, reduzindo tambem chamadas de desenho e nos.
+	var clusters: Array[Dictionary] = []
+	var phase := rng.randf_range(0.0,TAU)
+	# Quatro grupos grandes e bem distribuidos garantem a silhueta distante.
+	for i in range(4):
+		var angle := phase+TAU*float(i)/4.0
+		var radius := 0.49 if i%2==0 else 0.34
+		var height := 2.35 if i%2==0 else 2.77
+		clusters.append(_cluster(Vector3(cos(angle)*radius,height+variation,sin(angle)*radius),0.91,angle,rng))
+	# Oito grupos intermediaros preenchem a copa de baixo e de cima.
+	for i in range(8):
+		var angle := phase+TAU*float(i)/8.0+0.24
+		var radius := 0.68 if i%2==0 else 0.36
+		var height := 2.22 if i%2==0 else 2.95
+		clusters.append(_cluster(Vector3(cos(angle)*radius,height+variation,sin(angle)*radius),rng.randf_range(0.66,0.85),angle,rng))
+	# Dez grupos extras para arvores proximas, com variacao natural por ID.
+	for i in range(10):
+		var angle := phase+TAU*float(i)/10.0+rng.randf_range(-0.22,0.22)
+		var height := rng.randf_range(2.03,2.90)+variation
+		var radial := rng.randf_range(0.46,0.94)*clampf((3.30-height)/1.20,0.35,1.0)
+		clusters.append(_cluster(Vector3(cos(angle)*radial,height,sin(angle)*radial),rng.randf_range(0.62,0.86),angle,rng))
+	var near_distance := 14.0 if OS.has_feature("android") else 22.0
+	var mid_distance := 30.0 if OS.has_feature("android") else 46.0
+	# AABB comum garante que as faixas usem o mesmo centro em todos os niveis.
+	var bounds := AABB(Vector3(-2.0,0.65,-2.0),Vector3(4.0,4.0,4.0))
+	_add_lod(growth,clusters,22,1.0,0.0,near_distance,bounds,"FolhagemLOD0")
+	_add_lod(growth,clusters,12,1.18,near_distance,mid_distance,bounds,"FolhagemLOD1")
+	_add_lod(growth,clusters,4,1.62,mid_distance,0.0,bounds,"FolhagemLOD2")
 
-static func _add_leaf_cluster(parent: Node3D, pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> void:
-	var leaf_material := _leaf_material()
-	var leaf_mesh := _leaf_mesh()
-	for side in range(2):
-		var part := MeshInstance3D.new()
-		part.mesh = leaf_mesh
-		part.material_override = leaf_material
-		part.position = pos
-		part.rotation = Vector3(rng.randf_range(-0.26,0.26),yaw+float(side)*PI*0.5,rng.randf_range(-0.15,0.15))
-		part.scale = Vector3(extent*1.45,extent*1.25,1.0)
-		parent.add_child(part)
+static func _cluster(pos: Vector3, extent: float, yaw: float, rng: RandomNumberGenerator) -> Dictionary:
+	return {"position":pos,"extent":extent,"yaw":yaw,"pitch":rng.randf_range(-0.26,0.26),"roll":rng.randf_range(-0.15,0.15)}
+
+static func _add_lod(parent: Node3D, clusters: Array[Dictionary], count: int, size_factor: float, begin: float, end: float, bounds: AABB, lod_name: String) -> void:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var quad := _leaf_mesh()
+	for i in range(count):
+		var cluster: Dictionary = clusters[i]
+		var pos: Vector3 = cluster["position"]
+		var extent: float = float(cluster["extent"])*size_factor
+		for side in range(2):
+			var rotation := Vector3(float(cluster["pitch"]),float(cluster["yaw"])+float(side)*PI*0.5,float(cluster["roll"]))
+			var basis := Basis.from_euler(rotation).scaled_local(Vector3(extent*1.45,extent*1.25,1.0))
+			surface.append_from(quad,0,Transform3D(basis,pos))
+	var mesh := surface.commit()
+	mesh.surface_set_material(0,_leaf_material())
+	var part := MeshInstance3D.new()
+	part.name = lod_name
+	part.mesh = mesh
+	part.custom_aabb = bounds
+	part.visibility_range_begin = begin
+	part.visibility_range_end = end
+	part.visibility_range_begin_margin = 0.0
+	part.visibility_range_end_margin = 0.0
+	part.set_meta("leaf_plane_count",count*2)
+	if count==4:
+		part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(part)
