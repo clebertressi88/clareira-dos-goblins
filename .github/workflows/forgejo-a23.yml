@@ -1,0 +1,110 @@
+name: A23 - piloto Forgejo local
+on:
+  push:
+    branches: [infra/forgejo-a23]
+    paths: ['.github/workflows/forgejo-a23.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: forgejo-a23-pilot
+  cancel-in-progress: false
+jobs:
+  pilot:
+    runs-on: [self-hosted, Linux, ARM64, a23]
+    timeout-minutes: 20
+    env:
+      FORGEJO_VERSION: '15.0.12'
+    steps:
+      - name: Diagnostico de capacidade
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = aarch64
+          test "$(id -u)" != 0
+          for cmd in git curl gpg python3; do command -v "$cmd"; done
+          git --version
+          df -h "$HOME"
+          free -m || true
+          test "$(df -Pk "$HOME" | awk 'NR==2 {print $4}')" -ge 2097152
+          git lfs version || echo 'Git LFS pendente antes de migrar projetos LFS.'
+      - name: Instalar binario oficial LTS e verificar assinatura
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          base="$HOME/.local/share/forgejo-a23"
+          mkdir -p "$base/bin"
+          tmp="$(mktemp -d "$RUNNER_TEMP/forgejo-download.XXXXXX")"
+          trap 'rm -rf -- "$tmp"' EXIT
+          export GNUPGHOME="$tmp/gnupg"
+          mkdir -m 700 "$GNUPGHOME"
+          asset="forgejo-$FORGEJO_VERSION-linux-arm64"
+          url="https://codeberg.org/forgejo/forgejo/releases/download/v$FORGEJO_VERSION/$asset"
+          curl -fLsS --retry 2 --max-time 240 "$url" -o "$tmp/forgejo"
+          curl -fLsS --retry 2 --max-time 60 "$url.asc" -o "$tmp/forgejo.asc"
+          gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys EB114F5E6C0DC2BCDD183550A4B61A2DC5923710
+          gpg --batch --verify "$tmp/forgejo.asc" "$tmp/forgejo"
+          chmod 700 "$tmp/forgejo"
+          "$tmp/forgejo" --version
+          install -m 700 "$tmp/forgejo" "$base/bin/forgejo-$FORGEJO_VERSION"
+          echo "FORGEJO_BIN=$base/bin/forgejo-$FORGEJO_VERSION" >> "$GITHUB_ENV"
+      - name: Testar HTTP e SQLite apenas em localhost
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$(mktemp -d "$RUNNER_TEMP/forgejo-pilot.XXXXXX")"
+          pid=''
+          cleanup() {
+            if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+          port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+          mkdir -p "$work/data" "$work/repos"
+          cat > "$work/app.ini" <<EOF
+          APP_NAME = Forgejo A23 piloto
+          RUN_MODE = prod
+          RUN_USER = $(id -un)
+          [server]
+          HTTP_ADDR = 127.0.0.1
+          HTTP_PORT = $port
+          ROOT_URL = http://127.0.0.1:$port/
+          APP_DATA_PATH = $work/data
+          DISABLE_SSH = true
+          OFFLINE_MODE = true
+          [database]
+          DB_TYPE = sqlite3
+          PATH = $work/data/forgejo.db
+          [repository]
+          ROOT = $work/repos
+          [security]
+          INSTALL_LOCK = true
+          [service]
+          DISABLE_REGISTRATION = true
+          REQUIRE_SIGNIN_VIEW = true
+          [actions]
+          ENABLED = false
+          [log]
+          MODE = console
+          LEVEL = Info
+          EOF
+          export FORGEJO_WORK_DIR="$work"
+          "$FORGEJO_BIN" --work-path "$work" --config "$work/app.ini" web > "$work/server.log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 90); do
+            kill -0 "$pid" 2>/dev/null || break
+            if curl -fsS --max-time 2 "http://127.0.0.1:$port/api/v1/version" > "$work/version.json" && python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["version"]' "$work/version.json"; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != 1 ]; then tail -n 60 "$work/server.log"; exit 1; fi
+          test -s "$work/data/forgejo.db"
+          cat "$work/version.json"
+          echo
+          ps -p "$pid" -o pid,rss,etime
+          df -h "$HOME"
+          free -m || true
+          echo 'FORGEJO_A23_PILOT_OK: binario instalado, HTTP e SQLite validados; instancia temporaria encerrada ao final.'
+          echo 'Nenhum repositorio migrado, porta externa aberta ou runner existente alterado.'
