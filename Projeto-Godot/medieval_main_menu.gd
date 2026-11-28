@@ -102,9 +102,10 @@ func _recreate() -> void:
 	var title_b := _text("GOBLINS",72,GOLD)
 	_place(_stage,title_b,Vector2(573,83),Vector2(460,81))
 	title_b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var status := _text("●  BETA",20,GOLD)
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(_stage,status,Vector2(1440,25),Vector2(125,35))
+	var status := _text(_installed_build_label(),22,GOLD)
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	status.tooltip_text = "Identificador da compilação instalada neste dispositivo"
+	_place(_stage,status,Vector2(1180,25),Vector2(385,40))
 	_navigation = VBoxContainer.new()
 	_navigation.add_theme_constant_override("separation",5)
 	_place(_stage,_navigation,Vector2(58,173),Vector2(307,645))
@@ -125,6 +126,14 @@ func _recreate() -> void:
 	_render_page()
 	_refresh_update_indicator()
 	_fit()
+
+func _installed_build_label() -> String:
+	var version_path := OS.get_executable_path().get_base_dir().path_join("versao-github.txt")
+	if FileAccess.file_exists(version_path):
+		var revision := FileAccess.get_file_as_string(version_path).strip_edges()
+		if not revision.is_empty():
+			return "BETA | Windows " + revision.left(8)
+	return "BETA | " + ("Dev local" if OS.has_feature("editor") else "Versão não identificada")
 
 func _place(parent: Control,node: Control,pos: Vector2,area: Vector2) -> void:
 	parent.add_child(node)
