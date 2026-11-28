@@ -27,6 +27,7 @@ jobs:
         shell: bash
     steps:
       - name: Preparar somente ferramentas (fora da medicao)
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           echo "Runner: $RUNNER_NAME"
@@ -52,62 +53,72 @@ jobs:
               echo "FONTCONFIG_FILE=$c/fontconfig/fonts.conf"
               echo "LD_LIBRARY_PATH=$c/native/usr/lib/aarch64-linux-gnu:$c/native/usr/lib/aarch64-linux-gnu/android:$c/native/usr/lib/android-sdk/platform-tools:$c/native/lib/aarch64-linux-gnu"
             } >> "$GITHUB_ENV"
-          else
-            case "$RUNNER_NAME" in Clareira-Servidor-Cleber-01|Clareira-Servidor-Cleber-02) ;; *) echo 'Runner nao autorizado para benchmark'; exit 1;; esac
-            cache="$(cygpath -u "$RUNNER_TOOL_CACHE")"
-            sdk="$cache/ClareiraAndroidSDK"
-            j="$(find "$cache/Java_Temurin-Hotspot_jdk" -type f -iname java.exe | head -n 1)"
-            test -n "$j"
-            j="$(dirname "$(dirname "$j")")"
-            test -f "$sdk/build-tools/35.0.1/apksigner.bat"
-            r="$cache/clareira-benchmark-4.7.2"
-            mkdir -p "$r"
-            g="$r/Godot_v4.7.2-stable_win64_console.exe"
-            if [ ! -f "$g" ]; then
-              old="$(cygpath -u "$RUNNER_TEMP")/clareira-android-4.7.2"
-              shared="/c/ProgramData/ClareiraGodot/4.7.2"
-              for src in "$old" "$shared"; do
-                if [ -f "$src/Godot_v4.7.2-stable_win64_console.exe" ] && [ -f "$src/Godot_v4.7.2-stable_win64.exe" ]; then
-                  cp "$src"/Godot_v4.7.2-stable_win64*.exe "$r/"
-                  break
-                fi
-              done
-              if [ ! -f "$g" ]; then
-                curl -fL --retry 2 https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip -o "$r/editor.zip"
-                unzip -o "$r/editor.zip" -d "$r"
-              fi
-            fi
-            touch "$r/_sc_"
-            d="$r/editor_data"
-            t="$d/export_templates/4.7.2.stable"
-            mkdir -p "$t"
-            if [ ! -s "$t/android_debug.apk" ]; then
-              old="$(cygpath -u "$RUNNER_TEMP")/clareira-android-4.7.2/editor_data/export_templates/4.7.2.stable"
-              if [ -s "$old/android_debug.apk" ]; then
-                cp "$old"/android_*.apk "$t/"
-              else
-                curl -fL --retry 2 https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz -o "$r/templates.tpz"
-                unzip -jo "$r/templates.tpz" '*/android_debug.apk' '*/android_release.apk' -d "$t"
-              fi
-            fi
-            key="$r/debug.keystore"
-            if [ ! -s "$key" ]; then
-              "$j/bin/keytool.exe" -genkeypair -keystore "$(cygpath -m "$key")" -storepass android -keypass android -alias androiddebugkey -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -validity 10000 -storetype PKCS12
-            fi
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\n' "$(cygpath -m "$j")" "$(cygpath -m "$sdk")" "$(cygpath -m "$key")" > "$d/editor_settings-4.7.tres"
-            {
-              echo "BENCH_GODOT=$g"
-              echo "BENCH_SIGNER=$sdk/build-tools/35.0.1/apksigner.bat"
-              echo "JAVA_HOME=$(cygpath -m "$j")"
-              echo "ANDROID_HOME=$(cygpath -m "$sdk")"
-              echo "ANDROID_SDK_ROOT=$(cygpath -m "$sdk")"
-              echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$(cygpath -m "$key")"
-            } >> "$GITHUB_ENV"
           fi
           "$g" --version | grep '^4\.7\.2'
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+      - name: Preparar ferramentas Windows (fora da medicao)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -notin @('Clareira-Servidor-Cleber-01','Clareira-Servidor-Cleber-02')) { throw 'Runner nao autorizado' }
+          $cache = $env:RUNNER_TOOL_CACHE
+          $sdk = Join-Path $cache 'ClareiraAndroidSDK'
+          $java = Get-ChildItem (Join-Path $cache 'Java_Temurin-Hotspot_jdk') -Filter java.exe -File -Recurse | Select-Object -First 1
+          if (!$java) { throw 'JDK 17 ausente' }
+          $jdk = $java.Directory.Parent.FullName
+          if (!(Test-Path (Join-Path $sdk 'build-tools/35.0.1/lib/apksigner.jar'))) { throw 'SDK ausente neste runner' }
+          $r = Join-Path $cache 'clareira-benchmark-4.7.2'
+          New-Item -ItemType Directory -Force $r | Out-Null
+          $g = Join-Path $r 'Godot_v4.7.2-stable_win64_console.exe'
+          $base = 'https://github.com/godotengine/godot/releases/download/4.7.2-stable'
+          if (!(Test-Path $g)) {
+            foreach ($src in @((Join-Path $env:RUNNER_TEMP 'clareira-android-4.7.2'),'C:\ProgramData\ClareiraGodot\4.7.2')) {
+              if ((Test-Path (Join-Path $src 'Godot_v4.7.2-stable_win64_console.exe')) -and (Test-Path (Join-Path $src 'Godot_v4.7.2-stable_win64.exe'))) {
+                Copy-Item (Join-Path $src 'Godot_v4.7.2-stable_win64*.exe') $r -Force
+                break
+              }
+            }
+            if (!(Test-Path $g)) {
+              $zip = Join-Path $r 'editor.zip'
+              Invoke-WebRequest "$base/Godot_v4.7.2-stable_win64.exe.zip" -OutFile $zip -UseBasicParsing
+              Expand-Archive $zip $r -Force
+              Remove-Item $zip
+            }
+          }
+          New-Item -ItemType File -Force (Join-Path $r '_sc_') | Out-Null
+          $d = Join-Path $r 'editor_data'
+          $t = Join-Path $d 'export_templates/4.7.2.stable'
+          New-Item -ItemType Directory -Force $t | Out-Null
+          if (!(Test-Path (Join-Path $t 'android_debug.apk'))) {
+            $old = Join-Path $env:RUNNER_TEMP 'clareira-android-4.7.2/editor_data/export_templates/4.7.2.stable'
+            if (Test-Path (Join-Path $old 'android_debug.apk')) { Copy-Item (Join-Path $old 'android_*.apk') $t -Force }
+            else {
+              Add-Type -AssemblyName System.IO.Compression.FileSystem
+              $zip = Join-Path $r 'templates.tpz'
+              Invoke-WebRequest "$base/Godot_v4.7.2-stable_export_templates.tpz" -OutFile $zip -UseBasicParsing
+              $z = [IO.Compression.ZipFile]::OpenRead($zip)
+              try { foreach ($e in $z.Entries) { if ($e.Name -in @('android_debug.apk','android_release.apk','version.txt')) { [IO.Compression.ZipFileExtensions]::ExtractToFile($e,(Join-Path $t $e.Name),$true) } } } finally { $z.Dispose() }
+              Remove-Item $zip
+            }
+          }
+          $key = Join-Path $r 'debug.keystore'
+          if (!(Test-Path $key)) {
+            & (Join-Path $jdk 'bin/keytool.exe') -genkeypair -keystore $key -storepass android -keypass android -alias androiddebugkey -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -validity 10000 -storetype PKCS12
+            if ($LASTEXITCODE) { throw 'Falha na chave' }
+          }
+          @('[gd_resource type="EditorSettings" format=3]','','[resource]',('export/android/java_sdk_path = "'+($jdk -replace '\\','/')+'"'),('export/android/android_sdk_path = "'+($sdk -replace '\\','/')+'"'),('export/android/debug_keystore = "'+($key -replace '\\','/')+'"')) | Set-Content (Join-Path $d 'editor_settings-4.7.tres') -Encoding utf8
+          $v = & $g --version
+          if ($LASTEXITCODE -or $v -notmatch '^4\.7\.2') { throw 'Godot incorreto' }
+          @("BENCH_GODOT=$g","JAVA_HOME=$jdk","ANDROID_HOME=$sdk","ANDROID_SDK_ROOT=$sdk","GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$key",'GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey','GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android') | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Iniciar cronometro Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          "BENCH_START=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: Iniciar cronometro antes do checkout
+        if: runner.os == 'Linux'
         run: |
           echo "BENCH_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
@@ -116,6 +127,7 @@ jobs:
           clean: true
           persist-credentials: false
       - name: Medir importacao, validacao, exportacao e verificacao
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           start=$(date +%s)
@@ -162,3 +174,35 @@ jobs:
             echo "| Total sem instalacao | $((d-BENCH_START)) |"
             echo "APK: $bytes bytes. Nenhuma release publicada."
           } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Medir mesmas etapas no Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function NowSec { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
+          function RunGodot {
+            $ErrorActionPreference = 'Continue'
+            $log = & $env:BENCH_GODOT @args 2>&1 | Out-String
+            $rc = $LASTEXITCODE
+            if ($rc -ne 0 -or $log -match 'SCRIPT ERROR:|Parse Error') { Write-Host $log; throw 'Falha Godot' }
+          }
+          $start = NowSec
+          $checkout = $start - [long]$env:BENCH_START
+          $commit = git rev-parse HEAD
+          if (Test-Path 'Projeto-Godot/.godot') { throw 'Cache de importacao presente' }
+          $apk = Join-Path $env:RUNNER_TEMP "benchmark-$env:GITHUB_RUN_ID-$env:RUNNER_NAME.apk"
+          RunGodot --headless --path Projeto-Godot --import
+          $a = NowSec
+          foreach ($script in @('res://mobile_controls.gd','res://main.gd','res://medieval_main_menu.gd','res://game_updater.gd')) { RunGodot --headless --path Projeto-Godot --check-only --script $script }
+          $b = NowSec
+          RunGodot --headless --path Projeto-Godot --export-debug 'Android LAN' $apk
+          $c = NowSec
+          if (!(Test-Path $apk)) { throw 'APK ausente' }
+          & (Join-Path $env:JAVA_HOME 'bin/java.exe') -jar (Join-Path $env:ANDROID_HOME 'build-tools/35.0.1/lib/apksigner.jar') verify --verbose $apk
+          if ($LASTEXITCODE) { throw 'Assinatura invalida' }
+          $bytes = (Get-Item $apk).Length
+          Get-FileHash $apk -Algorithm SHA256
+          $d = NowSec
+          $report = @("## $env:RUNNER_NAME","Commit: $commit",'| Etapa | Segundos |','|---|---:|',"| Checkout | $checkout |","| Importacao | $($a-$start) |","| Validacao | $($b-$a) |","| Exportacao APK | $($c-$b) |","| Verificacao | $($d-$c) |","| Total sem instalacao | $($d-[long]$env:BENCH_START) |","APK: $bytes bytes. Nenhuma release publicada.")
+          $report | ForEach-Object { Write-Host $_ }
+          $report | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
