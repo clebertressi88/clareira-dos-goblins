@@ -13,7 +13,7 @@ concurrency:
 jobs:
   testar-a23:
     runs-on: [self-hosted, Linux, ARM64, a23]
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Diagnosticar runner e ferramentas
         shell: bash
@@ -109,6 +109,114 @@ jobs:
           chmod +x "$cache/bin/unzip"
           echo "$cache/bin" >> "$GITHUB_PATH"
           echo 'Extrator local Node.js preparado para unzip -o arquivo -d destino.'
+      - name: Preparar dependencias ARM64 sem administrador
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="$RUNNER_TOOL_CACHE/clareira-android-a23"
+          native="$cache/native"
+          mkdir -p "$native" "$cache/jdk"
+          # Instala no cache privado, sem modificar o Ubuntu ou outros runners.
+          if [ ! -f "$native/.ready" ]; then
+            tmp="$(mktemp -d "$RUNNER_TEMP/clareira-arm64-XXXXXX")"
+            trap 'rm -rf "$tmp"' EXIT
+            apt-get -s --no-install-recommends install adb libfontconfig1 fonts-dejavu-core > "$tmp/plan"
+            cat "$tmp/plan"
+            (
+              cd "$tmp"
+              # Baixar tambem os pacotes principais se ja estiverem no sistema.
+              packages="$( { printf '%s\n' adb libfontconfig1 fonts-dejavu-core; awk '/^Inst / {print $2}' plan; } | sort -u)"
+              for pkg in $packages; do
+                apt-get download "$pkg"
+              done
+              for pkg in ./*.deb; do dpkg-deb -x "$pkg" "$native"; done
+            )
+            touch "$native/.ready"
+          fi
+          libs="$native/usr/lib/aarch64-linux-gnu:$native/usr/lib/aarch64-linux-gnu/android:$native/usr/lib/android-sdk/platform-tools:$native/lib/aarch64-linux-gnu"
+          export LD_LIBRARY_PATH="$libs:${LD_LIBRARY_PATH:-}"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          adb_bin="$(find "$native" -type f -name adb -print -quit)"
+          if [ -z "$adb_bin" ]; then adb_bin="$(command -v adb || true)"; fi
+          test -x "$adb_bin"
+          "$adb_bin" version
+          mkdir -p "$cache/fontconfig" "$cache/font-cache"
+          cat > "$cache/fontconfig/fonts.conf" <<EOF
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+          <fontconfig><dir>$native/usr/share/fonts</dir><dir>/usr/share/fonts</dir><cachedir>$cache/font-cache</cachedir></fontconfig>
+          EOF
+          echo "FONTCONFIG_FILE=$cache/fontconfig/fonts.conf" >> "$GITHUB_ENV"
+          if [ ! -x "$cache/jdk/bin/java" ]; then
+            archive="$(mktemp "$RUNNER_TEMP/clareira-jdk-XXXXXX.tar.gz")"
+            curl -fL --retry 2 --max-time 600 'https://api.adoptium.net/v3/binary/latest/17/ga/linux/aarch64/jdk/hotspot/normal/eclipse' -o "$archive"
+            tar -xzf "$archive" -C "$cache/jdk" --strip-components=1
+            rm -f "$archive"
+          fi
+          "$cache/jdk/bin/java" -version
+          test -x "$cache/jdk/bin/keytool"
+          echo "JAVA_HOME=$cache/jdk" >> "$GITHUB_ENV"
+          echo "$cache/jdk/bin" >> "$GITHUB_PATH"
+          sdk="$cache/sdk"
+          tools="$sdk/build-tools/35.0.1"
+          mkdir -p "$sdk/platform-tools" "$tools"
+          ln -sfn "$adb_bin" "$sdk/platform-tools/adb"
+          # apksigner e Java puro; os binarios x86 do ZIP oficial nao sao usados.
+          if [ ! -s "$tools/lib/apksigner.jar" ]; then
+            archive="$(mktemp "$RUNNER_TEMP/clareira-apksigner-XXXXXX.zip")"
+            curl -fL --retry 2 --max-time 600 'https://dl.google.com/android/repository/build-tools_r35.0.1_linux.zip' -o "$archive"
+            mkdir -p "$tools/lib"
+            unzip -p "$archive" '*/lib/apksigner.jar' > "$tools/lib/apksigner.jar.tmp"
+            test -s "$tools/lib/apksigner.jar.tmp"
+            mv "$tools/lib/apksigner.jar.tmp" "$tools/lib/apksigner.jar"
+            rm -f "$archive"
+          fi
+          cat > "$tools/apksigner" <<'EOF'
+          #!/bin/bash
+          set -eu
+          exec "$JAVA_HOME/bin/java" -jar "$(dirname "$0")/lib/apksigner.jar" "$@"
+          EOF
+          chmod +x "$tools/apksigner"
+          JAVA_HOME="$cache/jdk" "$tools/apksigner" --version
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          echo "A23_APKSIGNER=$tools/apksigner" >> "$GITHUB_ENV"
+          echo "A23_CACHE=$cache" >> "$GITHUB_ENV"
+      - name: Preparar templates Godot e chave local de teste
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Configuracao separada, sem alterar os dados do servidor de jogo.
+          config="$A23_CACHE/config"
+          data="$A23_CACHE/data"
+          templates="$data/godot/export_templates/4.7.2.stable"
+          mkdir -p "$config/godot" "$templates"
+          if [ ! -s "$templates/android_debug.apk" ] || [ ! -s "$templates/android_release.apk" ]; then
+            archive="$(mktemp "$RUNNER_TEMP/clareira-templates-XXXXXX.tpz")"
+            curl -fL --retry 2 --max-time 1500 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz' -o "$archive"
+            unzip -j -o "$archive" '*/android_debug.apk' '*/android_release.apk' -d "$templates"
+            rm -f "$archive"
+          fi
+          test -s "$templates/android_debug.apk"
+          test -s "$templates/android_release.apk"
+          key="$A23_CACHE/debug.keystore"
+          if [ ! -s "$key" ]; then
+            "$JAVA_HOME/bin/keytool" -genkeypair -keystore "$key" -storepass android -keypass android -alias androiddebugkey -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -validity 10000 -storetype PKCS12
+          fi
+          cat > "$config/godot/editor_settings-4.7.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/debug_keystore = "$key"
+          EOF
+          echo "XDG_CONFIG_HOME=$config" >> "$GITHUB_ENV"
+          echo "XDG_DATA_HOME=$data" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$key" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+          echo 'JDK, adb, apksigner e templates Android preparados.'
       - uses: actions/checkout@v4
         with:
           ref: ad36f73ba9df1c1f03d17d77f20fd997b287f250
@@ -158,5 +266,6 @@ jobs:
           if grep -E 'SCRIPT ERROR:|Parse Error' "$log"; then exit 1; fi
           test -s "$apk"
           ls -lh "$apk"
+          "$A23_APKSIGNER" verify --verbose "$apk"
           sha256sum "$apk"
           echo 'APK local gerado. Nenhuma release alterada.'
