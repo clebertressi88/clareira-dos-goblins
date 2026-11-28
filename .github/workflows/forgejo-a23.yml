@@ -118,15 +118,88 @@ jobs:
           ok=0
           for i in $(seq 1 90); do
             kill -0 "$pid" 2>/dev/null || break
-            if curl -fsS --max-time 2 "http://127.0.0.1:$port/api/v1/version" > "$work/version.json" && grep -Eq '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$work/version.json"; then ok=1; break; fi
+            if curl -fsS --max-time 2 "http://127.0.0.1:$port/user/login" > "$work/login.html" && grep -qi "Forgejo" "$work/login.html"; then ok=1; break; fi
             sleep 1
           done
           if [ "$ok" != 1 ]; then tail -n 60 "$work/server.log"; exit 1; fi
           test -s "$work/data/forgejo.db"
-          cat "$work/version.json"
+          echo "Login HTTP 200 confirmado"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/v1/version")" = 403
           echo
           ps -p "$pid" -o pid,rss,etime
           df -h "$HOME"
           free -m || true
           echo 'FORGEJO_A23_PILOT_OK: binario instalado, HTTP e SQLite validados; instancia temporaria encerrada ao final.'
           echo 'Nenhum repositorio migrado, porta externa aberta ou runner existente alterado.'
+      - name: Preparar armazenamento permanente e scripts locais
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          base="$HOME/.local/share/forgejo-a23"
+          mkdir -p "$base/data" "$base/repos" "$base/log"
+          if [ ! -e "$base/app.ini" ]; then
+            cat > "$base/app.ini" <<EOF
+          APP_NAME = Servidor Git A23
+          RUN_MODE = prod
+          RUN_USER = $(id -un)
+          [server]
+          HTTP_ADDR = 127.0.0.1
+          HTTP_PORT = 3000
+          ROOT_URL = http://127.0.0.1:3000/
+          APP_DATA_PATH = $base/data
+          DISABLE_SSH = true
+          OFFLINE_MODE = true
+          [database]
+          DB_TYPE = sqlite3
+          PATH = $base/data/forgejo.db
+          [repository]
+          ROOT = $base/repos
+          [security]
+          INSTALL_LOCK = true
+          [service]
+          DISABLE_REGISTRATION = true
+          REQUIRE_SIGNIN_VIEW = true
+          [actions]
+          ENABLED = false
+          [log]
+          MODE = console
+          LEVEL = Info
+          EOF
+          fi
+          chmod 600 "$base/app.ini"
+          cat > "$base/start.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          umask 077
+          cd "$(dirname "$0")"
+          export FORGEJO_WORK_DIR="$PWD"
+          exec ./bin/forgejo-15.0.12 --work-path "$PWD" --config "$PWD/app.ini" web
+          EOF
+          chmod 700 "$base/start.sh"
+          if (echo > /dev/tcp/127.0.0.1/3000) 2>/dev/null; then echo 'Porta 3000 ocupada, sem alterar processo existente'; exit 1; fi
+          "$base/start.sh" >> "$base/log/server.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          ok=0
+          for i in $(seq 1 90); do
+            kill -0 "$pid" 2>/dev/null || break
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/user/login > /dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          test "$ok" = 1
+          test -s "$base/data/forgejo.db"
+          echo 'FORGEJO_PERSISTENT_DATA_OK; servidor temporariamente encerrado para validar reinicio'
+          kill "$pid"; wait "$pid" || true
+          "$base/start.sh" >> "$base/log/server.log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 90); do
+            kill -0 "$pid" 2>/dev/null || break
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/user/login > /dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          test "$ok" = 1
+          test -s "$base/data/forgejo.db"
+          echo 'FORGEJO_RESTART_OK; dados preservados, acesso local apenas.'
+          # Nao deixar processo orfao em job PRoot; inicializacao 24h requer supervisor externo.
