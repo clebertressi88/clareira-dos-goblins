@@ -1,0 +1,59 @@
+name: A23 - ativar Forgejo local persistente
+on:
+  push:
+    branches: [infra/forgejo-a23]
+    paths: ['.github/workflows/forgejo-a23-activate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: forgejo-a23-pilot
+  cancel-in-progress: false
+jobs:
+  activate:
+    runs-on: [self-hosted, Linux, ARM64, a23]
+    timeout-minutes: 8
+    steps:
+      - name: Iniciar supervisor local e verificar servico
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$RUNNER_NAME" = Galaxy-A23-Runner
+          base="$HOME/.local/share/forgejo-a23"
+          test -x "$base/supervise.sh"
+          test -s "$base/data/forgejo.db"
+          grep -Eq '^HTTP_ADDR = 127\.0\.0\.1$' "$base/app.ini"
+          command -v setsid
+          if curl -fsS --max-time 3 http://127.0.0.1:3000/user/login > /dev/null; then
+            echo 'Porta ja responde; nao substituir processo existente.'
+            exit 1
+          fi
+          if (echo > /dev/tcp/127.0.0.1/3000) 2>/dev/null; then echo 'Porta ocupada'; exit 1; fi
+          # Processo autorizado a permanecer apos a limpeza normal do runner.
+          # O PRoot ainda pode encerrar processos; verificar em outro job.
+          RUNNER_TRACKING_ID=forgejo-a23-local-service nohup setsid "$base/supervise.sh" </dev/null >>"$base/log/supervisor.log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 90); do
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/user/login > /dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != 1 ]; then kill "$pid" 2>/dev/null || true; echo 'Falha iniciando supervisor'; exit 1; fi
+          echo 'FORGEJO_LOCAL_STARTED; aguardando verificacao em job separado.'
+  verify:
+    needs: activate
+    runs-on: [self-hosted, Linux, ARM64, a23]
+    timeout-minutes: 5
+    steps:
+      - name: Confirmar sobrevivencia apos encerramento do job anterior
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_NAME" = Galaxy-A23-Runner
+          sleep 15
+          curl -fsS --max-time 10 http://127.0.0.1:3000/user/login > /dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/v1/version)" = 403
+          test -s "$HOME/.local/share/forgejo-a23/data/forgejo.db"
+          echo 'FORGEJO_SURVIVED_JOB_OK'
+          echo 'Reinicio completo do Android ainda nao testado; acesso exclusivamente local.'
