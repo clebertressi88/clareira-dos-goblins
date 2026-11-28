@@ -1,0 +1,106 @@
+name: A23 - Forgejo validar repositorio e supervisor
+on:
+  push:
+    branches: [infra/forgejo-a23]
+    paths: ['.github/workflows/forgejo-a23-service.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: forgejo-a23-pilot
+  cancel-in-progress: false
+jobs:
+  service:
+    runs-on: [self-hosted, Linux, ARM64, a23]
+    timeout-minutes: 15
+    steps:
+      - name: Validar instalacao e preparar supervisor
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$RUNNER_NAME" = Galaxy-A23-Runner
+          base="$HOME/.local/share/forgejo-a23"
+          test -x "$base/start.sh"
+          test -s "$base/data/forgejo.db"
+          grep -Eq '^HTTP_ADDR = 127\.0\.0\.1$' "$base/app.ini"
+          mkdir -p "$base/log"
+          command -v flock
+          cat > "$base/supervise.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -eu
+          umask 077
+          cd "$(dirname "$0")"
+          exec 9>supervisor.lock
+          flock -n 9 || exit 0
+          child=''
+          trap 'if [ -n "$child" ]; then kill "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 0' TERM INT HUP
+          while true; do
+            if [ -f log/server.log ] && [ "$(wc -c < log/server.log)" -gt 10485760 ]; then mv -f log/server.log log/server.log.1; fi
+            ./start.sh >>log/server.log 2>&1 &
+            child=$!
+            wait "$child" || true
+            child=''
+            sleep 10
+          done
+          EOF
+          chmod 700 "$base/supervise.sh"
+          echo 'SUPERVISOR_SCRIPT_READY'
+      - name: Validar API autenticada e git com dados descartaveis
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          base="$HOME/.local/share/forgejo-a23"
+          bin="$base/bin/forgejo-15.0.12"
+          work="$(mktemp -d "$RUNNER_TEMP/forgejo-repo-test.XXXXXX")"
+          pid=''
+          cleanup() { if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi; rm -rf -- "$work"; }
+          trap cleanup EXIT
+          port=$((20000 + RANDOM % 20000))
+          if (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; then exit 1; fi
+          mkdir -p "$work/data" "$work/repos"
+          sed -e "s|$base/data|$work/data|g" -e "s|$base/repos|$work/repos|g" -e "s|:3000/|:$port/|g" -e "s|HTTP_PORT = 3000|HTTP_PORT = $port|" "$base/app.ini" > "$work/app.ini"
+          export FORGEJO_WORK_DIR="$work"
+          password="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::add-mask::$password"
+          "$bin" --work-path "$work" --config "$work/app.ini" migrate > "$work/migrate.log" 2>&1 || { echo 'Falha migracao SQLite de teste'; exit 1; }
+          "$bin" --work-path "$work" --config "$work/app.ini" admin user create --username pilotlocal --password "$password" --email pilotlocal@example.invalid --admin --must-change-password=false > "$work/admin.log" 2>&1 || { echo 'Falha criando usuario temporario'; exit 1; }
+          "$bin" --work-path "$work" --config "$work/app.ini" web > "$work/server.log" 2>&1 &
+          pid=$!
+          url="http://127.0.0.1:$port"
+          ok=0
+          for i in $(seq 1 90); do
+            kill -0 "$pid" 2>/dev/null || break
+            if curl -fsS --max-time 3 --user "pilotlocal:$password" "$url/api/v1/user" > "$work/user.json"; then ok=1; break; fi
+            sleep 1
+          done
+          test "$ok" = 1
+          grep -q pilotlocal "$work/user.json"
+          curl -fsS --max-time 20 --user "pilotlocal:$password" -H 'Content-Type: application/json' -d '{"name":"teste-a23","private":true,"auto_init":true}' "$url/api/v1/user/repos" > "$work/repo.json"
+          grep -q teste-a23 "$work/repo.json"
+          # Credencial temporaria apenas em arquivo privado, nunca no URL ou no git config.
+          cat > "$work/askpass" <<'EOF'
+          #!/usr/bin/env bash
+          case "$1" in *Username*) printf '%s\n' pilotlocal;; *) printf '%s\n' "$PILOT_PASSWORD";; esac
+          EOF
+          chmod 700 "$work/askpass"
+          export GIT_ASKPASS="$work/askpass" GIT_TERMINAL_PROMPT=0 PILOT_PASSWORD="$password"
+          git -c credential.helper= clone "$url/pilotlocal/teste-a23.git" "$work/clone"
+          git -C "$work/clone" config user.name 'Teste A23'
+          git -C "$work/clone" config user.email pilotlocal@example.invalid
+          echo 'Forgejo A23 - teste local' > "$work/clone/teste.txt"
+          git -C "$work/clone" add teste.txt
+          git -C "$work/clone" commit -m 'Teste de gravacao'
+          git -C "$work/clone" -c credential.helper= push origin HEAD
+          git -c credential.helper= clone "$url/pilotlocal/teste-a23.git" "$work/confirm"
+          cmp "$work/clone/teste.txt" "$work/confirm/teste.txt"
+          echo 'FORGEJO_AUTH_CLONE_PUSH_OK'
+          echo 'Conta e repositorio temporarios removidos ao final; dados permanentes intactos.'
+      - name: Diagnosticar inicializacao externa ao runner
+        shell: bash
+        run: |
+          set -eu
+          for c in proot-distro termux-wake-lock sv crond systemctl nohup; do command -v "$c" || true; done
+          echo 'Supervisor preparado, mas nao iniciado permanentemente dentro do job PRoot.'
+          echo 'Necessario iniciar no ambiente persistente do Termux e validar apos o job terminar.'
