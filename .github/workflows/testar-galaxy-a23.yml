@@ -29,6 +29,86 @@ jobs:
           done
           echo "ANDROID_HOME=${ANDROID_HOME:-}"
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+      - name: Preparar descompactador ZIP no A23
+        shell: bash
+        run: |
+          set -eu
+          if command -v unzip >/dev/null 2>&1; then
+            unzip -v | head -5
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            if [ "$(id -u)" = 0 ]; then
+              (apt-get update && apt-get install -y --no-install-recommends unzip) || true
+            elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              (sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends unzip) || true
+            fi
+          fi
+          if command -v unzip >/dev/null 2>&1; then
+            unzip -v | head -5
+            exit 0
+          fi
+          # Fallback sem privilegios: extrair pacote oficial no cache do runner.
+          cache="$RUNNER_TOOL_CACHE/clareira-unzip"
+          mkdir -p "$cache"
+          if [ ! -x "$cache/usr/bin/unzip" ]; then
+            if command -v apt-get >/dev/null 2>&1 && command -v dpkg-deb >/dev/null 2>&1; then
+              tmp="$(mktemp -d "$RUNNER_TEMP/clareira-unzip-XXXXXX")"
+              if (cd "$tmp" && apt-get download unzip && dpkg-deb -x ./unzip_*.deb "$cache"); then
+                echo 'Descompactador instalado no cache local.'
+              fi
+              rm -rf "$tmp"
+            fi
+          fi
+          if [ -x "$cache/usr/bin/unzip" ] && "$cache/usr/bin/unzip" -v >/dev/null 2>&1; then
+            echo "$cache/usr/bin" >> "$GITHUB_PATH"
+            exit 0
+          fi
+          # O runner ja possui Node.js para executar actions/checkout.
+          # Usar a biblioteca ZIP do Node via um extrator restrito a arquivos normais.
+          node_bin="$(command -v node || true)"
+          if [ -z "$node_bin" ]; then
+            runner_root="$(dirname "$RUNNER_WORKSPACE")/.."
+            for candidate in "$runner_root"/externals/node*/bin/node; do
+              if [ -x "$candidate" ]; then node_bin="$candidate"; break; fi
+            done
+          fi
+          if [ -z "$node_bin" ]; then
+            echo 'Sem permissao para instalar unzip e sem Node.js acessivel.'
+            exit 1
+          fi
+          mkdir -p "$cache/bin"
+          cat > "$cache/bin/extract.cjs" <<'JS'
+          const fs = require('node:fs'), path = require('node:path'), zlib = require('node:zlib');
+          const [archive, target] = process.argv.slice(2);
+          const b = fs.readFileSync(archive);
+          let e = b.length - 22;
+          while (e >= Math.max(0,b.length-65557) && b.readUInt32LE(e)!==0x06054b50) e--;
+          if(e<0 || b.readUInt32LE(e)!==0x06054b50) throw Error('ZIP invalido');
+          const count=b.readUInt16LE(e+10), root=path.resolve(target);
+          let p=b.readUInt32LE(e+16);
+          for(let i=0;i<count;i++){
+            if(b.readUInt32LE(p)!==0x02014b50) throw Error('Diretorio ZIP invalido');
+            const method=b.readUInt16LE(p+10), size=b.readUInt32LE(p+20), expected=b.readUInt32LE(p+24);
+            const n=b.readUInt16LE(p+28), x=b.readUInt16LE(p+30), c=b.readUInt16LE(p+32), off=b.readUInt32LE(p+42);
+            const name=b.toString('utf8',p+46,p+46+n);
+            p+=46+n+x+c;
+            const dest=path.resolve(root,name);
+            if(!dest.startsWith(root+path.sep)) throw Error('Caminho ZIP inseguro');
+            if(name.endsWith('/')) {fs.mkdirSync(dest,{recursive:true});continue;}
+            if(b.readUInt32LE(off)!==0x04034b50) throw Error('Cabecalho ZIP invalido');
+            const start=off+30+b.readUInt16LE(off+26)+b.readUInt16LE(off+28);
+            const data=b.subarray(start,start+size);
+            const out=method===0?data:method===8?zlib.inflateRawSync(data,{maxOutputLength:expected||1}):null;
+            if(!out||out.length!==expected) throw Error('Arquivo ZIP invalido: '+name);
+            fs.mkdirSync(path.dirname(dest),{recursive:true});
+            fs.writeFileSync(dest,out);
+          }
+          JS
+          printf '%s\n' '#!/bin/bash' 'set -eu' "exec \"$node_bin\" \"$cache/bin/extract.cjs\" \"\$2\" \"\$4\"" > "$cache/bin/unzip"
+          chmod +x "$cache/bin/unzip"
+          echo "$cache/bin" >> "$GITHUB_PATH"
+          echo 'Extrator local Node.js preparado para unzip -o arquivo -d destino.'
       - uses: actions/checkout@v4
         with:
           ref: ad36f73ba9df1c1f03d17d77f20fd997b287f250
