@@ -22,7 +22,7 @@ jobs:
           set -euo pipefail
           test "$(uname -m)" = aarch64
           test "$(id -u)" != 0
-          for cmd in git curl python3 apt-get dpkg-deb; do command -v "$cmd"; done
+          for cmd in git curl apt-get dpkg-deb awk base64 grep; do command -v "$cmd"; done
           git --version
           df -h "$HOME"
           free -m || true
@@ -56,19 +56,13 @@ jobs:
           test -x "$verifier"
           "$verifier" --version
           asset="forgejo-$FORGEJO_VERSION-linux-arm64"
-          url="https://codeberg.org/forgejo/forgejo/releases/download/v$FORGEJO_VERSION/$asset"
+          url="https://code.forgejo.org/forgejo/forgejo/releases/download/v$FORGEJO_VERSION/$asset"
           curl -fLsS --retry 2 --max-time 240 "$url" -o "$tmp/forgejo"
           curl -fLsS --retry 2 --max-time 60 "$url.asc" -o "$tmp/forgejo.asc"
           fingerprint=EB114F5E6C0DC2BCDD183550A4B61A2DC5923710
           curl -fLsS --retry 2 --max-time 60 "https://keys.openpgp.org/vks/v1/by-fingerprint/$fingerprint" -o "$tmp/key.asc"
-          python3 - "$tmp/key.asc" "$tmp/keyring.gpg" <<'PY'
-          import sys, base64
-          lines = open(sys.argv[1]).read().splitlines()
-          begin = lines.index("-----BEGIN PGP PUBLIC KEY BLOCK-----")
-          end = lines.index("-----END PGP PUBLIC KEY BLOCK-----")
-          body = [x.strip() for x in lines[begin+1:end] if x.strip() and ":" not in x and not x.startswith("=")]
-          open(sys.argv[2],"wb").write(base64.b64decode("".join(body),validate=True))
-          PY
+          awk '/^-----BEGIN PGP PUBLIC KEY BLOCK-----/ {active=1; next} /^-----END PGP PUBLIC KEY BLOCK-----/ {exit} active {sub(/\r$/, ""); if ($0 ~ /^[A-Za-z0-9+\/][A-Za-z0-9+\/=]*$/) print}' "$tmp/key.asc" | base64 -d > "$tmp/keyring.gpg"
+          test -s "$tmp/keyring.gpg"
           "$verifier" --keyring "$tmp/keyring.gpg" --status-fd 1 "$tmp/forgejo.asc" "$tmp/forgejo" > "$tmp/verify.status"
           cat "$tmp/verify.status"
           awk -v f="$fingerprint" '$2=="VALIDSIG" && ($3==f || $NF==f) {ok=1} END {exit !ok}' "$tmp/verify.status"
@@ -88,7 +82,8 @@ jobs:
             rm -rf -- "$work"
           }
           trap cleanup EXIT
-          port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+          port=$(( 20000 + RANDOM % 20000 ))
+          if (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; then echo "Porta local ocupada; teste interrompido"; exit 1; fi
           mkdir -p "$work/data" "$work/repos"
           cat > "$work/app.ini" <<EOF
           APP_NAME = Forgejo A23 piloto
@@ -123,7 +118,7 @@ jobs:
           ok=0
           for i in $(seq 1 90); do
             kill -0 "$pid" 2>/dev/null || break
-            if curl -fsS --max-time 2 "http://127.0.0.1:$port/api/v1/version" > "$work/version.json" && python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["version"]' "$work/version.json"; then ok=1; break; fi
+            if curl -fsS --max-time 2 "http://127.0.0.1:$port/api/v1/version" > "$work/version.json" && grep -Eq '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$work/version.json"; then ok=1; break; fi
             sleep 1
           done
           if [ "$ok" != 1 ]; then tail -n 60 "$work/server.log"; exit 1; fi
