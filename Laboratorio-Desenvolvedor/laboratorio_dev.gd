@@ -390,6 +390,13 @@ func _create_developer_ui() -> void:
 	scroll.add_child(dev_body)
 	_heading("LABORATORIO DEV",24)
 	_heading("Clareira dos Goblins - sandbox",14)
+	var version_path := OS.get_executable_path().get_base_dir().path_join("versao-github.txt")
+	var build_label := "Dev local" if OS.has_feature("editor") else "Versão não identificada"
+	if FileAccess.file_exists(version_path):
+		var revision := FileAccess.get_file_as_string(version_path).strip_edges()
+		if not revision.is_empty():
+			build_label = revision.left(8)
+	_heading("Versão: " + build_label,16)
 	lab_note = Label.new()
 	dev_body.add_child(lab_note)
 	_lab_button("Fechar painel  [F6 / Esc]",func(): _toggle_panel(false))
