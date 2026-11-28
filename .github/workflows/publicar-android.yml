@@ -127,6 +127,42 @@ jobs:
           [IO.File]::WriteAllText((Join-Path $env:GITHUB_WORKSPACE $preset),$content)
           "extends RefCounted`nconst VERSION_CODE := $code`n" | Set-Content -LiteralPath 'Projeto-Godot/sistemas/atualizacao/android_build.gd' -Encoding ascii
           "ANDROID_BUILD_CODE=$code" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Incorporar modelo Dire Wolf Lite ao jogo
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = Join-Path $env:GITHUB_WORKSPACE 'Projeto-Godot/modelos/dire_wolf/Dire_Wolf_Lite.glb'
+          $names = @('Dire_Wolf_Lite.glb','Dire_Wolf_Lite_v1.0.0.zip')
+          $candidates = @()
+          if ($env:CLAREIRA_DIRE_WOLF_ASSET) { $candidates += $env:CLAREIRA_DIRE_WOLF_ASSET }
+          $roots = @($env:USERPROFILE, 'C:\ProgramData\ClareiraGodot', 'D:\Jogo Goblin')
+          $roots += @(Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          foreach ($root in ($roots | Where-Object { $_ } | Select-Object -Unique)) {
+            foreach ($folder in @($root,(Join-Path $root 'Downloads'),(Join-Path $root 'Desktop'),(Join-Path $root 'AppData\Roaming\Godot\app_userdata\Clareira dos Goblins'))) {
+              foreach ($name in $names) { $candidates += Join-Path $folder $name }
+              $cfg = Join-Path $folder 'dire_wolf_lab.cfg'
+              if (Test-Path -LiteralPath $cfg -PathType Leaf) {
+                $line = Get-Content -LiteralPath $cfg | Where-Object { $_ -match '^\s*path\s*=\s*"' } | Select-Object -First 1
+                if ($line -match '^\s*path\s*=\s*"([^"]+)"') { $candidates += $Matches[1].Replace('\\','\') }
+              }
+            }
+          }
+          $source = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) -and ((Split-Path $_ -Leaf) -in $names) } | Select-Object -First 1
+          if (-not $source -and (Test-Path 'D:\Jogo Goblin')) {
+            $source = Get-ChildItem 'D:\Jogo Goblin' -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -in $names } | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $source) { throw 'Dire Wolf Lite original ausente neste runner. Configure CLAREIRA_DIRE_WOLF_ASSET ou coloque o ZIP oficial em Downloads. Nenhuma release sem o lobo correto sera publicada.' }
+          New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
+          if ([IO.Path]::GetExtension($source) -eq '.zip') {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [IO.Compression.ZipFile]::OpenRead($source)
+            try {
+              $entry = $zip.Entries | Where-Object { $_.Name -ieq 'Dire_Wolf_Lite.glb' } | Select-Object -First 1
+              if (-not $entry) { throw 'GLB Dire Wolf Lite nao encontrado no ZIP.' }
+              [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$target,$true)
+            } finally { $zip.Dispose() }
+          } else { Copy-Item -LiteralPath $source -Destination $target -Force }
+          if ((Get-Item -LiteralPath $target).Length -lt 1000) { throw 'GLB vazio ou invalido.' }
+          Write-Host 'Modelo original incorporado ao projeto para importacao. O arquivo bruto nao sera publicado isoladamente.'
       - name: Importar e validar scripts
         run: |
           $ErrorActionPreference = 'Continue'
@@ -140,6 +176,37 @@ jobs:
             Write-Host $log
             if ($rc -ne 0 -or $log -match 'SCRIPT ERROR:|Parse Error') { throw "Falha no script $script" }
           }
+      - name: Validar lobo incorporado e animacoes
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $test = 'Projeto-Godot/tests/ci_bundled_wolf.gd'
+          New-Item -ItemType Directory -Path (Split-Path $test) -Force | Out-Null
+          @'
+          extends SceneTree
+          func _initialize() -> void:
+              var model_path := "res://modelos/dire_wolf/Dire_Wolf_Lite.glb"
+              if not ResourceLoader.exists(model_path, "PackedScene"):
+                  push_error("DIRE WOLF: imported model missing")
+                  quit(1)
+                  return
+              var wolf = load("res://dire_wolf_model.gd").new()
+              root.add_child(wolf)
+              if not wolf.install():
+                  push_error("DIRE WOLF: rig or animations invalid")
+                  wolf.queue_free()
+                  quit(1)
+                  return
+              print("BUNDLED DIRE WOLF OK")
+              wolf.queue_free()
+              quit(0)
+          '@ | Set-Content -LiteralPath $test -Encoding ascii
+          $ErrorActionPreference = 'Continue'
+          $log = & $env:GODOT_EXE --headless --path Projeto-Godot --script res://tests/ci_bundled_wolf.gd 2>&1 | Out-String
+          $rc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          Write-Host $log
+          Remove-Item -LiteralPath $test -Force
+          if ($rc -ne 0 -or $log -notmatch 'BUNDLED DIRE WOLF OK' -or $log -match 'SCRIPT ERROR:|Parse Error') { throw 'Modelo Dire Wolf nao validado; publicacao bloqueada.' }
       - name: Exportar e verificar APK ARM64
         run: |
           $ErrorActionPreference = 'Stop'
