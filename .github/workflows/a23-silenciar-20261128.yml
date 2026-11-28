@@ -1,0 +1,21 @@
+name: Silenciar Galaxy A23
+on:
+  push:
+    paths:
+      - '.github/workflows/a23-silenciar-20261128.yml'
+permissions: {}
+jobs:
+  mute:
+    runs-on: [self-hosted, a23, arm64]
+    timeout-minutes: 2
+    steps:
+      - name: Silenciar audio Android via Termux
+        shell: bash
+        run: |
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH="$PREFIX/bin:$PATH"
+          export LD_LIBRARY_PATH="$PREFIX/lib"
+          for stream in music ring notification system alarm; do
+            timeout 8 "$PREFIX/bin/termux-volume" "$stream" 0
+          done
+          timeout 8 "$PREFIX/bin/termux-volume"
